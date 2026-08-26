@@ -25,6 +25,13 @@ from harness.types import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Modules whose stubs have been replaced by a real implementation.
+# Each phase PR extends this set; stubs outside it must still raise.
+IMPLEMENTED = {
+    "harness.protocol",
+    "harness.events",
+}
+
 PRODUCT_STATES = {
     "screening",
     "running",
@@ -220,7 +227,11 @@ def _stub_callables():
     for package in ("data", "harness"):
         pkg = importlib.import_module(package)
         for modinfo in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
-            if modinfo.name in skip_modules or modinfo.name.endswith(".__main__"):
+            if (
+                modinfo.name in skip_modules
+                or modinfo.name in IMPLEMENTED
+                or modinfo.name.endswith(".__main__")
+            ):
                 continue
             mod = importlib.import_module(modinfo.name)
             for name, obj in inspect.getmembers(mod, inspect.isfunction):
