@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Secrets and local config
+.env
+.env.*
+
+# Run artefacts: every run directory except the placeholder
+runs/*
+!runs/.gitkeep
+
+# Data caches (parquet, raw Ali-CCP) — never committed
+data/cache/
+*.parquet
+*.csv
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
