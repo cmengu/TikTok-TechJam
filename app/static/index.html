@@ -3,8 +3,71 @@
 <head>
   <meta charset="utf-8" />
   <title>beating-nise</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
+      line-height: 1.4;
+    }
+    body {
+      margin: 0;
+      padding: 1rem 1.25rem 2rem;
+      background: linear-gradient(160deg, #f3f6f4 0%, #e7eef2 55%, #f7f3ea 100%);
+      color: #1a2421;
+      min-height: 100vh;
+    }
+    h1 {
+      font-family: "IBM Plex Serif", "Source Serif 4", Georgia, serif;
+      font-weight: 600;
+      font-size: 1.5rem;
+      margin: 0 0 0.25rem;
+    }
+    #meta {
+      color: #4a5a55;
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+    main {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    section h2 {
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 0 0 0.5rem;
+      color: #2f4f45;
+    }
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    li {
+      padding: 0.2rem 0;
+      font-variant-numeric: tabular-nums;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
 <body>
-  <!-- Phase 2 fills the first three views. -->
+  <h1>beating-nise</h1>
+  <div id="meta">loading…</div>
+  <main>
+    <section>
+      <h2>Run tree</h2>
+      <ul id="tree"></ul>
+    </section>
+    <section>
+      <h2>Hypotheses</h2>
+      <ul id="queue"></ul>
+    </section>
+    <section>
+      <h2>Now running</h2>
+      <ul id="workers"></ul>
+    </section>
+  </main>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

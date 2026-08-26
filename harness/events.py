@@ -68,6 +68,8 @@ class EventLog:
 
     def emit(self, type: str, **fields: Any) -> int:
         """Validate type/state, require summary, stamp seq/t/run/hash; return seq."""
+        if type == "heartbeat":
+            raise ValueError("heartbeat must use EventLog.heartbeat(), not emit()")
         if type not in EVENT_TYPES:
             raise ValueError(f"unknown event type: {type!r}")
         if "summary" not in fields or not isinstance(fields["summary"], str):
