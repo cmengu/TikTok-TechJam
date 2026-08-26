@@ -1,0 +1,30 @@
+[project]
+name = "beating-nise"
+version = "0.0.0"
+description = "Harness for beating NISE on Ali-CCP under a frozen protocol."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pytest",
+    "pyyaml",
+    "pyarrow",
+    "torch",
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "optuna==4.9.*",
+    "polars",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["harness*", "data*", "app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: may take a few minutes; synthetic task only",
+]

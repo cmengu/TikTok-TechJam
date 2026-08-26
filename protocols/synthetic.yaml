@@ -1,0 +1,58 @@
+# Synthetic benchmark — complete day-one values; same schema as aliccp.
+schema_version: 1
+task: synthetic
+
+ruler:
+  rulebook_version: 3
+  data:
+    ingest_hash: "synthetic-inmem-v1"
+    train:
+      source: generate
+      sha256: "0000000000000000000000000000000000000000000000000000000000000001"
+    test:
+      source: generate
+      sha256: "0000000000000000000000000000000000000000000000000000000000000002"
+  splits:
+    search_validation:
+      from: train
+      rule: "last 10% by sample_id"
+      sha256: "0000000000000000000000000000000000000000000000000000000000000003"
+    holdout_validation:
+      from: train
+      rule: "preceding 10% by sample_id"
+      sha256: "0000000000000000000000000000000000000000000000000000000000000004"
+  metrics:
+    ctr_auc:
+      population: all_impressions
+      positive: click
+      output: p_click
+    cvr_auc:
+      population: clicked
+      positive: conversion
+      output: p_conversion_given_click
+  scoring:
+    script_sha: "0000000000000000000000000000000000000000000000000000000000000005"
+    aggregation: mean_absolute_delta
+  baseline:
+    repo: local/synthetic
+    commit: "synthetic-baseline-v1"
+    command: "python -m harness.candidate.template"
+    published:
+      ctr_auc: 0.50
+      cvr_auc: 0.50
+    reproduced:
+      ctr_auc: [0.50, 0.50, 0.50, 0.50, 0.50]
+      cvr_auc: [0.50, 0.50, 0.50, 0.50, 0.50]
+  convergence:
+    epsilon: 0.001
+    n_rounds: 3
+  seeds:
+    pinned: [data_shuffle, init, dropout]
+    cuda_deterministic: false
+
+run:
+  budget:
+    gpu_hours: 1.0
+    wall_clock_h: 4.0
+    llm_usd: 0.0
+  workers: 1
