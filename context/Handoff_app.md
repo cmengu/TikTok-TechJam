@@ -189,6 +189,19 @@ export const initial = () => ({
 
 ### Rules
 
+- **Duplicate events must be ignored, per stream.** First two lines of
+  `reduce`:
+
+  ```js
+  if (ev.type === "heartbeat" && ev.seq <= state.lastHeartbeatSeq) return state;
+  if (ev.type !== "heartbeat" && ev.seq <= state.lastSeq) return state;
+  ```
+
+  Without this, `hits`/`misses`, `failuresByClass`, queue entries and node
+  `scores`/`seeds` double-count on any replay. Today the `?since=` transport
+  prevents duplicates, but that guarantee lives in `app.js` and `server.py`,
+  not in the module that owns state — and the Report screen ("the same renderer
+  fed a finished run") will eventually fold an array into a non-empty state.
 - **Purity is non-negotiable.** `reduce(state, ev)` returns a new object and
   mutates nothing reachable from `state`. No DOM, no `fetch`, no `Date.now()`,
   no imports beyond the module itself. It must stay runnable under
@@ -202,8 +215,13 @@ export const initial = () => ({
 - **Heartbeats** update `workers[ev.worker]` and `lastHeartbeatSeq` only.
   They never enter `log` or `feed`.
 - **`feed` includes:** `run_started`, `node_created`, `state_changed`,
-  `verdict`, `failure`, `recovery`, `rule_trip`, `queue_reordered`,
-  `submission_written`, `intervention`, `run_ended`.
+  `verdict`, `failure`, `recovery`, `rule_trip`, `hypothesis_queued`,
+  `queue_reordered`, `submission_written`, `intervention`, `run_ended`.
+  (`hypothesis_queued` was missing from an earlier draft of this list — it IS
+  feed-worthy. A new hypothesis is the only visible output of the researcher
+  agent, and Innovation is judged on what the agent chose to try. The startup
+  burst of six is a rendering concern — collapse consecutive same-type rows in
+  the view — not a reducer concern.)
   **Excludes:** `measurement`, `heartbeat`, `research_source`, `cache_lookup`
   — papers get their own ticker on the Dashboard later, per the product spec.
 - **`state` values** are validated against the nine in `harness/types.py`. An
@@ -366,8 +384,18 @@ Named tests, all fixture-driven, no Python at run time:
 - `test_heartbeat_excluded_from_log_and_feed`
 - `test_feed_excludes_measurement_ticks`
 - `test_unknown_event_type_is_counted_not_thrown`
-- `test_replay_is_idempotent` — folding the fixture twice from `initial()`
-  gives an identical state, so page reload from `seq 0` is safe
+- `test_replay_is_idempotent` — **corrected spec.** Folding the fixture twice
+  from `initial()` is tautologically true for a deterministic pure function and
+  tests nothing. The real property is duplicate tolerance:
+  `fold(fold(initial, events), events)` must deep-equal `fold(initial, events)`.
+  Test that, and make it pass with the per-stream seq guard above — not by
+  weakening the assertion
+- `test_event_vocabulary_matches_python` — read `harness/types.py` as TEXT,
+  regex out the `EVENT_TYPES` and `STATES` tuples, assert they match the arrays
+  hand-copied at the top of `reducer.js`. No Python execution, no dependency.
+  The reducer stays pure; the *test* is allowed file IO. `types.py` is the
+  two-person seam, so silent drift between it and the JS copy must be a red
+  test rather than a rendering mystery
 
 Keep existing tests passing unchanged where the contract has not moved.
 
