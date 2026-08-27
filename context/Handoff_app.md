@@ -320,6 +320,24 @@ you verify, not an artefact you rebuild. Two reasons:
    locally rewrites every line's `protocol_hash` and that path, producing a
    diff that looks like a real change and is not one.
 
+**Heartbeats need a SECOND fixture.** `heartbeat` will never appear in
+`fake-events.jsonl` — heartbeats go to the sidecar `heartbeat.jsonl` by design
+(the app opens two SSE streams for exactly this reason). A single-file fixture
+therefore cannot reach 16/16, and `test_heartbeat_does_not_touch_lastSeq` and
+`test_heartbeat_excluded_from_log_and_feed` would pass vacuously against a
+corpus with zero heartbeats.
+
+Add `tests/fixtures/fake-heartbeats.jsonl`, generated once from a
+`python -m harness fake --instant` run directory. Generating this one IS
+allowed, and does not contradict the rule above: `main` does not have the file
+so there is nothing to conflict with, and `EventLog.heartbeat()` stamps no
+`protocol` object, so the file contains no absolute path and no machine-specific
+churn. Never overwrite `fake-events.jsonl` while doing it.
+
+The coverage test then asserts: the 15 non-heartbeat types appear in
+`fake-events.jsonl`, and `heartbeat` appears in `fake-heartbeats.jsonl`.
+Together that is 16/16.
+
 Instead, add a test that *asserts* the fixture exercises all 16 types in
 `EVENT_TYPES` and reports the per-type counts. If a type is missing, stop and
 report it rather than regenerating. (The machine-specific `protocol_path` is
