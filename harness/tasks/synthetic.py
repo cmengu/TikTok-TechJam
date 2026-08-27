@@ -107,12 +107,14 @@ def generate(
         conversion[chosen] = 1
 
     # Four planted effects (scored on clicked rows for conversion).
-    # Tuned at 1M: f_true ≈ 0.65, f_marginal ≈ 0.56 (bands in tests).
-    f_true = (0.30 * cvr_latent + rng.normal(0.0, 1.15, size=n_impressions)).astype(
+    # Tuned so: 1M single-feature AUC stays in phase-3 bands; 200K/8ep model Δ
+    # clears PROMOTE_FLOOR with all-positive seeds but stays under
+    # LEAK_TRIGGER_BANDS × sd_delta_full (else f_true is mislabeled leaked).
+    f_true = (0.24 * cvr_latent + rng.normal(0.0, 1.25, size=n_impressions)).astype(
         np.float32
     )
     f_marginal = (
-        0.15 * cvr_latent + rng.normal(0.0, 1.40, size=n_impressions)
+        0.14 * cvr_latent + rng.normal(0.0, 1.42, size=n_impressions)
     ).astype(np.float32)
     f_zero = rng.normal(0.0, 1.0, size=n_impressions).astype(np.float32)
     f_leak = (
