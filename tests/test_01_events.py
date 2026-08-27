@@ -110,6 +110,15 @@ def test_unknown_type_raises(run_dir, protocol):
     assert len(_read_lines(_events_path(run_dir))) == 1
 
 
+def test_heartbeat_via_emit_raises(run_dir, protocol):
+    log = EventLog(run_dir, "synthetic-test", protocol)
+    with pytest.raises(ValueError, match="heartbeat"):
+        log.emit("heartbeat", summary="nope", worker="w1")
+    log.close()
+    assert len(_read_lines(_events_path(run_dir))) == 1
+    assert _read_lines(_heartbeat_path(run_dir)) == []
+
+
 def test_bad_state_raises(run_dir, protocol):
     log = EventLog(run_dir, "synthetic-test", protocol)
     with pytest.raises(ValueError):

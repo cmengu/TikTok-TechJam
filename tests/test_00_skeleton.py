@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parents[1]
 IMPLEMENTED = {
     "harness.protocol",
     "harness.events",
+    "harness.fake_run",
+    "app.server",
 }
 
 PRODUCT_STATES = {
@@ -272,15 +274,16 @@ def _stub_callables():
                         ("meth", modinfo.name, f"{name}.{meth_name}", descr, cls)
                     )
     # app.server
-    spec = importlib.util.spec_from_file_location(
-        "app.server", ROOT / "app" / "server.py"
-    )
-    mod = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(mod)
-    for name, obj in inspect.getmembers(mod, inspect.isfunction):
-        if obj.__module__ == mod.__name__ and not name.startswith("_"):
-            found.append(("fn", "app.server", name, obj))
+    if "app.server" not in IMPLEMENTED:
+        spec = importlib.util.spec_from_file_location(
+            "app.server", ROOT / "app" / "server.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(mod)
+        for name, obj in inspect.getmembers(mod, inspect.isfunction):
+            if obj.__module__ == mod.__name__ and not name.startswith("_"):
+                found.append(("fn", "app.server", name, obj))
     return found
 
 
