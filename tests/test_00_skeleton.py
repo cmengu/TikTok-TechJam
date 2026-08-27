@@ -34,6 +34,7 @@ IMPLEMENTED = {
     "app.server",
     "harness.tasks.synthetic",
     "harness.runner",
+    "harness.measure",
 }
 
 PRODUCT_STATES = {
@@ -65,6 +66,8 @@ VOCAB_EVENT_TYPES = (
     "submission_written",
     "intervention",
     "run_ended",
+    "incumbent_changed",
+    "prediction",
 )
 
 # Harness Decisions §1 — the seven fields that stay null until the webinar.
@@ -204,7 +207,7 @@ def test_types_round_trip():
 
 def test_state_vocabulary():
     assert set(STATES) == PRODUCT_STATES
-    assert len(EVENT_TYPES) == 16
+    assert len(EVENT_TYPES) == 18
     assert EVENT_TYPES == VOCAB_EVENT_TYPES
 
 

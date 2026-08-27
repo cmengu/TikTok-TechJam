@@ -303,6 +303,34 @@ def _build_script() -> list[dict]:
     )
     events.append(
         {
+            "type": "incumbent_changed",
+            "node": 3,
+            "reason": "promotion",
+            "summary": _s("node 3 became incumbent (promotion)"),
+        }
+    )
+    events.append(
+        {
+            "type": "measurement",
+            "node": 3,
+            "rung": "holdout",
+            "visit": 1,
+            "metric": "cvr_auc",
+            "value": 0.527,
+            "summary": _s("holdout visit=1 mean=0.527"),
+        }
+    )
+    events.append(
+        {
+            "type": "prediction",
+            "node": 3,
+            "metric": "cvr_auc",
+            "value": 0.527,
+            "summary": _s("prediction 0.527 (η ladder accepted)"),
+        }
+    )
+    events.append(
+        {
             "type": "submission_written",
             "node": 3,
             "path": "submission/pred.csv",

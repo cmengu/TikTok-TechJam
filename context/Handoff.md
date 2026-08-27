@@ -1,166 +1,180 @@
-# Handoff — Phase 4 (runner) · 27 Aug
+# Handoff — Phase 5 (measurement) · 27 Aug
 
-You are picking up after Phase 3. Planning is frozen; do not re-open it.
-Decisions that are still open go in the Phase-4 PR description, not in a new
-plan doc. **Classifier / retry naming is LOCKED (see §Locked below). Do not
-re-ask; implement against that table.**
+You are picking up after Phase 4. Planning is frozen; do not re-open it.
+Decisions that are still open go in the Phase-5 PR description, not in a new
+plan doc. **Read this page first. Do not execute code until you have confirmed
+the ladder-scope lock with the human (see §Conflicts below) — Plan_delta §4
+“minimal-first” vs Build_phases Redline ladder.**
 
 ## Read these, in this order
 
 1. This file.
-2. `context/Plan_delta.md` — overrides anything that conflicts with it.
-   Phase 4 is bound by §6 (typed retry table, classifier priority, watchdog,
-   never-wedge). Schema growth rule is §1. **Names** follow the lock below,
-   not Plan_delta's vocabulary.
-3. `context/Backend_plan.md` §5 — runner semantics (subprocess, timeout,
-   heartbeat, contract).
-4. `context/Build_steps.md` — Phase 1 is the page format. Write the **Phase 4**
-   page in that format in the same PR; never write Phase 5+ ahead.
-5. Frozen Phase-4 interface (also summarised below) lives in the build-phases
-   artifact / prior agent notes: `harness/runner.py` stubs + tests in
-   `tests/test_04_runner.py`.
+2. `context/Plan_delta.md` — §1 schema growth; §4 minimal-first ladder note
+   (may conflict with Build_phases — confirm before coding); §2 ranking is
+   out of scope until phase 6.
+3. `context/Backend_plan.md` §6 — measurement / noise / ladder intent (older;
+   where it fights the Redline, the Redline wins once locked).
+4. `context/Build_phases.html` §Phase 5 (`#p5`) — **interfaces, constants,
+   named tests, gate.** This is the detailed build page until you write the
+   Phase-5 page into `Build_steps.md`.
+5. `context/Build_steps.md` — Phase 1 is the page format. Write the **Phase 5**
+   page in that format in the same PR; never write Phase 6+ ahead.
 
-## Current state
+## Current state (merged to main)
 
-- **Merged to main as of 27 Aug 06:47 UTC (confirm with `git log origin/main`):**
-  PR #4 phase 3, PR #5 phase 4 (runner, classify, recover, heartbeat, stall
-  watchdog), PR #6 `run-one` CLI verb + app event-log panel / follow-newest-run
-  (see Plan_delta "27 Aug, session 2"). **In progress:** `fix/phase-3-review`
-  (the 27 Aug review's phase-3 findings — candidate moved out of `harness/`,
-  `f_marginal` restored, `f_true` retuned, rules `mode` field, no self-scoring).
-  **Not started:** `fix/phase-2-review`. Phase 5 is next after both land.
-- Manual gate for phase 4 (works today): `source .venv/bin/activate &&
-  uvicorn app.server:app` in one terminal, `python -m harness run-one --fail
-  oom_cuda --heartbeat 1` in another, open http://127.0.0.1:8000/ — expect
-  `failure(cuda_oom,1) → recovery(halve_batch) → failure(cuda_oom,2)`. The
-  conda `base` python cannot run it (project not installed there).
-- Known open items from the 27 Aug review not yet on any branch: runner should
-  absolutize `TaskPaths`; candidate is still spawned as
-  `-m harness.candidate.template` until `fix/phase-3-review` lands.
-- Phase 3 delivered (inherit after merge):
-  - `harness/tasks/synthetic.py` — generate / prepare / score / rows;
-    `n_impressions` constructor arg (default 1M); tests use 50K + placeholder
-    protocol copy; filled `protocols/synthetic.yaml` hashes verified in
-    `prepare()` when non-placeholder.
-  - `harness/candidate/template.py` — torch baseline; env
-    `DEVICE,SEED,TRAIN,VALID,FEATURES,BATCH,LR,EPOCHS,WORKSPACE`; seven
-    `SYNTHETIC_FAIL` modes: `crash|oom_cuda|oom_host|nan|hang|no_result|bad_schema`.
-    Manual seeded permutation (no DataLoader) — do **not** add `LOADER_WORKERS`.
-  - `harness/candidate/report.py` — stdlib-only top-level imports;
-    `progress.jsonl`, `result.json` (atomic tmp+rename), checkpoints last-3.
-  - `harness/candidate/rules.jsonl` — seed C1–C7 (step-7 copies to
-    `runs/<id>/rules.jsonl`). **Not** phase-10 R1–R6.
-- Stubs still raise under `tests/test_00_skeleton.py`; extend `IMPLEMENTED`
-  with `"harness.runner"` in the Phase-4 PR.
-- Tests: `pytest` from repo root (venv: `.venv`). App watch:
-  `python -m app.server` / `python -m harness.fake_run`.
+Confirm with `git log origin/main --oneline -8`. As of this handoff:
 
-## What to build now — Phase 4 only
+- **Phases 0–4 on main**, including:
+  - Phase-3 review fix (`fix/phase-3-review` / PR #8): four planted effects,
+    capability-safe `candidate/` at repo root, mid-training fails.
+  - Phase 4 runner + `run-one` CLI + app event-log / follow-newest-run.
+- **Open / not required for Phase 5:** `fix/phase-2-review` (SSE partial-line,
+  runs-path, fake-wipe, lastSeq) — independent; do not block on it.
+
+### What you inherit
+
+| Area | Location | Notes |
+|---|---|---|
+| Synthetic task | `harness/tasks/synthetic.py` | Four planted cols: `f_true`≈0.65, `f_marginal`≈0.56, `f_zero`, `f_leak` (1M, clicked CVR AUC). `harness_only/` for holdout + digests. `score()` is the only numeric authority; rejects duplicate `sample_id`. |
+| Candidate | `candidate/template.py`, `candidate/report.py`, `candidate/rules.jsonl` | Outside harness package. `import report`; `report.result({}, preds_path=…)`; checkpoints = bytes. Runner **copies** both into workspace and runs `[python, "template.py"]`. |
+| Runner | `harness/runner.py` | `LocalBackend`, classify/recover/stall, `Runner.run` → `RunResult` with `task.score` metrics. |
+| Events | `harness/events.py` | Emit `measurement` / `verdict` / `rule_trip`; no invented states. |
+| Stub | `harness/measure.py` | **Outdated stub** (old `Band` shape). Replace to match Build_phases `#p5`, do not implement the stub’s fields as-is. |
+| Tests | `pytest` from repo root (`.venv`) | Default: `addopts = -m 'not slow'`. Scorecard is `@pytest.mark.slow`. |
+
+App watch: `python -m app.server` / `python -m harness.fake_run` / `python -m harness run-one …`.
+
+## What to build now — Phase 5 only
 
 | File | Role |
 |---|---|
-| `harness/runner.py` | `LocalBackend`, `derived_timeout`, `classify`, `Runner.run` |
-| `tests/test_04_runner.py` | named tests below |
-| `context/Build_steps.md` | Phase-4 page (Phase-1 format) |
+| `harness/measure.py` | Constants, pure fns, `Band`, `Measure` (calibrate / verdict / holdout_report / maybe_refresh) |
+| `tests/test_05_measure_pure.py` | Named pure tests from Build_phases `#p5` |
+| `tests/test_05_scorecard.py` | `@pytest.mark.slow` — real runner, ~200K synthetic |
+| `context/Build_steps.md` | Phase-5 page (Phase-1 format) |
 
-**Out of scope:** choosing the next node; judging metrics (phase 5); SSH
-backend; calibrating `seconds_per_row_screen` (formula only — inputs passed in);
-semantic check (phase 7); `types.py` unless you must and you say so in the PR;
-`infra` / `llm_api` failure classes (phase 7).
+Extend `IMPLEMENTED` with `"harness.measure"` in this PR.
 
-### Locked — classifier / retry (27 Aug, human)
+**Out of scope:** choosing the next node / queue / git workspace (phase 6);
+attribution *adjudication* logic that invents labels (phase 7 hands
+`attribution=` in — measure only gates on it); phase-10 post-check rulebook;
+BH / bootstrap / Student-t / DiD (removed 27 Aug — do not reintroduce);
+Ali-CCP / ingest (phase 8); rewriting runner or planted-effect *bars*
+(if scorecard fails, retune phase-3 **weights**, never loosen constants).
 
-Keep stub **names**. Plan_delta **policy** where it differs. Add `stall` as an
-extra class (not a rename). Do not invent a third vocabulary.
+### Interfaces (from Build_phases `#p5` — implement these)
 
 ```python
-FAILURE_CLASSES = (
-    "cuda_oom", "host_oom", "diverged", "timeout",
-    "contract_violation", "crash", "stall",
-)
+# constants — each with a "# Redline §6 Ladder: …" comment
+SIGMA_UNSTABLE, SCREEN_REJECT_DELTA, SCREEN_ADVANCE_SD, PROMOTE_FLOOR,
+PROMOTE_Z_OVER_SQRT_K, REPLICATE_K, LEAK_TRIGGER_BANDS, LEAK_SINGLE_FEATURE_AUC,
+LADDER_ETA, HOLDOUT_VISITS_MAX, HOLDOUT_SEEDS, INCONCLUSIVE_REVISITS,
+INCONCLUSIVE_PRIORITY, RHO_REFRESH_AFTER, STALL_SD_MULT
 
-# RECOVERY (None = abandon / no runner retry):
-#   cuda_oom            → BATCH // 2, retry once
-#   host_oom            → BATCH // 2, retry once   # same knob; no LOADER_WORKERS
-#   diverged            → None (abandon); family note in failure summary
-#   timeout             → None (abandon)
-#   contract_violation  → None (coder path later; no runner retry)
-#   crash               → None (coder debug later)
-#   stall               → retry once (no knob change)
+@dataclass
+class Band:
+    sigma_screen, sigma_full, sigma_fix, ratio, rho
+    sd_delta_screen, sd_delta_full, bar
+    source: Literal["fixed_pair","refreshed"]; n_replicated: int
 
-# classify priority (deterministic-first):
-#   NaN / loss>10×first in progress → diverged
-#   "CUDA out of memory" in stderr  → cuda_oom
-#   returncode in {-9, 137} + empty/no useful stderr → host_oom
-#     (normalise returncode to 137 on the failure event)
-#   stall: last progress older than max(5 min, 3× median step gap)
-#     → kill, class stall
-#   killed at derived deadline → timeout
-#   exit 0 + missing/invalid result.json → contract_violation
-#   returncode != 0 → crash
-#   else None (success path)
+def calibrate(screen_per_seed, full_per_seed, fixed_seed_pair) -> Band
+def refresh_rho(band, per_seed_deltas) -> Band
+def screen_verdict(delta, band) -> Literal["rejected","replicating","inconclusive"]
+def promote_bar(band) -> float
+def replicate_verdict(deltas, band) -> Literal["pass","fail_sign","fail_mean"]
+def leak_audit(mean_delta, band, single_feature_aucs) -> list[str]
+def ladder_accepts(best_reported, new_holdout, eta=LADDER_ETA) -> bool
+def inconclusive_next(prior_inconclusives) -> Literal["requeue","retire"]
+def combine_inconclusive(a, b) -> Literal["re_measure"]  # never "pass"
 
-# Runner.run: env = DEVICE/SEED/WORKSPACE/BATCH/LR/EPOCHS/FEATURES
-#   + task.candidate_env + overrides; score via task.score(preds,"search") on success;
-#   metrics from harness score(), never the child's self-reported numbers.
-# Stall watchdog lives in LocalBackend's 1s progress.jsonl poll loop.
-# Runner attempt cap = 2 (per-node cap 3 is loop-level, phase 6).
+class Measure:
+    def calibrate_from_runs(self, runner, baseline_node, ...) -> Band
+    def verdict(self, node, results, incumbent, rung, attribution=None) -> Verdict
+    def holdout_report(self, node, runner, incumbent, best_reported) -> HoldoutReport
+    def maybe_refresh(self) -> Band | None
 ```
 
-### Named tests — `tests/test_04_runner.py` (synthetic 50K, `heartbeat_s=0.5`)
+Ladder in one line: **smoke** (contract only) → **screen** (one paired seed) →
+**replicate** (k=3 full, all Δ>0 and mean ≥ bar, attribution clear). **Holdout
+is not a rung** — run-level, ≤2 visits, candidate-side only; decides the
+*reported* number, never the incumbent.
 
-- `test_success_returns_scored_metrics`
-- `test_classify_table` — seven `SYNTHETIC_FAIL` → expected class
-  (`no_result`/`bad_schema` → `contract_violation`)
-- `test_timeout_kills_hang` — `timeout_s=3`, done within 5s, no orphan
-- `test_retry_on_cuda_oom` — fake backend fails once then ok; BATCH halved; attempt=2
-- `test_retry_on_host_oom` — BATCH halved (same recovery as cuda_oom)
-- `test_no_retry_on_contract_violation`
-- `test_no_retry_on_diverged` — abandon; summary carries family note
-- `test_max_two_attempts`
-- `test_heartbeats_written` — ≥3 heartbeats with node + step
-- `test_diverged_killed_early`
-- `test_stall_kills_and_retries` — tiny threshold override + `heartbeat_s=0.5`
-  so the watchdog fires in seconds
-- `test_child_env_is_capability_safe` — no holdout / `protocols/` / rulebook in
-  env keys or values; child `PYTHONPATH` must not expose harness package root
-- `test_derived_timeout` — formula + floor
+### Named tests
+
+**Pure — `tests/test_05_measure_pure.py`** (σ_screen=0.015, σ_full=0.012 unless stated):
+`test_calibrate_columns`, `test_calibrate_unstable_raises`, `test_screen_table`,
+`test_promote_bar`, `test_replicate_k3`, `test_replicate_refuses_screen_rung`,
+`test_leak_trigger`, `test_attribution_gate`, `test_ladder_eta`,
+`test_holdout_budget`, `test_holdout_candidate_side_only`,
+`test_inconclusive_revisits`, `test_inconclusive_never_stacks`,
+`test_verdict_pairs_by_seed`, `test_rho_refresh`, `test_verdict_emits_event`.
+
+**Slow scorecard — `tests/test_05_scorecard.py`** (real runner, ~200K synthetic):
+`test_baseline_calibrates`, `test_zero_feature_not_promoted`,
+`test_true_feature_promoted` (`FEATURES=base,f_true`, attribution clear),
+`test_marginal_feature_not_rejected` (`base,f_marginal` → promoted|inconclusive, never rejected),
+`test_leak_feature_trips`, `test_holdout_never_in_ladder` (scorecard path emits
+zero holdout measurements), `test_scorecard_printed`
+(`FP=0 FN=0 marginal=<…> leak=caught`).
 
 ### Gate
 
-All tests green. Manual: one real node through a real `EventLog`; watch
-heartbeat + failure/recovery in the app.
+Pure tests green; slow scorecard prints `FP=0 FN=0 … leak=caught`. Calibration
+`Band` visible as a `measurement` event in the app. Record nominal false-promotion
+rate (~3%) in README as the gate page asks. If scorecard fails: fix planted
+size in phase 3 or arithmetic here — **never loosen a Redline constant**.
 
-## Phase-3 locks Phase 4 must honour
+## Conflicts to resolve with the human BEFORE coding
 
-- `oom_host`: child may exit `-9` or `137`; classifier → `host_oom`, event
-  returncode normalised to `137`.
-- Child writes `result.json` atomically (already true in `report.result`).
-- `score()` is the only numeric entry; runner must call `task.score`.
-- Capability: `candidate_env` is only `{TRAIN, VALID}`; do not pass holdout.
-- No `LOADER_WORKERS` on the template (no DataLoader).
+| Topic | Plan_delta §4 | Build_phases `#p5` (Redline 27 Aug) |
+|---|---|---|
+| Scope | “rung-0 band, reject-only screen, k=3 → promising”; defer holdout/DiD confirm, BH, … | Full Redline: screen + replicate + leak + attribution gate + `holdout_report` (≤2) + ρ refresh |
+| Stub `Band` | n/a | New fields (`sigma_screen`/`sigma_full`/…); **delete** old stub shape |
+| Holdout | Deferred as confirm *rung* | Not a rung; run-level budgeted visit — still in Phase 5 API |
 
-## Working rules (unchanged)
+**Recommended default to propose:** implement the **Redline / Build_phases `#p5`**
+surface (pure tests + scorecard). Treat Plan_delta §4 as “no BH / no DiD /
+no bootstrap” (already absent from `#p5`), not as permission to drop
+`holdout_report` or leak/attribution. Do not invent a third ladder.
 
-- Branch `phase-4-runner` off **updated main** (with Phase 3 merged), green → PR.
-- Event log is the only seam; emit `failure` / `recovery` / `heartbeat`; do not
-  invent node state `"failed"` — use `debugging` + `failure` event.
-- Retries = new attempt with counted cost; nothing edited retroactively.
-- Extend `fake_run.py` only if you add event types/fields the app must see
-  (e.g. `stall` if the app must see it before a real run).
-- CPU only; synthetic task only.
+Also honour locks from prior phases:
+
+- Metrics only from `task.score` / `RunResult.metrics` — never child self-report.
+- Capability: never put holdout / `harness_only` / `protocols/` on the child env;
+  candidate scripts stay under repo `candidate/` and are copied into workspace.
+- Failure class names stay stub vocabulary (`cuda_oom`, …, `stall`) — measure
+  does not reclassify runner failures.
+- Planted bands are locked: if `f_true` fails promote or `f_marginal` is
+  rejected, retune weights in synthetic generate — **never** widen test bands
+  or lower `PROMOTE_FLOOR`.
+
+## Working rules
+
+- Branch `phase-5-measure` off **updated main** (with PR #8 already merged),
+  green → PR. Never stack on an unmerged fix branch.
+- Event log is the only seam; `verdict` / `measurement` / `rule_trip` /
+  `incumbent_changed` as specified; no node state `"failed"`.
+- Pure functions first; `Measure` only wraps them + emits. Fake runner for
+  holdout budget / seed-pairing tests; real runner only in `@pytest.mark.slow`
+  scorecard.
+- CPU only; synthetic task only. Extend `fake_run.py` only if new event fields
+  must show in the app before a real calibrate.
+- `pytest` skips `slow` by default; run scorecard explicitly:
+  `pytest tests/test_05_scorecard.py -m slow`.
 
 ## What NOT to do
 
-- Do not touch Ali-CCP / ingest (step 8).
-- Do not implement `measure.py` ladder (step 5) in this PR.
-- Do not start Phase-5 Build_steps page.
-- Do not rename `FAILURE_CLASSES` to Plan_delta names (`oom_gpu`, `nan_loss`, …).
-- Do not add `infra` / `llm_api` yet (phase 7).
-- Do not add `LOADER_WORKERS` to the template.
+- Do not start Phase-6 Build_steps / `tree.py`.
+- Do not reintroduce BH, bootstrap CIs, Student-t tables, or DiD.
+- Do not loosen Redline constants or planted-effect AUC bands to green the
+  scorecard.
+- Do not put holdout paths in `candidate_env` or teach the child to score.
+- Do not “helpfully” rename failure classes or implement phase-7 attribution
+  LLM — accept `attribution=` as an argument.
 
-## Hands forward after Phase 4
+## Hands forward after Phase 5
 
-`Runner.run` is the only way training happens. Phase 5 calls it to calibrate
-the band and run the synthetic scorecard; Phase 6 calls it per node; Phase 7
-tuner calls it per trial.
+Phase 6 calls `Measure.verdict` after every screen/replicate batch and
+`holdout_report` at most twice per run. The state a node moves to is decided
+here and only here. Phase 7 later supplies real attribution labels; phase 10
+adds post-check rules beyond leak_audit.
