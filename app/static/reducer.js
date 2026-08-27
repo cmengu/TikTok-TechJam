@@ -19,6 +19,10 @@ export const EVENT_TYPES = [
   "submission_written",
   "intervention",
   "run_ended",
+  // Phase 5 (Plan_delta §1: additive types, no schema bump) — mirrors
+  // harness/types.py EVENT_TYPES.
+  "incumbent_changed",
+  "prediction",
 ];
 
 export const STATES = [
@@ -50,6 +54,12 @@ const FEED_TYPES = new Set([
   "submission_written",
   "intervention",
   "run_ended",
+  // Both are rare, milestone-like events (not high-frequency ticks like
+  // measurement/cache_lookup): incumbent_changed only fires on promotion,
+  // prediction only fires up to HOLDOUT_VISITS_MAX (=2) times per run
+  // (harness/measure.py:33).
+  "incumbent_changed",
+  "prediction",
 ]);
 
 const LOG_CAP = 500;
@@ -80,6 +90,9 @@ export const initial = () => ({
 
   verdicts: [],
   measurements: [],
+  predictions: [],
+  incumbentChanges: [],
+  incumbent: null, // current incumbent node id; null until the first promotion
 
   research: {
     sources: [],
@@ -388,6 +401,30 @@ export function reduce(state, ev) {
 
     case "measurement": {
       next.measurements = capPush(state.measurements, ev, MEASUREMENTS_CAP);
+      break;
+    }
+
+    // Emitted by harness/measure.py:445-450:
+    //   self.events.emit("incumbent_changed", node=node.id, reason="promotion",
+    //                     summary=f"node {node.id} became incumbent (promotion)")
+    // Proven fields: node, reason, summary. Stored whole (same convention as
+    // verdict/submission_written/intervention below) — no field invented.
+    case "incumbent_changed": {
+      next.incumbentChanges = [...state.incumbentChanges, ev];
+      next.incumbent = ev.node;
+      break;
+    }
+
+    // Emitted by harness/measure.py:507-515:
+    //   self.events.emit("prediction", node=node.id, metric=METRIC, value=new_holdout,
+    //                     best_reported=next_best, band=_band_payload(self.band) if self.band else None,
+    //                     summary=f"prediction {new_holdout:.4f} (η ladder accepted)")
+    // Proven fields: node, metric, value, best_reported, band, summary. Only
+    // fires up to HOLDOUT_VISITS_MAX (=2) times per run, so plain (uncapped)
+    // push mirrors verdicts/submissions rather than the capPush used for the
+    // high-frequency "measurement" ticks.
+    case "prediction": {
+      next.predictions = [...state.predictions, ev];
       break;
     }
 

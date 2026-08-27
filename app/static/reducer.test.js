@@ -290,6 +290,32 @@ describe("reducer — Checkpoint C: state contract", () => {
     assert.equal(state.interventions[0].kind, "pause_queue");
   });
 
+  it("test_incumbent_changed_sets_current_and_appends_history", () => {
+    const events = loadFixture();
+    const incumbentChanged = events.find((e) => e.type === "incumbent_changed");
+    const state = fold(events);
+    assert.equal(state.incumbent, incumbentChanged.node);
+    assert.equal(state.incumbentChanges.length, 1);
+  });
+
+  it("test_prediction_is_stored_with_its_proven_fields", () => {
+    const events = loadFixture();
+    const predictionEv = events.find((e) => e.type === "prediction");
+    const state = fold(events);
+    assert.equal(state.predictions.length, 1);
+    assert.equal(state.predictions[0].node, predictionEv.node);
+    assert.equal(state.predictions[0].metric, predictionEv.metric);
+    assert.equal(state.predictions[0].value, predictionEv.value);
+    assert.equal(state.predictions[0].summary, predictionEv.summary);
+    // harness/measure.py:512-513 also emit best_reported and band:
+    //   best_reported=next_best,
+    //   band=_band_payload(self.band) if self.band else None,
+    // but the committed fixture's prediction event (tests/fixtures/fake-events.jsonl
+    // seq 115) carries neither key — only node, metric, value, summary.
+    assert.ok(!("best_reported" in predictionEv));
+    assert.ok(!("band" in predictionEv));
+  });
+
   it("test_run_lifecycle_status", () => {
     assert.equal(initial().run.status, "waiting");
     const events = loadFixture();
@@ -335,8 +361,16 @@ describe("reducer — Checkpoint C: state contract", () => {
 
   it("test_event_vocabulary_matches_python", () => {
     const src = readFileSync(TYPES_PY, "utf8");
+    // Strip Python "# ..." comments before matching: a trailing comment can
+    // itself contain a parenthesized aside (e.g. harness/types.py:40's
+    // "# Phase 5 (Plan_delta §1: ...)"), whose ")" would otherwise close the
+    // regex's capture group early and pull comment text in as fake entries.
+    const srcNoComments = src
+      .split("\n")
+      .map((line) => line.replace(/#.*$/, ""))
+      .join("\n");
     const extractTuple = (name) => {
-      const m = src.match(new RegExp(`${name}\\s*=\\s*\\(([^)]*)\\)`));
+      const m = srcNoComments.match(new RegExp(`${name}\\s*=\\s*\\(([^)]*)\\)`));
       assert.ok(m, `could not find ${name} in harness/types.py`);
       return m[1]
         .split(",")
