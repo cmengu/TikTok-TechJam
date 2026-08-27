@@ -216,12 +216,15 @@ function buildEventsPanel(state) {
 }
 
 // Counts verdicts after the most recent "promoted" one (all of them, if
-// there has been no promotion yet) — a stand-in for the convergence counter
-// outputs.py (phase 9) is specified to emit on every verdict and does not
-// yet (ConvergenceTracker.update() raises NotImplementedError). This panel
-// switches to that event the day it exists; until then the count is derived
-// here, in the view, from state.verdicts — never presented as harness-
-// reported.
+// there has been no promotion yet). This is NOT the harness's convergence
+// counter — harness/outputs.py::Convergence.update(searchval_score) tracks
+// whether the search-validation score has stopped improving by more than
+// epsilon across n_rounds, a different quantity, and it raises
+// NotImplementedError today regardless. It also can't be reconstructed from
+// the event stream: measurement events carry {node, metric, value, seed}
+// with no split label, so search-validation and holdout scores are
+// indistinguishable here. This count is a stand-in derived in the view from
+// state.verdicts, never presented as harness-reported.
 function verdictsSinceLastPromoted(state) {
   const verdicts = state.verdicts;
   for (let i = verdicts.length - 1; i >= 0; i--) {
@@ -236,12 +239,12 @@ function buildStoppingPanel(state) {
   const convergence = protocol.ruler?.convergence || {};
   const since = verdictsSinceLastPromoted(state);
   return `
-    <p class="derived-note" title="outputs.py (phase 9) is specified to emit a convergence counter on every verdict and does not yet — this count is derived in the app from state.verdicts, not reported by the harness">${chip("derived in the app", "chip-derived")}</p>
+    <p class="derived-note" title="harness/outputs.py::Convergence.update(searchval_score) is specified to track rounds without improvement and does not yet (raises NotImplementedError) — nothing below is that counter">${chip("derived in the app", "chip-derived")}</p>
     <dl class="kv">
-      ${kv("epsilon target", renderScalar(convergence.epsilon))}
-      ${kv("n_rounds target", renderScalar(convergence.n_rounds))}
-      ${kv("verdicts since last promotion", String(since))}
+      ${kv("epsilon (protocol target)", renderScalar(convergence.epsilon))}
+      ${kv("n_rounds (protocol target)", renderScalar(convergence.n_rounds))}
     </dl>
+    <p class="panel-note" title="counts verdicts in state.verdicts since the last one with state === &quot;promoted&quot; — not the harness's rounds-without-improvement count, which does not exist yet">verdicts since last promotion: ${since} (not the convergence counter — the harness's rounds-without-improvement count does not exist yet)</p>
   `;
 }
 
