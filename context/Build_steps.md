@@ -118,3 +118,84 @@ All tests green. `python -m harness init protocols/synthetic.yaml` creates a run
 ### Hands forward
 
 The only write path to the log. Phase 2's fake run and every later module call `EventLog.emit` and nothing else.
+
+---
+
+## Phase 3 · Synthetic task and the candidate contract
+
+**Owner** A: `tasks/synthetic.py`, `candidate/*`  
+**Depends on** phase 1  
+**Source** Backend_plan §5 contract, §10; Plan_delta §5 (seed rules)
+
+### Goal
+
+A generated dataset with the Ali-CCP funnel shape and three planted effects; a task adapter that owns the splits; a baseline training script that honours the harness–candidate contract; `report.py` and a seed `rules.jsonl` the step-7 semantic check will copy into each run.
+
+### In scope
+
+`harness/tasks/base.py`, `harness/tasks/synthetic.py`, `harness/candidate/template.py`, `harness/candidate/report.py`, `harness/candidate/rules.jsonl`, `protocols/synthetic.yaml` (hash fields only), `tests/test_03_synthetic.py`, `tests/test_03_template.py`, this page.
+
+### Out of scope
+
+Ali-CCP anything. Spawning via `runner.py` (phase 4). Ladder / band / model-level Δ tests (phase 5). A model bigger than embedding(8) + MLP on CPU. Phase-10 rulebook R1–R6 (post-run checks) — keep distinct from C1–C7.
+
+### Interfaces
+
+```python
+# harness/tasks/base.py — Task Protocol + TaskPaths (already stubbed)
+
+# harness/tasks/synthetic.py
+def generate(seed, n_users=20_000, n_items=2_000, n_impressions=1_000_000) -> pa.Table
+    # columns: sample_id, user_id, item_id, cat_a/b/c, hist, click, conversion,
+    #          f_true, f_zero, f_leak
+class SyntheticTask:
+    def __init__(self, n_impressions: int = 1_000_000): ...
+    # prepare writes parquet (compression="zstd", no metadata); sha256s each file;
+    # raises on mismatch when yaml hash is non-placeholder; script_sha of this file
+    # candidate_env → exactly {TRAIN, VALID}; never holdout
+FAILURE_ENV = "SYNTHETIC_FAIL"
+
+# harness/candidate/report.py  (stdlib only)
+# WORKSPACE env: progress.jsonl, result.json, checkpoints/step-N.pt (last 3)
+
+# harness/candidate/template.py  (torch + pyarrow + numpy + report)
+# env: DEVICE, SEED, TRAIN, VALID, FEATURES, BATCH, LR, EPOCHS, WORKSPACE
+# base features = user_id,item_id,cat_a,cat_b,cat_c (hist excluded v1)
+# SYNTHETIC_FAIL: crash|oom_cuda|oom_host|nan|hang|no_result|bad_schema
+
+# harness/candidate/rules.jsonl — one JSON object per line, keys:
+#   id, statement, check ("static"|"llm"), pattern (regex|null),
+#   severity ("fail"|"warn"), source ("seed" | later "node NNN")
+```
+
+### Locked decisions (phase 3)
+
+1. **Contract rules** — seed file `harness/candidate/rules.jsonl` (shape shared with `runs/<id>/rules.jsonl`); seven C-clauses from Plan_delta; not CONTRACT.md; not R1–R6.
+2. **Hashes** — real sha256 in yaml; `prepare()` verifies non-placeholders; pin `pyarrow==25.0.1`; write `compression="zstd"`, no user metadata; `script_sha` = sha256 of `synthetic.py`.
+3. **`n_impressions`** — constructor arg only (default 1M); tests use 50K with placeholder hashes in the protocol copy.
+4. **AUC** — `sklearn.roc_auc_score` in `score()`; hand-rolled only in `test_score_hand_computed`.
+5. **Baseline** — torch only; seeded permutation minibatches (no DataLoader); dropout param present, value 0.
+6. **`score()`** — join preds↔labels on `sample_id`; assert id sets equal.
+7. **`oom_host`** — assert returncode in `(-9, 137)`; hang via `Popen`, poll 3s, kill in `finally`.
+8. **Checkpoints** — `torch.save(state_dict)`; keep last 3 by step.
+
+### Tests to pass — `tests/test_03_synthetic.py`
+
+- `test_deterministic`, `test_funnel_rates`, `test_leak_feature_auc`, `test_zero_feature_auc`, `test_true_feature_auc`
+- `test_splits_by_rule`, `test_candidate_env_has_no_holdout`, `test_score_populations`
+- `test_score_hand_computed`, `test_seed_rules_parse`, `test_unseen_id_in_valid`
+- hash mismatch raises when yaml is filled (covered via prepare)
+
+### Tests to pass — `tests/test_03_template.py` (50K-row synthetic)
+
+- `test_contract_outputs`, `test_features_env_changes_model`, `test_seed_changes_result`
+- `test_failure_modes_observable`, `test_report_imports_stdlib_only`, `test_runs_under_60s_cpu`
+- checkpoints ≤ 3 files
+
+### Gate to phase 4
+
+All tests green. Manual: run the template under env and read the two AUCs; `SYNTHETIC_FAIL=oom_host` → returncode in `(-9, 137)`.
+
+### Hands forward
+
+Seven failure-mode fixtures (phase 4), three planted effects (phase 5), `score()` as the only numeric entry point, seed rules for step 7.

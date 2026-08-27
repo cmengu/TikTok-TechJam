@@ -32,6 +32,9 @@ IMPLEMENTED = {
     "harness.events",
     "harness.fake_run",
     "app.server",
+    "harness.tasks.synthetic",
+    "harness.candidate.template",
+    "harness.candidate.report",
 }
 
 PRODUCT_STATES = {

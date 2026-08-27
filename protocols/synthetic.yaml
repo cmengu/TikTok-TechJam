@@ -8,19 +8,19 @@ ruler:
     ingest_hash: "synthetic-inmem-v1"
     train:
       source: generate
-      sha256: "0000000000000000000000000000000000000000000000000000000000000001"
+      sha256: "749e1e9007d3d98ffff8a0d843242b4751c0536ca91f333fe8d42c839c9c657b"
     test:
       source: generate
-      sha256: "0000000000000000000000000000000000000000000000000000000000000002"
+      sha256: "2db3d3a4ea8217b3f4e140e3ed0f1e69526c868a287c814d256fdca10a8c27f1"
   splits:
     search_validation:
       from: train
       rule: "last 10% by sample_id"
-      sha256: "0000000000000000000000000000000000000000000000000000000000000003"
+      sha256: "806c14108d00d3ae969708f5d28802d9859aa0d11e7a42b46e67c969e94a4fb8"
     holdout_validation:
       from: train
       rule: "preceding 10% by sample_id"
-      sha256: "0000000000000000000000000000000000000000000000000000000000000004"
+      sha256: "d0482d601ef6192d240fbc77f15fdabbc389a7e7a8479708f41dff3a4b6f50e0"
   metrics:
     ctr_auc:
       population: all_impressions
@@ -31,7 +31,7 @@ ruler:
       positive: conversion
       output: p_conversion_given_click
   scoring:
-    script_sha: "0000000000000000000000000000000000000000000000000000000000000005"
+    script_sha: "e069cb03cc92422e5ac1985f0e06b7bdec2fa0d6b581ccbd85e55ccc310e47d4"
     aggregation: mean_absolute_delta
   baseline:
     repo: local/synthetic
