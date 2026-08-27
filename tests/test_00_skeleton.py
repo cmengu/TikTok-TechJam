@@ -35,6 +35,7 @@ IMPLEMENTED = {
     "harness.tasks.synthetic",
     "harness.candidate.template",
     "harness.candidate.report",
+    "harness.runner",
 }
 
 PRODUCT_STATES = {

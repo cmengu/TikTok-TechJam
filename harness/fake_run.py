@@ -134,6 +134,23 @@ def _build_script() -> list[dict]:
     )
     events.append(
         {
+            "type": "failure",
+            "node": 2,
+            "class": "stall",
+            "summary": _s("node 2 failed: stall (progress watchdog)"),
+        }
+    )
+    events.append(
+        {
+            "type": "recovery",
+            "node": 2,
+            "class": "stall",
+            "action": "retry",
+            "summary": _s("node 2 recovery: retry after stall"),
+        }
+    )
+    events.append(
+        {
             "type": "measurement",
             "node": 2,
             "metric": "cvr_auc",
