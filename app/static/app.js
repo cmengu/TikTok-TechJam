@@ -95,23 +95,42 @@ function latestPromoted(state, metric) {
   return null;
 }
 
-// The whole point of this panel: a value inside its own band is
-// indistinguishable from noise and must never render as if it were a clean
-// read, regardless of what lifecycle state produced it.
+// "Inside the band" means opposite things depending on which of measure.py's
+// two verdict functions produced the number:
+//   screen_verdict(delta, band)     -> inconclusive/rejected: inside band
+//                                       means the delta has no signal — grey.
+//   replicate_verdict(deltas, band) -> replicating/promoted: inside band
+//                                       means the replicate agreed with the
+//                                       screen — that's the good outcome,
+//                                       render it normally.
+// Neither function exists yet (both raise NotImplementedError); this mapping
+// is the contract to update once they're real.
+function verdictBandTest(state) {
+  if (state === "inconclusive" || state === "rejected") return "screening";
+  if (state === "replicating" || state === "promoted") return "replication";
+  return null;
+}
+
+// The app reports the harness's verdict; it never computes or overrides one.
+// The number and its band are always shown — greying flags "no signal", it
+// never deletes the reading or relabels the verdict.
 function renderScoreCell(verdict) {
   if (!verdict || !Array.isArray(verdict.scores) || !verdict.scores.length) {
     return chip("not yet promoted", "chip-null");
   }
-  const band = Array.isArray(verdict.band) && verdict.band.length === 2 ? verdict.band : null;
-  if (!band) return chip("not yet promoted", "chip-null");
   const value = mean(verdict.scores);
+  const badge = chip(verdict.state);
+  const band = Array.isArray(verdict.band) && verdict.band.length === 2 ? verdict.band : null;
+  if (!band) {
+    return `<span class="score-value">${fmtNum(value)}</span> ${badge}`;
+  }
   const [lo, hi] = band;
   const bandText = `band ${fmtNum(lo)}–${fmtNum(hi)}`;
-  if (value >= lo && value <= hi) {
-    return `<span class="score-inconclusive" title="inside noise band: ${escapeAttr(bandText)}">inconclusive</span> <span class="band-note">(${escapeHtml(bandText)})</span>`;
-  }
-  const cls = value > hi ? "score-above" : "score-below";
-  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)})</span>`;
+  const inside = value >= lo && value <= hi;
+  const isNoSignal = inside && verdictBandTest(verdict.state) === "screening";
+  const cls = isNoSignal ? "score-inconclusive" : !inside && value > hi ? "score-above" : !inside ? "score-below" : "";
+  const noteSuffix = isNoSignal ? ", within noise band" : "";
+  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)}${escapeHtml(noteSuffix)})</span> ${badge}`;
 }
 
 function buildScorePanel(state) {
@@ -134,7 +153,7 @@ function buildScorePanel(state) {
     .join("");
   return `
     <table class="metrics score-table">
-      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
+      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent (verdict)</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;

@@ -519,9 +519,15 @@ along, is anything wrong.** Five panels:
    look stale (the heartbeat's `t` vs now, same clock as the header).
 2. **Score against baseline** — the incumbent's latest promoted scores per
    metric, each **with its noise band**, against
-   `protocol.ruler.baseline.published` and the `reproduced` spread. No bare
-   numbers anywhere: any value inside its band renders grey and labelled
-   `inconclusive`. This rule is the whole point of the screen.
+   `protocol.ruler.baseline.published` and the `reproduced` spread. The
+   number and its band are always shown — never delete the reading, never
+   compute or override the verdict. `band` means opposite things depending on
+   which verdict produced it (see `harness/measure.py`): for
+   `inconclusive`/`rejected` (screening), inside the band means no signal —
+   grey it. For `replicating`/`promoted` (replication), inside the band means
+   the replicate agreed — render it normally. The verdict badge is always
+   `ev.state` verbatim; the app reports the harness's verdict, it never
+   invents one.
 3. **Last five events** — from `state.feed`, newest first. `inconclusive` must
    appear as its own event kind, never folded into `rejected`. Collapse
    consecutive same-type rows (the six startup `hypothesis_queued` events
