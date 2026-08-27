@@ -8,6 +8,28 @@ import { describe, it } from "node:test";
 
 import { initial, reduce } from "./reducer.js";
 
+// Mirrors harness/types.py EVENT_TYPES. No Python at run time here (see file
+// header), so this list is copied by hand — keep it in sync if that tuple
+// changes.
+const EVENT_TYPES = [
+  "run_started",
+  "node_created",
+  "state_changed",
+  "heartbeat",
+  "measurement",
+  "verdict",
+  "failure",
+  "recovery",
+  "rule_trip",
+  "research_source",
+  "cache_lookup",
+  "hypothesis_queued",
+  "queue_reordered",
+  "submission_written",
+  "intervention",
+  "run_ended",
+];
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(
   __dirname,
@@ -17,13 +39,44 @@ const FIXTURE = join(
   "fixtures",
   "fake-events.jsonl",
 );
+const HEARTBEAT_FIXTURE = join(
+  __dirname,
+  "..",
+  "..",
+  "tests",
+  "fixtures",
+  "fake-heartbeats.jsonl",
+);
 
-function loadFixture() {
-  const text = readFileSync(FIXTURE, "utf8");
+function loadJsonl(path) {
+  const text = readFileSync(path, "utf8");
   return text
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line));
+}
+
+function loadFixture() {
+  return loadJsonl(FIXTURE);
+}
+
+function loadHeartbeats() {
+  return loadJsonl(HEARTBEAT_FIXTURE);
+}
+
+function countByType(events, types) {
+  const counts = Object.fromEntries(types.map((t) => [t, 0]));
+  for (const ev of events) {
+    if (ev.type in counts) counts[ev.type] += 1;
+  }
+  return counts;
+}
+
+function logCounts(label, counts) {
+  console.log(label);
+  for (const [type, n] of Object.entries(counts)) {
+    console.log(`  ${type}: ${n}`);
+  }
 }
 
 function fold(events, start = initial()) {
@@ -83,5 +136,28 @@ describe("reducer", () => {
       kind: "draft",
     });
     deepEqual(state, snapshot);
+  });
+
+  it("the two fixtures together exercise every EVENT_TYPES member (Checkpoint B: two files, never regenerated to patch a gap)", () => {
+    // heartbeat lands in the sidecar heartbeat.jsonl by design (EventLog.heartbeat,
+    // not .emit) — fake-events.jsonl can never carry it. See
+    // context/Handoff_app.md, Tests section, "Heartbeats need a SECOND fixture".
+    const nonHeartbeatTypes = EVENT_TYPES.filter((t) => t !== "heartbeat");
+
+    const eventCounts = countByType(loadFixture(), nonHeartbeatTypes);
+    logCounts("per-type counts in tests/fixtures/fake-events.jsonl:", eventCounts);
+    const missingFromEvents = nonHeartbeatTypes.filter((t) => eventCounts[t] === 0);
+    assert.deepEqual(
+      missingFromEvents,
+      [],
+      `fake-events.jsonl is missing event type(s): ${missingFromEvents.join(", ")}`,
+    );
+
+    const heartbeatCounts = countByType(loadHeartbeats(), ["heartbeat"]);
+    logCounts("per-type counts in tests/fixtures/fake-heartbeats.jsonl:", heartbeatCounts);
+    assert.ok(
+      heartbeatCounts.heartbeat > 0,
+      "fake-heartbeats.jsonl has no heartbeat events",
+    );
   });
 });

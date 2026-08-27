@@ -100,3 +100,25 @@ Note the venv's editable finder still pins `app` in its `NAMESPACES` dict — it
 was generated before the `__init__.py` existed, which is why `app.__file__` is
 still `None` above. A `pip install -e .` regenerates it as a regular package.
 Not done on this branch; harmless either way for the editable install.
+
+## Raise with teammate
+
+`tests/fixtures/fake-events.jsonl` embeds `protocol_path` as an absolute path
+from whoever generated it — currently
+`/Users/ngchenmeng/beating-nise/protocols/synthetic.yaml`. Every regeneration
+by a different person rewrites all 115 lines (the path plus every derived
+`protocol_hash`) and produces a diff that looks like a real change and isn't
+one. Suggested fix is for `harness/events.py` to emit a repo-relative
+`protocol_path` instead. Not our lane — record only, do not implement.
+
+Related, found while writing the Checkpoint B coverage test (below): the
+checked-in fixture is also missing `heartbeat`, one of the 16 types in
+`harness/types.py` `EVENT_TYPES`. `tests/test_02_fake_run.py::test_covers_every_event_type`
+passes today only because it checks a **freshly regenerated** run dir, where
+`heartbeat` events land in a separate `heartbeat.jsonl` that gets unioned in —
+that file is not part of the single-file fixture the JS reducer tests read.
+`app/static/reducer.test.js` now has a test asserting the checked-in fixture
+covers all 16 types; it currently fails on `heartbeat` (count 0). Per
+instructions this was not fixed by regenerating — flagged for the teammate to
+decide (e.g. add heartbeat lines to the fixture, or point the JS test at a
+combined fixture the way the Python test does).
