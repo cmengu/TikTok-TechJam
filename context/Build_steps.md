@@ -199,3 +199,80 @@ All tests green. Manual: run the template under env and read the two AUCs; `SYNT
 ### Hands forward
 
 Seven failure-mode fixtures (phase 4), three planted effects (phase 5), `score()` as the only numeric entry point, seed rules for step 7.
+
+---
+
+## Phase 4 · Runner
+
+**Owner** A: `runner.py`  
+**Depends on** phases 1, 3  
+**Source** Backend_plan §5; Plan_delta §6 (policy); Handoff locked names
+
+### Goal
+
+Spawn the candidate as a child process, enforce a derived timeout, classify failures, recover per class (max 2 attempts), heartbeat, stall-watchdog, and return a `RunResult`. The runner trains nothing and decides nothing.
+
+### In scope
+
+`harness/runner.py`, `tests/test_04_runner.py`, this page; optional `fake_run.py` stall pair so the app sees the class.
+
+### Out of scope
+
+Which node to run next. Metric judgement (phase 5). SSH backend. Calibrating `seconds_per_row_screen`. Semantic check / `infra` / `llm_api` (phase 7). `LOADER_WORKERS` on the template.
+
+### Interfaces
+
+```python
+FAILURE_CLASSES = (
+    "cuda_oom", "host_oom", "diverged", "timeout",
+    "contract_violation", "crash", "stall",
+)
+RECOVERY = {
+  "cuda_oom": lambda env: {**env, "BATCH": str(int(env["BATCH"]) // 2)},
+  "host_oom": lambda env: {**env, "BATCH": str(int(env["BATCH"]) // 2)},  # no LOADER_WORKERS
+  "diverged": None,   # abandon; family note in failure summary
+  "timeout": None,
+  "contract_violation": None,
+  "crash": None,
+  "stall": lambda env: dict(env),  # retry once, no knob change
+}
+
+class LocalBackend:  # Popen; poll progress.jsonl every poll_s; stall + timeout kills
+def derived_timeout(seconds_per_row_screen, rows, epochs, safety=2.0, floor_s=60) -> float
+def classify(returncode, stderr_tail, progress, result_path, killed_as=None) -> str | None
+    # NaN / loss>10×first → diverged
+    # killed_as stall|timeout → that class
+    # "CUDA out of memory" → cuda_oom
+    # returncode in {-9,137} + empty stderr → host_oom (event returncode normalised to 137)
+    # exit 0 + missing/invalid result.json → contract_violation
+    # returncode != 0 → crash; else None
+
+class Runner:
+    def run(node, rung, seed, timeout_s, env_overrides={}, attempt=1) -> RunResult
+        # metrics = task.score(preds, "search") on success — never child's self-report
+```
+
+### Locked decisions (phase 4)
+
+1. **Names** — stub vocabulary + `stall`; not Plan_delta's `oom_gpu` / `nan_loss` / …
+2. **Diverged** — abandon (no LR retry); summary carries `given_up:diverged` family note.
+3. **host_oom** — `-9` and `137` equal; failure event stores `returncode=137`.
+4. **Stall watchdog** — in the progress poll loop; threshold `max(5 min, 3× median step gap)` or `run_cfg["stall_threshold_s"]` override for tests.
+5. **Attempt cap** — 2 in the runner; per-node cap 3 stays loop-level (phase 6).
+
+### Tests to pass — `tests/test_04_runner.py` (synthetic 50K, `heartbeat_s=0.5`)
+
+- `test_success_returns_scored_metrics`, `test_classify_table`, `test_timeout_kills_hang`
+- `test_retry_on_cuda_oom`, `test_retry_on_host_oom`, `test_no_retry_on_contract_violation`
+- `test_no_retry_on_diverged`, `test_max_two_attempts`, `test_heartbeats_written`
+- `test_diverged_killed_early`, `test_stall_kills_and_retries`, `test_child_env_is_capability_safe`
+- `test_derived_timeout`
+
+### Gate to phase 5
+
+All tests green. Manual: one real node through a real `EventLog`; watch heartbeat + failure/recovery in the app.
+
+### Hands forward
+
+`Runner.run` is the only way training happens. Phase 5 calibrates with it; phase 6 calls it per node; phase 7 tuner per trial.
+
