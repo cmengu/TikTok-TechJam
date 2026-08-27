@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import time
@@ -10,42 +9,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-import yaml
 
+from helpers import placeholder_protocol
 from harness.events import EventLog
-from harness.protocol import load
 from harness.runner import (
     FAILURE_CLASSES,
     RECOVERY,
     Completed,
     LocalBackend,
     Runner,
-    classify,
     derived_timeout,
 )
 from harness.tasks.synthetic import SyntheticTask
 from harness.types import Cost, Node
 
 ROOT = Path(__file__).resolve().parents[1]
-PROTOCOL = ROOT / "protocols" / "synthetic.yaml"
-
-
-def _placeholder_protocol(tmp_path: Path):
-    raw = copy.deepcopy(yaml.safe_load(PROTOCOL.read_text()))
-    raw["ruler"]["data"]["train"]["sha256"] = "0" * 63 + "1"
-    raw["ruler"]["data"]["test"]["sha256"] = "0" * 63 + "2"
-    raw["ruler"]["splits"]["search_validation"]["sha256"] = "0" * 63 + "3"
-    raw["ruler"]["splits"]["holdout_validation"]["sha256"] = "0" * 63 + "4"
-    raw["ruler"]["scoring"]["script_sha"] = "0" * 63 + "5"
-    path = tmp_path / "proto.yaml"
-    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
-    return load(path)
 
 
 @pytest.fixture(scope="module")
 def synth_50k(tmp_path_factory):
     root = tmp_path_factory.mktemp("synth50k-p4")
-    proto = _placeholder_protocol(root)
+    proto = placeholder_protocol(root)
     task = SyntheticTask(n_impressions=50_000)
     paths = task.prepare(proto, root / "data")
     return task, paths, proto, root

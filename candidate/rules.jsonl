@@ -1,0 +1,7 @@
+{"id":"C1","statement":"Never reads VALID labels (click/conversion) for fitting.","check":"static","mode":"forbid","pattern":"VALID.*(click|conversion)","severity":"fail","source":"seed"}
+{"id":"C2","statement":"Evaluates the declared population on the full search-validation set (no eval subsample).","check":"llm","mode":"require","pattern":null,"severity":"fail","source":"seed"}
+{"id":"C3","statement":"Writes the declared CVR head p_conversion_given_click, not the CTR×CVR product.","check":"static","mode":"require","pattern":"p_conversion_given_click","severity":"fail","source":"seed"}
+{"id":"C4","statement":"Honours SEED and DEVICE from the environment for reproducibility and device placement.","check":"static","mode":"require","pattern":"os\\.environ\\.(get\\()?[\\\"'](SEED|DEVICE)","severity":"fail","source":"seed"}
+{"id":"C5","statement":"Calls report.progress during training so the harness can watch loss and stall.","check":"static","mode":"require","pattern":"report\\.progress\\(","severity":"fail","source":"seed"}
+{"id":"C6","statement":"Checkpoints via report.checkpoint.save so resume and sensitivity checks have artifacts.","check":"static","mode":"require","pattern":"checkpoint\\.save\\(","severity":"fail","source":"seed"}
+{"id":"C7","statement":"No label-derived feature uses the row's own label (no self-label leakage).","check":"llm","mode":"require","pattern":null,"severity":"fail","source":"seed"}

@@ -33,8 +33,6 @@ IMPLEMENTED = {
     "harness.fake_run",
     "app.server",
     "harness.tasks.synthetic",
-    "harness.candidate.template",
-    "harness.candidate.report",
     "harness.runner",
 }
 

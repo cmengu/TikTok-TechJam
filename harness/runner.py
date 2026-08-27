@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -28,7 +29,8 @@ FAILURE_CLASSES = (
     "stall",
 )
 
-REQUIRED_RESULT_METRICS = frozenset({"ctr_auc", "cvr_auc"})
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CANDIDATE_DIR = REPO_ROOT / "candidate"
 
 
 def _halve_batch(env: dict) -> dict:
@@ -108,16 +110,12 @@ def progress_diverged(progress: list[dict]) -> bool:
 
 
 def _result_valid(result_path: Path | None) -> bool:
+    """Contract: result.json exists and points at a real preds file. Metrics are harness-owned."""
     if result_path is None or not result_path.is_file():
         return False
     try:
         data = json.loads(result_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
-    metrics = data.get("metrics")
-    if not isinstance(metrics, dict):
-        return False
-    if not REQUIRED_RESULT_METRICS <= set(metrics):
         return False
     preds = data.get("preds")
     if not preds:
@@ -362,12 +360,14 @@ class Runner:
                     attempt=attempt,
                 )
 
+        self._stage_candidate(workspace)
+
         hb_thread = threading.Thread(target=hb_loop, name="runner-heartbeat", daemon=True)
         hb_thread.start()
         try:
             completed = self.backend.run(
                 workspace=workspace,
-                cmd=[sys.executable, "-m", "harness.candidate.template"],
+                cmd=[sys.executable, "template.py"],
                 env=env,
                 timeout_s=timeout_s,
                 on_progress=on_progress,
@@ -471,6 +471,15 @@ class Runner:
             result_path=result_path if result_path.is_file() else None,
             checkpoint_path=self._latest_checkpoint(workspace),
         )
+
+    @staticmethod
+    def _stage_candidate(workspace: Path) -> None:
+        """Copy template + report into workspace so the child never imports harness.*."""
+        for name in ("template.py", "report.py"):
+            src = CANDIDATE_DIR / name
+            if not src.is_file():
+                raise FileNotFoundError(f"missing candidate script: {src}")
+            shutil.copy2(src, workspace / name)
 
     def _failure_summary(self, node_id: int, failure: str, attempt: int) -> str:
         if failure == "diverged":

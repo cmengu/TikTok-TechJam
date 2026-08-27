@@ -13,26 +13,13 @@ import pytest
 import yaml
 from sklearn.metrics import roc_auc_score
 
-from harness.candidate.template import main as template_main
 from harness.protocol import load
 from harness.tasks.synthetic import SyntheticTask, generate
+from helpers import placeholder_protocol, run_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
-RULES = ROOT / "harness" / "candidate" / "rules.jsonl"
+RULES = ROOT / "candidate" / "rules.jsonl"
 PROTOCOL = ROOT / "protocols" / "synthetic.yaml"
-
-
-def _placeholder_protocol(tmp_path: Path):
-    raw = yaml.safe_load(PROTOCOL.read_text())
-    raw = copy.deepcopy(raw)
-    raw["ruler"]["data"]["train"]["sha256"] = "0" * 63 + "1"
-    raw["ruler"]["data"]["test"]["sha256"] = "0" * 63 + "2"
-    raw["ruler"]["splits"]["search_validation"]["sha256"] = "0" * 63 + "3"
-    raw["ruler"]["splits"]["holdout_validation"]["sha256"] = "0" * 63 + "4"
-    raw["ruler"]["scoring"]["script_sha"] = "0" * 63 + "5"
-    path = tmp_path / "proto.yaml"
-    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
-    return load(path)
 
 
 def test_deterministic():
@@ -77,14 +64,20 @@ def test_zero_feature_auc():
 def test_true_feature_auc():
     t = generate(0, n_impressions=1_000_000)
     auc = _single_feature_auc(t, "f_true")
-    assert 0.55 <= auc <= 0.65
+    assert 0.60 <= auc <= 0.72
+
+
+def test_marginal_feature_auc():
+    t = generate(0, n_impressions=1_000_000)
+    auc = _single_feature_auc(t, "f_marginal")
+    assert 0.53 <= auc <= 0.60
 
 
 def test_splits_by_rule(tmp_path: Path):
-    proto = _placeholder_protocol(tmp_path)
+    proto = placeholder_protocol(tmp_path)
     task = SyntheticTask(n_impressions=10_000)
     paths = task.prepare(proto, tmp_path / "data")
-    full = pq.read_table(tmp_path / "data" / "generated.parquet")
+    full = pq.read_table(tmp_path / "data" / "harness_only" / "generated.parquet")
     train = pq.read_table(paths.train)
     search = pq.read_table(paths.search_validation)
     holdout = pq.read_table(paths.holdout_validation)
@@ -94,6 +87,9 @@ def test_splits_by_rule(tmp_path: Path):
     assert search.num_rows == n_search
     assert holdout.num_rows == n_holdout
     assert train.num_rows == n - n_search - n_holdout
+    assert paths.holdout_validation.is_relative_to(tmp_path / "data" / "harness_only")
+    assert (tmp_path / "data" / "harness_only" / "digests.json").is_file()
+    assert not (tmp_path / "data" / "generated.parquet").exists()
     search_ids = set(search.column("sample_id").to_pylist())
     holdout_ids = set(holdout.column("sample_id").to_pylist())
     train_ids = set(train.column("sample_id").to_pylist())
@@ -101,31 +97,29 @@ def test_splits_by_rule(tmp_path: Path):
     assert search_ids.isdisjoint(train_ids)
     assert holdout_ids.isdisjoint(train_ids)
     assert search_ids | holdout_ids | train_ids == set(full.column("sample_id").to_pylist())
-    # last 10% by sample_id
     all_ids = full.column("sample_id").to_pylist()
     assert search.column("sample_id").to_pylist() == all_ids[-n_search:]
     assert holdout.column("sample_id").to_pylist() == all_ids[-n_search - n_holdout : -n_search]
 
 
 def test_candidate_env_has_no_holdout(tmp_path: Path):
-    proto = _placeholder_protocol(tmp_path)
+    proto = placeholder_protocol(tmp_path)
     task = SyntheticTask(n_impressions=5_000)
     paths = task.prepare(proto, tmp_path / "data")
     env = task.candidate_env(paths)
     assert set(env.keys()) == {"TRAIN", "VALID"}
     for v in env.values():
         assert "holdout" not in v.lower()
+        assert "harness_only" not in v.lower()
 
 
 def test_score_populations(tmp_path: Path):
-    proto = _placeholder_protocol(tmp_path)
+    proto = placeholder_protocol(tmp_path)
     task = SyntheticTask(n_impressions=5_000)
     paths = task.prepare(proto, tmp_path / "data")
     valid = pq.read_table(paths.search_validation)
-    n = valid.num_rows
     click = np.asarray(valid.column("click"))
     conv = np.asarray(valid.column("conversion"))
-    # Predictions: on un-clicked rows, put extreme scores that would ruin CVR if included.
     p_cvr = np.where(click == 1, conv.astype(np.float64) * 0.9 + 0.05, 0.99).astype(
         np.float32
     )
@@ -143,22 +137,47 @@ def test_score_populations(tmp_path: Path):
         compression="zstd",
     )
     metrics = task.score(preds_path, "search")
-    # Hand check: CVR AUC on clicked only with those preds.
     mask = click == 1
-    expected = float(roc_auc_score(conv[mask], p_cvr[mask]))
-    assert metrics["cvr_auc"] == pytest.approx(expected, abs=1e-9)
+    clicked_auc = float(roc_auc_score(conv[mask], p_cvr[mask]))
+    all_rows_auc = float(roc_auc_score(conv, p_cvr))
+    assert metrics["cvr_auc"] == pytest.approx(clicked_auc, abs=1e-9)
+    assert all_rows_auc != clicked_auc
 
 
-def test_score_hand_computed():
+def test_score_rejects_duplicate_ids(tmp_path: Path):
+    proto = placeholder_protocol(tmp_path)
+    task = SyntheticTask(n_impressions=1_000)
+    paths = task.prepare(proto, tmp_path / "data")
+    valid = pq.read_table(paths.search_validation)
+    n = valid.num_rows
+    ids = np.asarray(valid.column("sample_id"), dtype=np.int64).copy()
+    ids[1] = ids[0]
+    preds_path = tmp_path / "dup.parquet"
+    pq.write_table(
+        pa.table(
+            {
+                "sample_id": ids,
+                "p_click": np.linspace(0.1, 0.9, n).astype(np.float32),
+                "p_conversion_given_click": np.linspace(0.1, 0.9, n).astype(np.float32),
+            }
+        ),
+        preds_path,
+        compression="zstd",
+    )
+    with pytest.raises(ValueError, match="duplicate sample_id"):
+        task.score(preds_path, "search")
+
+
+def test_score_hand_computed(tmp_path: Path):
     """10-row fixture; AUC by hand including a tie — library-independent guard."""
     y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1], dtype=np.float64)
     s = np.array([0.1, 0.2, 0.3, 0.5, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], dtype=np.float64)
-    # 5×5 pairs; neg@0.5 ties one pos@0.5 → 24.5/25 = 0.98
     hand = 24.5 / 25.0
     assert roc_auc_score(y, s) == pytest.approx(hand, abs=1e-12)
 
-    task = SyntheticTask(n_impressions=10)
-    # Mix clicks so CTR AUC is also defined.
+    proto = placeholder_protocol(tmp_path)
+    task = SyntheticTask(n_impressions=100)
+    paths = task.prepare(proto, tmp_path / "data")
     click = np.array([1, 1, 1, 1, 1, 1, 1, 1, 0, 0], dtype=np.int8)
     labels = pa.table(
         {
@@ -167,10 +186,11 @@ def test_score_hand_computed():
             "conversion": y.astype(np.int8),
         }
     )
-    # Only clicked rows (first 8) enter CVR; hand AUC on those 8:
-    # y_c=[0,0,0,0,0,1,1,1] s_c=[0.1,0.2,0.3,0.5,0.4,0.5,0.6,0.7]
-    # 5 neg × 3 pos: neg0.1→3, 0.2→3, 0.3→3, 0.4→3, 0.5→0.5+2=2.5 → 14.5/15
     hand_cvr = 14.5 / 15.0
+    pq.write_table(labels, paths.search_validation, compression="zstd", store_schema=False)
+    # Drop cached tables so score() reads the rewritten search parquet from disk.
+    task._tables.clear()
+    assert task.rows("search") == 10
     preds = pa.table(
         {
             "sample_id": np.arange(10, dtype=np.int64),
@@ -178,14 +198,9 @@ def test_score_hand_computed():
             "p_conversion_given_click": s.astype(np.float32),
         }
     )
-    task._tables = {"search": labels}
-    task._paths = None
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as td:
-        preds_path = Path(td) / "p.parquet"
-        pq.write_table(preds, preds_path, compression="zstd")
-        metrics = task.score(preds_path, "search")
+    preds_path = tmp_path / "p.parquet"
+    pq.write_table(preds, preds_path, compression="zstd")
+    metrics = task.score(preds_path, "search")
     assert metrics["cvr_auc"] == pytest.approx(hand_cvr, abs=1e-6)
 
 
@@ -193,17 +208,19 @@ def test_seed_rules_parse():
     lines = [ln for ln in RULES.read_text(encoding="utf-8").splitlines() if ln.strip()]
     assert len(lines) == 7
     ids = []
-    required = {"id", "statement", "check", "pattern", "severity", "source"}
+    required = {"id", "statement", "check", "pattern", "severity", "source", "mode"}
     for ln in lines:
         obj = json.loads(ln)
         assert required <= set(obj.keys())
         assert obj["check"] in {"static", "llm"}
         assert obj["severity"] in {"fail", "warn"}
+        assert obj["mode"] in {"forbid", "require"}
         assert obj["source"] == "seed"
         assert obj["pattern"] is None or isinstance(obj["pattern"], str)
         ids.append(obj["id"])
-    assert len(ids) == len(set(ids))
     assert ids == [f"C{i}" for i in range(1, 8)]
+    c1 = json.loads(lines[0])
+    assert c1["id"] == "C1" and c1["mode"] == "forbid"
 
 
 @pytest.mark.slow
@@ -219,36 +236,22 @@ def test_prepare_verifies_filled_hashes(tmp_path: Path):
         SyntheticTask(n_impressions=1_000_000).prepare(load(bad_path), tmp_path / "bad")
 
 
-def test_unseen_id_in_valid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    proto = _placeholder_protocol(tmp_path)
+def test_unseen_id_in_valid(tmp_path: Path):
+    proto = placeholder_protocol(tmp_path)
     task = SyntheticTask(n_impressions=5_000)
     paths = task.prepare(proto, tmp_path / "data")
     valid = pq.read_table(paths.search_validation)
-    # Inject an item_id absent from train.
     train = pq.read_table(paths.train)
     train_items = set(train.column("item_id").to_pylist())
     unseen = max(train_items) + 10_000
     assert unseen not in train_items
     cols = {name: valid.column(name) for name in valid.column_names}
-    item = np.asarray(valid.column("item_id"))
-    item = item.copy()
+    item = np.asarray(valid.column("item_id")).copy()
     item[0] = unseen
     cols["item_id"] = pa.array(item, type=pa.int32())
     pq.write_table(pa.table(cols), paths.search_validation, compression="zstd")
 
     ws = tmp_path / "ws"
-    ws.mkdir()
-    env = {
-        **task.candidate_env(paths),
-        "DEVICE": "cpu",
-        "SEED": "0",
-        "FEATURES": "base",
-        "BATCH": "512",
-        "EPOCHS": "1",
-        "WORKSPACE": str(ws),
-        "SYNTHETIC_FAIL": "",
-    }
-    for k, v in env.items():
-        monkeypatch.setenv(k, v)
-    template_main()  # must not crash on OOV
+    proc = run_candidate(paths, ws)
+    assert proc.returncode == 0, proc.stderr
     assert (ws / "result.json").exists()

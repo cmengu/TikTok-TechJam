@@ -27,6 +27,7 @@ include = ["harness*", "data*", "app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
 markers = [
     "slow: may take a few minutes; synthetic task only",
 ]
