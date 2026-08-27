@@ -100,6 +100,7 @@ def _cmd_run_one(argv: list[str]) -> None:
     run_dir = (Path("runs") / run_id).resolve()  # child runs with cwd=workspace
     run_dir.mkdir(parents=True, exist_ok=False)
     print(f"run_id={run_id}", flush=True)
+    print(f"watch: http://127.0.0.1:8000/?run={run_id}  (uvicorn app.server:app)", flush=True)
 
     task = SyntheticTask(n_impressions=args.rows)
     paths = task.prepare(protocol, run_dir / "data")
