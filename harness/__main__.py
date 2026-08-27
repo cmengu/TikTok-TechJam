@@ -116,6 +116,10 @@ def _cmd_run_one(argv: list[str]) -> None:
             rung="screen", kind="draft", scores={}, seeds=[args.seed],
             cost=Cost(gpu_s=0.0, tokens_in=0, tokens_out=0, slice="training"), created_seq=1,
         )
+        events.emit(
+            "node_created", id=node.id, parent=None, kind=node.kind,
+            hypothesis_id=node.hypothesis_id, summary="node 1 created as draft under root (run-one)",
+        )
         overrides = {"SYNTHETIC_FAIL": args.fail} if args.fail else {}
         result = runner.run(node, "screen", args.seed, args.timeout, env_overrides=overrides)
     finally:
