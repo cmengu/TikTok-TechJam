@@ -307,9 +307,25 @@ Agreed with the teammate; these land in a later phase.
 
 ## Tests
 
-Extend `app/static/reducer.test.js`. Regenerate
-`tests/fixtures/fake-events.jsonl` from `python -m harness fake --instant` if
-stale, and assert the fixture exercises all 16 event types.
+Extend `app/static/reducer.test.js`.
+
+**Do NOT regenerate `tests/fixtures/fake-events.jsonl`.** Treat it as an input
+you verify, not an artefact you rebuild. Two reasons:
+
+1. It is a *generated* file that both people regenerate. Two regenerations of
+   the same 115-line generated file is a guaranteed merge conflict with no
+   meaningful resolution.
+2. Its first line embeds `protocol_path` as an **absolute path from whoever
+   generated it** (currently `/Users/ngchenmeng/beating-nise/...`). Regenerating
+   locally rewrites every line's `protocol_hash` and that path, producing a
+   diff that looks like a real change and is not one.
+
+Instead, add a test that *asserts* the fixture exercises all 16 types in
+`EVENT_TYPES` and reports the per-type counts. If a type is missing, stop and
+report it rather than regenerating. (The machine-specific `protocol_path` is
+worth raising with the teammate as a separate fix — the harness should emit a
+repo-relative path — but that is `harness/events.py`, not our lane. Record it
+in the notes file, do not fix it here.)
 
 Named tests, all fixture-driven, no Python at run time:
 
@@ -351,6 +367,35 @@ Keep existing tests passing unchanged where the contract has not moved.
   other. Protocol page fills in the instant `run_started` lands; the existing
   four panels behave exactly as before; sidebar routes without a page reload;
   a browser refresh mid-stream reproduces the same state.
+
+## Before every commit — fetch and rebase
+
+`main` moves while this branch is open; the teammate merges phase PRs through
+the day. Before every commit on `app-batch-1`:
+
+```
+git fetch origin
+git log --oneline HEAD..origin/main          # what landed since we branched
+git diff --name-only HEAD...origin/main -- harness/types.py harness/events.py \
+    harness/fake_run.py app/ tests/fixtures/
+```
+
+That second command is the one that matters: those are the only paths on `main`
+that can invalidate work in this batch. If it prints nothing, the reducer
+contract is intact and you can proceed.
+
+Then commit your work **first**, and rebase after — never stash a dirty tree
+across a rebase:
+
+```
+git add -A && git commit -m "..."
+git rebase origin/main
+python -m pytest && node --test "app/static/*.test.js"    # re-run AFTER the rebase
+```
+
+If the rebase conflicts on `tests/fixtures/fake-events.jsonl`, take `main`'s
+version wholesale (`git checkout --theirs` during rebase) — see the fixture
+rule under Tests.
 
 ## Branch and PR
 
