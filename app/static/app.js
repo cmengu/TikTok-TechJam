@@ -67,7 +67,15 @@ function render() {
 
   workersEl().innerHTML = Object.entries(state.workers)
     .map(([w, ev]) => {
-      const label = `${w}: ${ev.status || "?"} node=${ev.node ?? "—"} p=${ev.progress ?? "—"}`;
+      const prog =
+        ev.total != null && ev.total > 0
+          ? `${ev.step ?? 0}/${ev.total}`
+          : ev.progress != null
+            ? String(ev.progress)
+            : "—";
+      const loss = ev.loss != null ? ` loss=${Number(ev.loss).toFixed(4)}` : "";
+      const attempt = ev.attempt != null ? ` attempt=${ev.attempt}` : "";
+      const label = `${w}: ${ev.status || "running"} node=${ev.node ?? "—"} step=${prog}${loss}${attempt}`;
       return `<li>${escapeHtml(label)}</li>`;
     })
     .join("");
@@ -122,12 +130,35 @@ async function resolveRunId() {
   return runs[0].run_id;
 }
 
+function followNewestRun() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("run")) return; // pinned by URL: never switch
+  setInterval(async () => {
+    try {
+      const res = await fetch("/runs");
+      const runs = await res.json();
+      if (runs.length && runs[0].run_id !== runId) {
+        runId = runs[0].run_id;
+        state = initial();
+        eventsSince = 0;
+        heartbeatSince = 0;
+        render();
+        connectEvents();
+        connectHeartbeat();
+      }
+    } catch (_) {
+      /* server away; try again next tick */
+    }
+  }, 2000);
+}
+
 async function main() {
   try {
     runId = await resolveRunId();
     render();
     connectEvents();
     connectHeartbeat();
+    followNewestRun();
   } catch (err) {
     metaEl().textContent = String(err.message || err);
   }

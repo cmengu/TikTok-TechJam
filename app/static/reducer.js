@@ -29,7 +29,7 @@ export function reduce(state, ev) {
     queue: [...state.queue],
     workers: { ...state.workers },
     verdicts: [...state.verdicts],
-    log: [...state.log, ev].slice(-200),
+    log: ev.type === "heartbeat" ? [...state.log] : [...state.log, ev].slice(-200),
     lastSeq: ev.seq,
   };
 
