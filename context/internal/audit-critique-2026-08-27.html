@@ -1,0 +1,365 @@
+<title>Harness Audit Redline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F6F8F7;--surface:#FFFFFF;--ink:#1A1F1C;--muted:#5C665F;--rule:#D5DCD7;--rule-soft:#E6EBE8;
+  --accent:#0E6B66;--accent-soft:#E1EFED;
+  --block:#B23A2E;--block-soft:#F7E6E3;--fix:#B7791F;--fix-soft:#F8EFDD;--minor:#6B7570;--minor-soft:#E9ECEA;
+  --code-bg:#EEF2F0;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121614;--surface:#181D1A;--ink:#E6EBE8;--muted:#98A39D;--rule:#2C3430;--rule-soft:#232A26;
+    --accent:#5FBFB7;--accent-soft:#16302D;
+    --block:#E3796C;--block-soft:#3A1F1B;--fix:#DDA84E;--fix-soft:#3A2E17;--minor:#9AA5A0;--minor-soft:#262C29;
+    --code-bg:#1F2623;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121614;--surface:#181D1A;--ink:#E6EBE8;--muted:#98A39D;--rule:#2C3430;--rule-soft:#232A26;
+  --accent:#5FBFB7;--accent-soft:#16302D;
+  --block:#E3796C;--block-soft:#3A1F1B;--fix:#DDA84E;--fix-soft:#3A2E17;--minor:#9AA5A0;--minor-soft:#262C29;
+  --code-bg:#1F2623;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:72ch;margin:0 auto;padding:56px 24px 96px}
+h1,h2,h3{font-family:"Newsreader","Iowan Old Style",Georgia,serif;text-wrap:balance;margin:0;font-weight:500}
+h1{font-size:2.6rem;line-height:1.1;letter-spacing:-.01em}
+h2{font-size:1.65rem;line-height:1.2;margin-top:8px}
+h3{font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:1.05rem;font-weight:600;line-height:1.3}
+p{margin:0}
+a{color:var(--accent)}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+code{background:var(--code-bg);padding:.1em .35em;border-radius:3px}
+.eyebrow{font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:.9rem;margin-top:14px}
+.meta span b{color:var(--ink);font-weight:500}
+header{display:flex;flex-direction:column;gap:14px;padding-bottom:28px;border-bottom:1px solid var(--rule)}
+.verdict{font-family:"Newsreader",Georgia,serif;font-size:1.25rem;line-height:1.45;color:var(--ink);max-width:62ch}
+.verdict em{font-style:italic}
+
+.tally{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:28px 0 8px}
+.tally .cell{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.tally .n{font-family:"Newsreader",Georgia,serif;font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
+.tally .l{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.tally .d{font-size:.85rem;color:var(--muted)}
+.cell.block .n,.cell.block .l{color:var(--block)}
+.cell.fix .n,.cell.fix .l{color:var(--fix)}
+.cell.minor .n,.cell.minor .l{color:var(--minor)}
+.state{font-size:.9rem;color:var(--muted);margin-top:14px;max-width:66ch}
+
+nav.toc{margin:36px 0 0;padding:18px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:.92rem}
+nav.toc .k{color:var(--muted);font-variant-numeric:tabular-nums}
+nav.toc a{text-decoration:none;color:var(--ink)}
+nav.toc a:hover{color:var(--accent)}
+
+section{margin-top:56px;display:flex;flex-direction:column;gap:18px}
+section>.lede{color:var(--muted);max-width:66ch}
+.item{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px 20px 18px 22px;position:relative;display:flex;flex-direction:column;gap:10px;scroll-margin-top:24px}
+.item::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:6px 0 0 6px;background:var(--minor)}
+.item.block::before{background:var(--block)}
+.item.fix::before{background:var(--fix)}
+.item .head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.item .id{font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.chip{font-size:.7rem;letter-spacing:.09em;text-transform:uppercase;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:auto;white-space:nowrap}
+.chip.block{color:var(--block);background:var(--block-soft)}
+.chip.fix{color:var(--fix);background:var(--fix-soft)}
+.chip.minor{color:var(--minor);background:var(--minor-soft)}
+.item p.body{max-width:66ch}
+.rec{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:10px 12px;background:var(--accent-soft);border-radius:4px;max-width:66ch}
+.rec .arrow{color:var(--accent);font-weight:600;font-family:"IBM Plex Mono",monospace}
+.rec p{font-size:.95rem}
+
+.scope ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;max-width:64ch}
+.scope p{max-width:66ch}
+
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg)}
+tr:last-child td{border-bottom:none}
+td.ref{font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+td.ref a{color:var(--accent);text-decoration:none}
+.decided{gap:22px}
+.dblock{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.dblock h3{font-family:"Newsreader",Georgia,serif;font-size:1.25rem;font-weight:500}
+.dblock ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px;font-size:.95rem}
+.dblock p{font-size:.95rem;max-width:66ch}
+.dblock td:first-child{color:var(--muted);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+code.new{background:var(--accent-soft);color:var(--accent);font-weight:500}
+.next{border-left:4px solid var(--accent);padding:12px 16px;background:var(--accent-soft);border-radius:0 6px 6px 0;display:flex;flex-direction:column;gap:6px}
+.next p{max-width:66ch}
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);color:var(--muted);font-size:.85rem;max-width:66ch}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:640px){.tally{grid-template-columns:1fr}h1{font-size:2.1rem}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">beating-nise · context/internal · 27 Aug 2026</div>
+  <h1>Harness Audit Redline</h1>
+  <p class="verdict">The audit's diagnosis is right — <em>the log records what happened, never what it is doing</em> — and its four backend fixes are cheap. But the two documents together introduce three numbering systems, two incompatible promotion ladders, event types their own code emits but their own vocabulary lacks, and at least four loop edges described in prose and absent from both the diagram and the code.</p>
+  <div class="meta">
+    <span>Reviewing: <b>Frontend↔backend mapping audit</b> + <b>Harness Decisions (chronological)</b></span>
+    <span>Repo state: <b>PR #1 merged</b>, phase 2 committed on <span class="mono">phase-2-fake-run-server</span></span>
+    <span>Status: <b>all 29 items decided</b> — see <a href="#s6">section 6</a></span>
+  </div>
+</header>
+
+<div class="tally">
+  <div class="cell block"><span class="n">9</span><span class="l">Blocking</span><span class="d">All resolved — decisions in §6</span></div>
+  <div class="cell fix"><span class="n">12</span><span class="l">Should fix</span><span class="d">Cheap now, a rebuild later</span></div>
+  <div class="cell minor"><span class="n">8</span><span class="l">Minor</span><span class="d">Wording, dedupe, or decide after the webinar</span></div>
+</div>
+<p class="state">Shipped vocabulary the critique is measured against: 16 event types, <code>schema_version=1</code>, 5 rungs, 9 states, 4 cost slices, 6 failure classes. Every recommendation below is written so the implementing agent can act on it without re-deriving.</p>
+
+<nav class="toc" aria-label="Sections">
+  <span class="k">1</span><a href="#s1">Contradictions with shipped code and the build plan</a>
+  <span class="k">2</span><a href="#s2">Loop edges missing from the diagram and the code</a>
+  <span class="k">3</span><a href="#s3">Log → app links the audit opens but does not close</a>
+  <span class="k">4</span><a href="#s4">Naming — three numberings now coexist</a>
+  <span class="k">5</span><a href="#s5">Scope honesty</a>
+  <span class="k">6</span><a href="#s6">Decisions — locked 27 Aug</a>
+</nav>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <div class="eyebrow">Section 1</div>
+  <h2>Contradictions with shipped code and the build plan</h2>
+  <p class="lede">Resolve these before phase 3. Every later phase emits from this vocabulary and measures with this ladder.</p>
+
+  <div class="item block" id="i1-1"><div class="head"><span class="id">1.1</span><h3>Event vocabulary: 16 vs 22 vs 25 vs 27</h3><span class="chip block">Blocking</span></div>
+    <p class="body">Code has 16. The chrono doc's <code>EVENT_TYPES</code> has 22 and <code>schema_version: 2</code>. The audit adds <code>phase_entered</code>, <code>phase_exited</code>, <code>digest</code> (25). The chrono doc's own phase-13 code emits <code>convergence</code> and <code>prediction</code>, which are in nobody's vocabulary (27) — its own <code>assert type in EVENT_TYPES</code> would fail on them.</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided: 33, not 27.</b> Walking every tab and phase found five more (<code>data_profile</code>, <code>research_query</code>, <code>hypothesis_updated</code>, <code>incumbent_changed</code>, <code>llm_call</code>) plus a <code>note</code> valve. <code>schema_version</code> stays 1. Full list in §6.</p></div></div>
+
+  <div class="item minor" id="i1-2"><div class="head"><span class="id">1.2</span><h3>Heartbeat routing</h3><span class="chip minor">Minor</span></div>
+    <p class="body">Chrono 2.4 keeps <code>heartbeat</code> in the vocabulary and routes it inside <code>_drain</code>. The shipped decision is the opposite: <code>emit("heartbeat")</code> raises; sidecar only via <code>log.heartbeat()</code>.</p>
+    <div class="rec"><span class="arrow">→</span><p>Doc follows code. Drop <code>heartbeat</code> from the vocabulary in the doc.</p></div></div>
+
+  <div class="item block" id="i1-3"><div class="head"><span class="id">1.3</span><h3>Two promotion ladders exist</h3><span class="chip block">Blocking</span></div>
+    <p class="body">The build plan's §6 (what phase-5 <code>measure.py</code> is built from) uses screen −0.010 / +1·SD(Δ), k=3 means 0.025/0.016, BH q=0.10, t 2.92/2.13/1.83, DiD 0.013/0.007. Chrono phase 11 uses screen +1σ / −0.01, replicate "all three deltas positive AND mean ≥ 0.010", holdout η=0.005, audit at 5σ — no BH, no t-stat, no DiD. The agent will build whichever it reads first.</p>
+    <div class="rec"><span class="arrow">→</span><p>Pick the chrono rule: simpler, honest about its 6–12% false-positive rate, matches the audit's dossier screenshot. Then rewrite the build plan's phase-5 constants to match.</p></div></div>
+
+  <div class="item fix" id="i1-4"><div class="head"><span class="id">1.4</span><h3>"Derive thresholds from σ" — then the code hardcodes 0.010</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">Chrono 4.5 says thresholds come from the measured σ. The phase-4 code sets <code>promote_bar: 0.010</code> as a constant in the same function.</p>
+    <div class="rec"><span class="arrow">→</span><p><code>promote_bar = max(0.010, 2.5 · sd_delta / √3)</code>; log both terms so the report can say which one bound.</p></div></div>
+
+  <div class="item block" id="i1-5"><div class="head"><span class="id">1.5</span><h3>Rung count: 5, 3, or 4 — and where does "full" run?</h3><span class="chip block">Blocking</span></div>
+    <p class="body">Code has 5 rungs (smoke, screen, full, replicate, holdout). Chrono 11 describes three; 13.7 says "four-rung ladder"; <code>full</code> is used only in calibration. Yet the Replication tab needs screen-versus-full pairs per node, so a full-data run must happen somewhere in the ladder — and phase 11 never says where.</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided:</b> three rungs — smoke, screen, replicate-on-full (3 paired seeds, incumbent side cached). <b>Holdout is not a rung</b>; it is a run-level checkpoint with at most two visits.</p></div></div>
+
+  <div class="item fix" id="i1-6"><div class="head"><span class="id">1.6</span><h3>Three LLM calls have no cost slice</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">Slices are researching, coding, training, tuning. Phase 9 verify calls <code>llm_strong.semantic_match</code>; phase 11 <code>adjudicate</code> calls an LLM per link; phase 12 has an adversarial falsifier. None fits. The cost tab's headline claim depends on these being counted.</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided:</b> tokens live only on a new <code>llm_call</code> event whose <code>slice</code> is set by the caller — researcher/brief/adjudicate → researching; coder/verify/debug turns → coding; tuner → tuning. Four slices kept.</p></div></div>
+
+  <div class="item minor" id="i1-7"><div class="head"><span class="id">1.7</span><h3>Protocol hash length</h3><span class="chip minor">Minor</span></div>
+    <p class="body">Chrono 0 truncates to 12 hex; shipped code emits <code>sha256:&lt;64 hex&gt;</code>.</p>
+    <div class="rec"><span class="arrow">→</span><p>Fixture and every doc example use the shipped form.</p></div></div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <div class="eyebrow">Section 2</div>
+  <h2>Loop edges missing from the diagram and the code</h2>
+  <p class="lede">Each of these is described in a sentence of prose somewhere and has no arrow in the loop, no branch in the pseudocode, and no event.</p>
+
+  <div class="item block" id="i2-1"><div class="head"><span class="id">2.1</span><h3>UNCLEAR attribution has no edge back to the coder</h3><span class="chip block">Blocking</span></div>
+    <p class="body">11.6: a positive delta with UNCLEAR attribution does not promote; verdict is <code>inconclusive</code>. 11.5: inconclusive nodes requeue at reduced priority. But UNCLEAR is an implementation defect (dead gate, Glorot init), not noise — rerunning the same code with more seeds reproduces the same dead gate. AgentX fixes it with a one-line rewrite in round two. That is an edge 11 → 8 carrying the observable finding, and it does not exist.</p>
+    <div class="rec"><span class="arrow">→</span><p><code>inconclusive</code> with <code>attribution="unclear"</code> requeues the hypothesis as <code>maturity="probe"</code> with the broken-link report attached as coder context. Noise-inconclusive requeues unchanged. Two different edges.</p></div></div>
+
+  <div class="item fix" id="i2-2"><div class="head"><span class="id">2.2</span><h3>No state for a node whose K candidates all failed verify</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">Phase 9 <code>fail_round</code> after three rewrites. The node was created (<code>candidates_generated</code> carries <code>node=18</code>), never ran, has no measurement. None of the nine states fits: not <code>rejected</code> (no measurement), not <code>retired</code> (family alive), not <code>debugging</code> (no failure event).</p>
+    <div class="rec"><span class="arrow">→</span><p>Create the node only after a candidate passes verify. Failed rounds are hypothesis-level events with no node — NOVA's "working state unchanged, round recorded as semantic failure".</p></div></div>
+
+  <div class="item fix" id="i2-3"><div class="head"><span class="id">2.3</span><h3>"≥2 independent runs" makes the forbidden list empty by construction</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">12.3 requires two independent runs before an anti-pattern is confirmed. If "run" means a harness run (one 24-hour execution), a hackathon has one or two, nothing is ever confirmed, and the audit's own daily check — "if the forbidden list is empty after fifty attempts, the gates are not admitting anything" — fires on every run.</p>
+    <div class="rec"><span class="arrow">→</span><p>"Run" means node. Confirm at ≥2 nodes in the same family with the same failure signature.</p></div></div>
+
+  <div class="item minor" id="i2-4"><div class="head"><span class="id">2.4</span><h3>The adversarial falsifier exists in no diagram, code, slice, or cadence</h3><span class="chip minor">Minor</span></div>
+    <p class="body">12.3 introduces an agent whose only job is to falsify a claimed mechanism. When does it run, on what, at what cost?</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided: cut.</b> Admission is count-based (≥2 nodes); <code>excluded</code> is set by hand via <code>intervention</code>. Revisit Saturday only if everything else is green.</p></div></div>
+
+  <div class="item fix" id="i2-5"><div class="head"><span class="id">2.5</span><h3>Tuner trials are runs but are not in the ladder</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">8.6 sends independent knobs to Optuna. Each trial is a phase-10 execution and a screen measurement. Twenty trials on the screen rung is twenty draws from the same null; the best one is exactly the best-of-N artefact phase 4 warns about.</p>
+    <div class="rec"><span class="arrow">→</span><p>A sweep is <b>one node</b>; trials are <code>measurement</code> events with <code>trial=</code>; only the best trial enters replicate, carrying <code>n_trials=20</code> so the report can discount it.</p></div></div>
+
+  <div class="item block" id="i2-6"><div class="head"><span class="id">2.6</span><h3>Restart / resume is not a phase</h3><span class="chip block">Blocking</span></div>
+    <p class="body">Chrono 2 says "nothing else holds state", but tree, queue, memory and the tuner study all live in-process. The harness will die at least once overnight. New run or resume? Nothing says.</p>
+    <div class="rec"><span class="arrow">→</span><p><code>python -m harness resume &lt;run_id&gt;</code> rebuilds tree/queue/memory by reducing <code>events.jsonl</code> — the same fold the app does, which is also the strongest test that the fold is correct — emits <code>intervention</code> if a human triggered it, and reopens the log. The most likely hackathon-night failure; costs one afternoon.</p></div></div>
+
+  <div class="item block" id="i2-7"><div class="head"><span class="id">2.7</span><h3>Holdout arithmetic does not close</h3><span class="chip block">Blocking</span></div>
+    <p class="body">11.4: five paired seeds, at most twice. Paired = candidate + incumbent = 10 full runs per visit, 20 for two. Phase 4 prices five full baseline runs at ~15 GPU-hours, so one full run ≈ 3 h and the holdout costs ≈ 60 GPU-hours — more than the whole hackathon budget.</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided:</b> holdout leaves the ladder entirely — ≤2 visits per run (first promotion, end), 3 paired seeds, candidate side only, <code>holdout_visits</code> counter enforced in code. A node failing holdout is <code>rejected</code>, never requeued.</p></div></div>
+
+  <div class="item minor" id="i2-8"><div class="head"><span class="id">2.8</span><h3>Where search_validation and holdout come from is never said</h3><span class="chip minor">After webinar</span></div>
+    <p class="body">0.5 carves two validation sets; 1.7 says Ali-CCP has no timestamp and the split is at file level. If the organisers ship train/test only, both sets must come out of train — or test doubles as search_validation and holdout comes from train. The two sections never meet.</p>
+    <div class="rec"><span class="arrow">→</span><p>Decide after 28 Aug. Until then write into <code>protocols/aliccp.yaml</code>: search_validation = organisers' test file; holdout = last 10% of train by <code>sample_id</code>, ASSUMED chronological — and hash the assumption.</p></div></div>
+
+  <div class="item block" id="i2-9"><div class="head"><span class="id">2.9</span><h3>The synthetic planted effect sits exactly on the promote bar</h3><span class="chip block">Blocking</span></div>
+    <p class="body">3.3 plants a true effect of +0.010. Phase 4 says k=3 paired detects ~2.5·SE; 11.3 promotes at mean ≥ 0.010. A true +0.010 effect is promoted about half the time, so the build plan's phase-5 gate (<code>FN=0</code>) is unreachable by design and the scorecard reports ~50% false negatives on a <em>working</em> harness.</p>
+    <div class="rec"><span class="arrow">→</span><p>Plant +0.025 for the strong signal and a second marginal +0.010 feature whose expected promotion rate is stated as "≈50%, by design". Gate on <code>FP=0, FN=0 on the strong signal, leak caught</code>.</p></div></div>
+
+  <div class="item fix" id="i2-10"><div class="head"><span class="id">2.10</span><h3>Saturation hashes the field that never changes</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">12.7 hashes discretised architecture fields. 5.7 says architecture is worth ~0.002 here and most hypotheses are features / objective / training. Architecture repeats &gt;80% almost immediately and the run stops on "idea exhaustion" while ideas are still fresh.</p>
+    <div class="rec"><span class="arrow">→</span><p>Signature over <code>(stage, mechanism)</code> keys of the last N hypotheses.</p></div></div>
+
+  <div class="item minor" id="i2-11"><div class="head"><span class="id">2.11</span><h3>Exploration reserve uses unseeded randomness</h3><span class="chip minor">Minor</span></div>
+    <p class="body">7.5 <code>random() &gt; explore</code> in a harness whose whole argument is replayability.</p>
+    <div class="rec"><span class="arrow">→</span><p>Seed from <code>protocol.run.seed</code>; emit <code>queue_reordered</code> with <code>explored=True</code> when the reserve fires.</p></div></div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <div class="eyebrow">Section 3</div>
+  <h2>Log → app links the audit opens but does not close</h2>
+  <p class="lede">The audit adds events for the app to fold over. Several of the folds it promises cannot be built from the events as specified.</p>
+
+  <div class="item block" id="i3-1"><div class="head"><span class="id">3.1</span><h3><code>phase_entered</code> with no exit lights a chip forever</h3><span class="chip block">Blocking</span></div>
+    <p class="body">A worker that dies mid-phase never emits <code>phase_exited</code>. The strip then shows phase 10 "running" for the rest of the night — the opposite of the stuck-loop detection the strip exists for.</p>
+    <div class="rec"><span class="arrow">→</span><p>A phase is open only while its worker's last heartbeat is under 3× the interval; heartbeats carry <code>phase=</code> so the strip can be rebuilt from the sidecar alone; emit <code>phase_exited</code> from a <code>finally:</code> block.</p></div></div>
+
+  <div class="item fix" id="i3-2"><div class="head"><span class="id">3.2</span><h3>The strip is per-worker, not global</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">The researcher can be in phase 6 for node 19 while the GPU worker is in phase 10 for node 18. "Accent for currently executing" as one colour cannot show two lit chips with different owners.</p>
+    <div class="rec"><span class="arrow">→</span><p>Reducer state <code>active_phases: {worker: {phase, node, since}}</code>; chips carry a small worker badge.</p></div></div>
+
+  <div class="item minor" id="i3-3"><div class="head"><span class="id">3.3</span><h3>Fourteen chips mix one-time setup with the loop</h3><span class="chip minor">Minor</span></div>
+    <p class="body">Phases 0–4 happen once; phase 2 (the event log) is never "entered" at runtime at all. After hour two, five chips are grey forever and read as broken.</p>
+    <div class="rec"><span class="arrow">→</span><p>One "setup" chip (0–4), eight loop chips (5–12), one "report" chip (13). Ten.</p></div></div>
+
+  <div class="item fix" id="i3-4"><div class="head"><span class="id">3.4</span><h3>Cost on <code>phase_exited</code> double counts</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">2.5 puts cost on every event. If <code>candidates_generated</code> carries <code>cost=</code> and <code>phase_exited</code> also does, the four-way sum counts coding tokens twice.</p>
+    <div class="rec"><span class="arrow">→</span><p><b>Decided:</b> tokens only on <code>llm_call</code>, GPU seconds only on <code>measurement</code>/<code>failure</code>; <code>cost=</code> removed from every other event; <code>phase_exited</code> carries <code>duration_s</code> only.</p></div></div>
+
+  <div class="item fix" id="i3-5"><div class="head"><span class="id">3.5</span><h3>The <code>digest</code> event does not feed the Memory tab it was invented for</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">The tab wants anti-patterns with run counts and admission status. The digest carries only forbidden ids.</p>
+    <div class="rec"><span class="arrow">→</span><p>Add an <code>anti_pattern</code> event on create and on every status change (pending → contested → confirmed | excluded, with <code>runs_seen</code>). Memory tab = fold over <code>anti_pattern</code> + latest <code>digest</code>.</p></div></div>
+
+  <div class="item fix" id="i3-6"><div class="head"><span class="id">3.6</span><h3>No endpoint serves diffs, reasoning, or observable series</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">The dossier needs <code>patches/node-018-cand2.diff</code>, <code>reasoning/node-018.md</code>, and — by the audit's own argument that a paragraph does not belong on a JSONL line — observable time series, which are far larger than a paragraph.</p>
+    <div class="rec"><span class="arrow">→</span><p><code>GET /runs/{id}/files/{path}</code> with an allowlist of three prefixes: <code>patches/</code>, <code>reasoning/</code>, <code>observables/</code>. Observables written as <code>observables/node-018-seed0.jsonl</code>; the <code>observable</code> event carries the path and a three-number summary (first, last, max).</p></div></div>
+
+  <div class="item fix" id="i3-7"><div class="head"><span class="id">3.7</span><h3><code>rule_trip</code> and <code>semantic_filter</code> — one thing with two names, or two things nobody separated</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">Chrono 9.7 says every verify rejection emits <code>rule_trip</code>; the audit's <code>semantic_filter</code> carries the same category. Reliability shows "rule trips"; the audit's histogram shows "the seven categories".</p>
+    <div class="rec"><span class="arrow">→</span><p>Split by when they fire. <code>semantic_filter</code> = pre-execution candidate rejection (A–F, Z). <code>rule_trip</code> = runtime violation by a running child (holdout read, protocol write, stdout-only result). Different histograms, different tabs.</p></div></div>
+
+  <div class="item minor" id="i3-8"><div class="head"><span class="id">3.8</span><h3>Winner diff stored twice</h3><span class="chip minor">Minor</span></div>
+    <p class="body">2.6 derives <code>node-018.diff</code> from <code>git diff parent..node</code>; the audit writes <code>node-018-cand{0..3}.diff</code> before ranking. The winner exists as a loose file and as a commit.</p>
+    <div class="rec"><span class="arrow">→</span><p>Losers are loose files only; <code>diff_path</code> on <code>candidate_ranked</code> points at the <code>cand{k}</code> file. One source.</p></div></div>
+
+  <div class="item fix" id="i3-9"><div class="head"><span class="id">3.9</span><h3>The one-screenshot dossier needs the fake run to script it</h3><span class="chip fix">Should fix</span></div>
+    <p class="body">Part 5's judge screenshot (rejected promotion, four candidates, seed 0 +0.009, mean +0.003) can only be shown before real GPU time if <code>fake_run.SCRIPT</code> contains that node. The shipped SCRIPT covers 16 types and no candidates.</p>
+    <div class="rec"><span class="arrow">→</span><p>When the vocabulary PR (1.1) lands, add "node 18" to SCRIPT verbatim from Part 5 and make it the fixture the JS test asserts on.</p></div></div>
+
+  <div class="item minor" id="i3-10"><div class="head"><span class="id">3.10</span><h3>Permalink route appears in no phase</h3><span class="chip minor">Minor</span></div>
+    <p class="body"><code>#/run/&lt;id&gt;/node/&lt;n&gt;</code> is required by Part 5.</p>
+    <div class="rec"><span class="arrow">→</span><p>Hash routing over the existing reducer; add to the phase-2.5 app work.</p></div></div>
+
+  <div class="item minor" id="i3-11"><div class="head"><span class="id">3.11</span><h3>What counts as an <code>intervention</code> is undefined</h3><span class="chip minor">Minor</span></div>
+    <p class="body">"Every control is an intervention" — but restarting after a crash, editing <code>bank.yaml</code>, or changing the <code>run:</code> budget mid-run are not classified.</p>
+    <div class="rec"><span class="arrow">→</span><p>Any human write to <code>runs/&lt;id&gt;/</code>, <code>protocols/</code>, or <code>bank.yaml</code> between <code>run_started</code> and <code>run_ended</code>, plus any restart. Emit with <code>kind=</code>.</p></div></div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4" class="scope">
+  <div class="eyebrow">Section 4</div>
+  <h2>Naming — three numberings now coexist</h2>
+  <p>Build-plan phases 0–10 (what the implementing agent works from), chrono phases 0–13 (what events will carry), audit build steps 1–12. "Phase 2" means the event log in one and fake_run/server in another; "phase 5" means measurement in one and research fan-out in the other.</p>
+  <div class="rec"><span class="arrow">→</span><p>Events carry <code>name=</code> only (<code>rank_evidence</code>, <code>verify</code>, <code>run</code>) and no integer — the integer is a display concern. In prose: "build phase N" vs "loop phase &lt;name&gt;". Rename the audit's steps "app steps". Never say bare "phase N" in a ticket again.</p></div>
+  <p><code>stage</code> is already the six pipeline stages — do not reuse it for loop phases or rungs. <code>round</code> (used by <code>digest</code>) is undefined: define it as one dequeue.</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="s5" class="scope">
+  <div class="eyebrow">Section 5</div>
+  <h2>Scope honesty</h2>
+  <p>The chrono doc adds four modules the build plan does not have: <code>agents/evidence.py</code> (phase 6), <code>verify.py</code> beyond the rulebook (phase 9), K-candidate <code>coder.py</code> (phase 8), <code>memory.py</code> with admission gates and saturation (phase 12). Together they are roughly the size of existing build phases 6–8 combined. The audit's own line stands: stop after app step 7 and there is a competitive submission.</p>
+  <p>Order of value per hour, given the ladder and log already exist:</p>
+  <ol>
+    <li>K candidates with deterministic ranking (phase 8 + a cut-down 6 with fixed weights) — the biggest ablation number and the dossier's centrepiece.</li>
+    <li><code>verify.py</code> categories B, C, D, F only (columns, protocol touch, anti-pattern regex, observables wired) — regexes, no LLM.</li>
+    <li><code>digest</code> + <code>anti_pattern</code> events with the ≥2-node admission rule, no falsifier.</li>
+    <li>Evidence α-routing and the adversarial falsifier — only if the above is green by Saturday.</li>
+  </ol>
+  <p>Reserve all 27 event types now regardless. A reserved type that is never emitted costs nothing; an unreserved one costs a reducer rebuild.</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="s6" class="decided">
+  <div class="eyebrow">Section 6 · locked 27 Aug 2026</div>
+  <h2>Decisions</h2>
+  <p class="lede">Resolved one by one after the critique. Where a decision differs from an item's original recommendation, the decision wins and the item's recommendation above has been corrected.</p>
+
+  <div class="dblock"><h3>Vocabulary — 33 event types, <code>schema_version</code> stays 1</h3>
+    <p>Five events nothing emitted, plus one valve; <code>heartbeat</code> out (sidecar only).</p>
+    <div class="tablewrap"><table><thead><tr><th>Group</th><th>Types</th></tr></thead><tbody>
+      <tr><td>run</td><td><code>run_started</code> <code>run_ended</code> <code>intervention</code> <code>convergence</code> <code>saturation</code> <code>prediction</code> <code>submission_written</code> <code class="new">data_profile</code> <code class="new">note</code></td></tr>
+      <tr><td>phase</td><td><code>phase_entered</code> <code>phase_exited</code></td></tr>
+      <tr><td>research</td><td><code class="new">research_query</code> <code>research_source</code> <code>cache_lookup</code></td></tr>
+      <tr><td>hypothesis</td><td><code>hypothesis_queued</code> <code class="new">hypothesis_updated</code> <code>queue_reordered</code></td></tr>
+      <tr><td>candidate</td><td><code>candidates_generated</code> <code>semantic_filter</code> <code>candidate_ranked</code></td></tr>
+      <tr><td>node</td><td><code>node_created</code> <code>state_changed</code> <code>measurement</code> <code>observable</code> <code>attribution</code> <code>verdict</code> <code class="new">incumbent_changed</code> <code>failure</code> <code>recovery</code> <code>rule_trip</code></td></tr>
+      <tr><td>memory</td><td><code>digest</code> <code>anti_pattern</code></td></tr>
+      <tr><td>cost</td><td><code class="new">llm_call</code> — the only token-bearing event</td></tr>
+    </tbody></table></div>
+    <ul>
+      <li>Strict writer, lenient reader: <code>emit</code> rejects unknown types; the reducer ignores and counts them. Adding a type is never breaking.</li>
+      <li>Every event names its subject: <code>node=</code> / <code>hyp=</code> / <code>cand=</code> / <code>worker=</code>. Paths end in <code>_path</code>, relative to run_dir.</li>
+      <li><code>llm_call.slice</code> set by caller: researcher, brief, adjudicate → researching; coder, verify, debug turns → coding; tuner → tuning. Training is GPU-only.</li>
+      <li><code>hypothesis_updated.status</code> ∈ backlog · probe · ready · dequeued · spawned · failed_verify · dropped · merged. <code>incumbent_changed.reason</code> ∈ promotion · rollback.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>Ladder — chrono rule, four fixes</h3>
+    <ul>
+      <li>Rungs: smoke → screen → replicate-on-full. Holdout is not a rung.</li>
+      <li>Refuse to search if σ<sub>full</sub> &gt; 0.02. <code>sd_delta</code> defaults to σ·√2; re-estimate ρ after 3 replicated candidates; emit a band refresh.</li>
+      <li>Screen (1 paired seed, subsample): Δ<sub>0</sub> ≥ +1.0·sd_delta → replicate; ≤ −0.010 → rejected; else inconclusive (priority ×0.5, ≤2 revisits, then retired).</li>
+      <li>Replicate (3 paired seeds on full; incumbent's seeds cached): all 3 &gt; 0 <b>and</b> mean ≥ max(0.010, 0.95·sd_delta<sub>full</sub>) — one-sided known-σ α = 0.05 at k = 3; with the sign rule ≈3% per-candidate false promotion. Say so in the writeup.</li>
+      <li>mean ≥ 5·sd_delta<sub>full</sub> → leak audit first. Attribution CLEAR required; UNCLEAR → <code>hypothesis_updated status=probe</code> with the link report attached.</li>
+      <li>Promote → <code>verdict promoted</code> + <code>incumbent_changed reason=promotion</code>.</li>
+      <li>Holdout: run-level, ≤2 visits (first promotion, end), 3 paired seeds, candidate side only, counter enforced. Report only if ≥ best + 0.005; failing node is <code>rejected reason=holdout</code>, never requeued.</li>
+      <li>Dropped from build plan §6: BH, t-table, DiD, k = 5 tier. Synthetic plants +0.025 strong, +0.010 marginal, 0, leak; gate on strong / noise / leak / <code>holdout_visits</code> &lt; 3.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>Lifecycle — three objects, three lifetimes</h3>
+    <ul>
+      <li><b>Hypothesis</b> lives in the queue; every status change is <code>hypothesis_updated</code>.</li>
+      <li><b>Candidate</b> exists only between <code>candidates_generated</code> and <code>candidate_ranked</code>, addressed <code>hyp=, cand=</code>; K candidates, ≤3 rewrite rounds, then <code>failed_verify</code>. No node.</li>
+      <li><b>Node</b> is born when the ranked winner passes verify: <code>node_created(hyp, cand, parent=incumbent, diff_path)</code>. Only nodes have measurements, states, verdicts. Nine states unchanged. Writer rule: <code>node_created</code> must reference a hypothesis currently <code>dequeued</code>.</li>
+      <li>UNCLEAR attribution → probe requeue with the link report in the coder prompt; noise-inconclusive → same hypothesis at ×0.5, no context. Two distinguishable edges.</li>
+      <li>Tuner sweep = one hypothesis → one node; trials are <code>measurement(rung=screen, trial=i)</code>; best trial enters replicate carrying <code>n_trials</code>.</li>
+      <li>The dossier's candidates section folds by <code>hyp=</code>, so it renders for hypotheses that never became nodes.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>Memory</h3>
+    <ul>
+      <li>"Run" = node. <code>anti_pattern</code> confirmed at ≥2 nodes, same family, same failure signature; one node = pending. Status ∈ pending · confirmed · excluded; excluded is set by hand via <code>intervention</code>. Falsifier cut.</li>
+      <li>Saturation over <code>(stage, mechanism)</code> of the last 20 hypotheses; stop when repeat rate &gt; 80% for 2 consecutive rounds. Round = one dequeue.</li>
+      <li>Memory tab = fold over <code>anti_pattern</code> + latest <code>digest</code>.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>Run mechanics</h3>
+    <ul>
+      <li><code>python -m harness resume &lt;run_id&gt;</code>: reduce <code>events.jsonl</code> → tree / queue / memory, reopen the log with seq continuing, emit <code>intervention kind=resume</code>. Optuna study persisted at <code>runs/&lt;id&gt;/tuner.db</code>.</li>
+      <li>Splits until the webinar: search_validation = organisers' test file; holdout = last 10% of train by <code>sample_id</code>, assumption written and hashed. Revisit 28 Aug.</li>
+      <li>Exploration: <code>random.Random(protocol.run.seed)</code>; <code>queue_reordered explored=true</code>.</li>
+      <li>Intervention = any human write under <code>runs/&lt;id&gt;/</code>, <code>protocols/</code>, <code>bank.yaml</code> during a run, plus resume; <code>kind=</code>.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>App</h3>
+    <ul>
+      <li><code>phase_exited</code> in <code>finally:</code>; reducer closes a phase whose worker heartbeat is &gt;3× interval old; heartbeats carry <code>phase=</code>; <code>active_phases</code> keyed by worker, chip shows a worker badge.</li>
+      <li>Ten chips: setup · fan-out · rank · queue · candidates · verify · run · believe · digest · report.</li>
+      <li><code>GET /runs/{id}/files/{path}</code>, allowlist <code>patches/</code> <code>reasoning/</code> <code>observables/</code>; observables as per-seed JSONL, event carries path + first / last / max.</li>
+      <li><code>semantic_filter</code> = pre-execution (A–F, Z); <code>rule_trip</code> = runtime child violation. Separate histograms.</li>
+      <li>Losers are loose files; the winner's <code>cand{k}.diff</code> is the one file. Fake run scripts "node 18" from audit Part 5 as the JS fixture. Hash route <code>#/run/&lt;id&gt;/node/&lt;n&gt;</code>.</li>
+    </ul></div>
+
+  <div class="dblock"><h3>Naming</h3>
+    <p>Events carry loop-phase <code>name=</code> only, never an integer. Tickets say "build phase N" / "loop phase &lt;name&gt;". <code>round</code> = one dequeue. <code>stage</code> = the six pipeline stages only.</p></div>
+
+  <div class="next"><span class="eyebrow">Next concrete action</span><p>After phase 2 merges: one PR <b>"vocabulary v1 complete"</b> — 33 types, <code>note</code> valve, strict-writer / lenient-reader tests, fake-run node 18, files endpoint, hash route. Then rewrite build-plan §6 with the ladder constants above before build phase 5 starts.</p></div>
+</section>
+
+<footer>Source of record: <span class="mono">~/beating-nise/context/internal/audit-critique-2026-08-27.md</span>. Untracked on the <span class="mono">phase-2-fake-run-server</span> working tree — do not sweep it into the phase-2 PR; it lands with the vocabulary PR.</footer>
+</div>
