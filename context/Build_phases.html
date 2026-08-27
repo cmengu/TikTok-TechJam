@@ -1,0 +1,818 @@
+<title>Beating NISE Build Phases</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F3F5F9; --surface:#FFFFFF; --ink:#141A2B; --muted:#5B6478; --line:#D9DEE8;
+  --accent:#2743C7; --accent-ink:#FFFFFF; --soft:#E7EBFA; --warn:#B4531B; --warn-soft:#FBEEE4;
+  --ok:#1F7A4D; --ok-soft:#E6F3EC; --code-bg:#EEF1F7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1320; --surface:#171C2C; --ink:#E8EBF3; --muted:#9AA3B8; --line:#2A3148;
+    --accent:#8FA3FF; --accent-ink:#0F1320; --soft:#1E2646; --warn:#F0A06A; --warn-soft:#2E211A;
+    --ok:#6FCF97; --ok-soft:#16281E; --code-bg:#1B2135;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1320; --surface:#171C2C; --ink:#E8EBF3; --muted:#9AA3B8; --line:#2A3148;
+  --accent:#8FA3FF; --accent-ink:#0F1320; --soft:#1E2646; --warn:#F0A06A; --warn-soft:#2E211A;
+  --ok:#6FCF97; --ok-soft:#16281E; --code-bg:#1B2135;
+}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6;font-size:1.02rem}
+.wrap{max-width:46rem;margin:0 auto;padding:3rem 1.25rem 5rem}
+h1,h2,h3,h4{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance;line-height:1.15}
+h1{font-size:2.6rem;font-weight:700;margin:0 0 .5rem}
+h2{font-size:1.65rem;font-weight:700;margin:3.5rem 0 .5rem;padding-top:1.25rem;border-top:2px solid var(--ink)}
+h3{font-size:1.05rem;font-weight:700;margin:1.6rem 0 .35rem;color:var(--accent);letter-spacing:.01em}
+h4{font-size:.95rem;font-weight:700;margin:1rem 0 .25rem}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.15rem;color:var(--muted);margin:.5rem 0 2rem;max-width:40rem}
+p{margin:.6rem 0}
+ul,ol{padding-left:1.25rem;margin:.4rem 0}
+li{margin:.3rem 0}
+li::marker{color:var(--accent)}
+strong{font-weight:600}
+code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--code-bg);padding:.1em .35em;border-radius:3px}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:1rem 1.1rem;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:.82rem;line-height:1.5;margin:.8rem 0}
+pre code{background:none;padding:0;font-size:inherit}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.25rem;font-size:.9rem;color:var(--muted);margin:.25rem 0 1rem}
+.meta b{color:var(--ink);font-weight:600}
+.box{border-left:3px solid var(--accent);background:var(--soft);padding:.7rem 1rem;border-radius:0 6px 6px 0;margin:.9rem 0}
+.stop{border-left:3px solid var(--warn);background:var(--warn-soft);padding:.7rem 1rem;border-radius:0 6px 6px 0;margin:.9rem 0}
+.stop .eyebrow{color:var(--warn)}
+.gate{border:2px solid var(--ok);background:var(--ok-soft);border-radius:6px;padding:.75rem 1rem;margin:1rem 0}
+.gate .eyebrow{color:var(--ok)}
+.tests li{margin:.45rem 0}
+.tests code:first-child{font-weight:500}
+.toc{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:1rem 1.25rem;margin:1.5rem 0 2.5rem}
+.toc ol{margin:0;padding-left:1.4rem}
+.toc a{color:var(--ink);text-decoration:none}
+.toc a:hover,.toc a:focus-visible{color:var(--accent);outline:none}
+.toc .eyebrow{margin-bottom:.4rem}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.owner{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--muted)}
+.foot{margin-top:4rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+</style>
+
+<div class="wrap">
+<p class="eyebrow">Beating NISE · build plan · companion to <em>Harness Decisions</em> · 26 Aug 2026</p>
+<h1>Beating NISE Build Phases</h1>
+<p class="lede">Eleven phases from an empty repository to a run whose numbers can be believed. Each phase names the only files it may touch, the interfaces it must expose (pseudocode, never final code), the tests that must pass before the next phase starts, and what it hands forward. Written to be executed one phase at a time by a smaller model.</p>
+
+<div class="toc">
+<p class="eyebrow">Phases</p>
+<ol start="0">
+<li><a href="#p0">Skeleton commit</a></li>
+<li><a href="#p1">Protocol and event log</a></li>
+<li><a href="#p2">Fake run, server, and the first three views</a></li>
+<li><a href="#p3">Synthetic task and the candidate contract</a></li>
+<li><a href="#p4">Runner</a></li>
+<li><a href="#p5">Measurement</a></li>
+<li><a href="#p6">Run tree with hand-written hypotheses</a></li>
+<li><a href="#p7">Agents</a></li>
+<li><a href="#p8">Ali-CCP data and task</a></li>
+<li><a href="#p9">Outputs and audit</a></li>
+<li><a href="#p10">Rulebook post-checks</a></li>
+</ol>
+<p class="eyebrow" style="margin-top:.8rem">Also</p>
+<p style="margin:.2rem 0"><a href="#rules">Rules for every phase</a> · <a href="#seam">The seam: types.py</a> · <a href="#vocab">Fixed vocabularies</a></p>
+</div>
+
+<h2 id="rules">Rules for every phase</h2>
+<p>These hold in every phase below. The implementer reads them once and re-reads them at the start of each phase.</p>
+<ol>
+<li><strong>Touch only the files listed under "In scope".</strong> If the work seems to need a change elsewhere, stop and report the need; do not make the change. The only exception is a test file for the current phase.</li>
+<li><strong><code>harness/types.py</code> changes are their own pull request</strong>, reviewed by both people. A phase that needs a new field on a dataclass proposes it as a diff and waits.</li>
+<li><strong>Tests run offline, on CPU, with no LLM and no GPU.</strong> Every phase's test suite finishes in under 60 seconds, except tests marked <code>slow</code>, which may take a few minutes and run on the synthetic task only.</li>
+<li><strong>Regression is part of the gate.</strong> "Tests pass" means the whole <code>tests/</code> directory, including every earlier phase, not just the new file.</li>
+<li><strong>No invented numbers.</strong> Every threshold in measurement comes from the ladder locked in the <em>Audit Redline</em> §6 (27 Aug) and is a named constant with a comment giving the rule. Every event type, node state and file name comes from the vocabularies at the end of this page.</li>
+<li><strong>Judgement lives in the bottom layer only</strong> (§0): protocol, measurement, and the frozen values. Agents propose; the runner executes; the harness decides. No module reads another module's state — every module reports to <code>events.py</code>.</li>
+<li><strong>Stack:</strong> Python 3.11+, <code>pytest</code>, <code>pyyaml</code>, <code>pyarrow</code>, <code>torch</code> (CPU wheel), <code>fastapi</code> + <code>uvicorn</code> + <code>httpx</code> (phase 2), <code>optuna==4.9.*</code> (phase 7), <code>polars</code> (phase 8). Nothing else without a stated reason.</li>
+<li><strong>Each phase ends with a commit whose message is the phase title</strong> and a short note of anything left unresolved. Person A / B ownership follows the split in <em>Harness Decisions</em> §A.</li>
+</ol>
+
+<h2 id="seam">The seam: types.py</h2>
+<p>Four dataclasses that every other file passes around. They are fully fielded in phase 0 because they are the contract between the two people; later phases may add fields only through the rule above. Field names are the product spec's.</p>
+<pre><code>Stage   = Literal["data","features","objective","architecture","training","ensemble"]
+State   = Literal["screening","running","replicating","promoted","inconclusive",
+                  "rejected","retired","leaked","debugging"]
+Rung    = Literal["smoke","screen","full","replicate","holdout"]   # full = seed-0 full-data run, replicate = seeds 1,2 on the same data; holdout is NOT a ladder rung
+
+@dataclass Hypothesis:
+    id: str; stage: Stage; mechanism: str          # family = f"{stage}/{mechanism}"
+    description: str; citation: str | "no prior"
+    expected_gain: float; expected_gpu_h: float
+    parent_node: int | None; patch: Path | None    # patch only for hand-written ones (phase 6)
+
+@dataclass Node:
+    id: int; parent: int | None; hypothesis_id: str; commit: str | None
+    state: State; rung: Rung; kind: Literal["draft","improve","debug","ablate","trial","ensemble"]
+    scores: dict[str, list[float]]                # metric -> per-seed scores, parallel to seeds
+    seeds: list[int]; cost: Cost; created_seq: int
+
+@dataclass RunResult:
+    node: int; attempt: int; seed: int; rung: Rung; ok: bool
+    metrics: dict[str, float]; failure_class: str | None; stderr_tail: str
+    gpu_s: float; wall_s: float; result_path: Path | None; checkpoint_path: Path | None
+
+@dataclass Verdict:
+    node: int; rung: Rung; state: State; metric: str
+    delta_mean: float | None; delta_per_seed: list[float]; band: tuple[float,float]
+    reason: str                                   # becomes the event's summary
+    rule_trips: list[str]
+
+@dataclass Cost: gpu_s: float; tokens_in: int; tokens_out: int
+                 slice: Literal["researching","coding","training","tuning"]</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="p0">Phase 0 · Skeleton commit</h2>
+<div class="meta"><span><b>Owner</b> both, one PR</span><span><b>Depends on</b> nothing</span><span><b>Time</b> hours, not a day</span></div>
+<h3>Goal</h3>
+<p>Every file in the tree exists with its public signatures, its docstring naming the phase that fills it, and <code>raise NotImplementedError</code> bodies. <code>types.py</code> is complete. One test imports everything. After this commit, each later PR touches only its owner's files.</p>
+<h3>In scope</h3>
+<pre><code>beating-nise/
+├── pyproject.toml           name, python>=3.11, deps from rule 7, pytest config
+├── README.md                one paragraph + link to Harness Decisions + phase list
+├── data/                    __init__, ingest.py, schema.py, subsample.py       (stubs)
+├── harness/
+│   ├── __init__.py, __main__.py   (python -m harness &lt;cmd&gt; dispatcher; only "init" wired in phase 1)
+│   ├── types.py             COMPLETE — the block above, plus EVENT_TYPES and STATES tuples
+│   ├── protocol.py, events.py, fake_run.py, runner.py, measure.py, tree.py,
+│   │   audit.py, outputs.py                                                    (stubs)
+│   ├── candidate/           __init__, template.py, report.py                   (stubs)
+│   ├── agents/              __init__, researcher.py, coder.py, tuner.py, brief.py, cache.py, llm.py  (stubs)
+│   └── tasks/               __init__, base.py, synthetic.py, aliccp.py        (stubs)
+├── protocols/               synthetic.yaml (COMPLETE, real values), aliccp.yaml (nulls where §1 says)
+├── reference/               published_costs.yaml (empty list with a comment)
+├── runs/.gitkeep
+├── app/                     server.py (stub), static/index.html (empty shell), static/reducer.js (stub)
+└── tests/                   conftest.py, test_00_skeleton.py</code></pre>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Any function body other than dataclass definitions and constant tuples. No logic, no I/O, no CLI behaviour beyond printing "not implemented".</p></div>
+<h3>Interfaces</h3>
+<p>Every stub carries the exact signature the later phase will implement — copy them from the phase's Interfaces block. Two constants live in <code>types.py</code>:</p>
+<pre><code>EVENT_TYPES = ("run_started","node_created","state_changed","heartbeat","measurement","verdict",
+               "failure","recovery","rule_trip","research_source","cache_lookup","hypothesis_queued",
+               "queue_reordered","submission_written","intervention","run_ended")
+STATES      = ("screening","running","replicating","promoted","inconclusive","rejected","retired","leaked","debugging")</code></pre>
+<h3>Tests to pass — <code>tests/test_00_skeleton.py</code></h3>
+<ul class="tests">
+<li><code>test_every_module_imports</code> — walks the tree, imports every <code>.py</code> under <code>data/</code>, <code>harness/</code>, <code>app/</code>; none raises on import.</li>
+<li><code>test_types_round_trip</code> — each of the four dataclasses can be built, converted to a dict, serialised to JSON and rebuilt equal.</li>
+<li><code>test_state_vocabulary</code> — <code>set(STATES)</code> is exactly the nine product-spec words; <code>len(EVENT_TYPES) == 16</code> and matches the list in the vocab section.</li>
+<li><code>test_protocol_files_parse</code> — both yaml files load with <code>yaml.safe_load</code>; <code>synthetic.yaml</code> has no <code>null</code> anywhere under <code>ruler</code>; <code>aliccp.yaml</code> has the seven nulls named in §1 and no others.</li>
+<li><code>test_stubs_raise</code> — calling any stub function raises <code>NotImplementedError</code> (guards against a half-written body sneaking in).</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 1</p><p><code>pytest</code> green. <code>tree -I __pycache__</code> matches the layout above file-for-file. One commit, message "Phase 0: skeleton".</p></div>
+<h3>Hands forward</h3>
+<p>The dataclasses, the two vocab tuples, and two protocol files that phase 1 will hash.</p>
+
+<!-- ============================================================ -->
+<h2 id="p1">Phase 1 · Protocol and event log</h2>
+<div class="meta"><span><b>Owner</b> A: protocol.py · B: events.py</span><span><b>Depends on</b> phase 0</span><span><b>Source</b> §1, §4</span></div>
+<h3>Goal</h3>
+<p>Load a protocol yaml, hash its <code>ruler</code> block canonically, and write a <code>run_started</code> event through a single-writer log that three threads can hammer without a torn line. After this phase you can <code>tail -f</code> a real log.</p>
+<h3>In scope</h3>
+<p><code>harness/protocol.py</code>, <code>harness/events.py</code>, <code>harness/__main__.py</code> (the <code>init</code> command only), <code>tests/test_01_protocol.py</code>, <code>tests/test_01_events.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Filling in any null in <code>aliccp.yaml</code>. Any event type other than <code>run_started</code> being emitted by real code (tests may emit any type). The web server. Reading the log back.</p></div>
+<h3>Interfaces</h3>
+<pre><code># harness/protocol.py
+@dataclass Protocol: task: str; schema_version: int; ruler: dict; run: dict; protocol_hash: str; path: Path
+def load(path) -> Protocol             # validates required keys; nulls allowed under ruler
+def canonical_bytes(ruler: dict) -> bytes
+    # sort keys recursively; floats via repr of float(x) so 0.10 == 0.1; ints stay ints;
+    # None -> "null"; no whitespace; utf-8. Comments never reach here (yaml drops them).
+def protocol_hash(ruler: dict) -> str  # "sha256:" + hex of canonical_bytes; run block NOT included
+
+# harness/events.py
+class EventLog:
+    def __init__(self, run_dir: Path, run_id: str, protocol: Protocol): ...
+        # opens events.jsonl and heartbeat.jsonl for append; starts one writer thread
+        # first line written is run_started with the whole protocol dict embedded
+    def emit(self, type: str, **fields) -> int
+        # validates type in EVENT_TYPES and fields.get("state") in STATES if present;
+        # requires "summary" (str); stamps schema_version=1, seq, t (ISO-8601 UTC), run, protocol_hash;
+        # puts on queue; returns the seq it WILL get (allocated under a lock, so monotonic)
+    def new_node(self, parent: int | None) -> int      # one counter, lock-protected
+    def heartbeat(self, worker: str, **fields) -> None # goes to heartbeat.jsonl through the same queue
+    def close(self) -> None                            # drains, fsyncs, joins thread; emit after close raises
+    # writer thread: json.dumps(line) + "\n"; flush() every line; os.fsync only when type in
+    # {"verdict","submission_written","run_ended"}</code></pre>
+<pre><code># python -m harness init protocols/synthetic.yaml
+#   -> creates runs/&lt;task&gt;-&lt;YYYYMMDD-HHMMSS&gt;/ , writes run_started, closes, prints the run id and hash</code></pre>
+<h3>Tests to pass — <code>tests/test_01_protocol.py</code></h3>
+<ul class="tests">
+<li><code>test_reorder_same_hash</code> — the same ruler with top-level keys reordered hashes identically.</li>
+<li><code>test_float_formatting_same_hash</code> — <code>0.10</code> and <code>0.1</code> and <code>1e-1</code> give the same hash.</li>
+<li><code>test_comment_same_hash</code> — a yaml with an added comment line gives the same hash.</li>
+<li><code>test_ruler_change_new_hash</code> — changing <code>metrics.cvr_auc.population</code> changes the hash.</li>
+<li><code>test_run_block_not_hashed</code> — changing <code>run.budget.gpu_hours</code> leaves the hash unchanged.</li>
+<li><code>test_missing_ruler_raises</code> — a yaml without <code>ruler</code> raises a clear <code>ValueError</code> naming the key.</li>
+<li><code>test_nulls_allowed</code> — <code>aliccp.yaml</code> loads and hashes even with its seven nulls.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_01_events.py</code></h3>
+<ul class="tests">
+<li><code>test_first_line_is_run_started</code> — after <code>__init__</code> + <code>close</code>, the file has one line, type <code>run_started</code>, containing the protocol dict and hash.</li>
+<li><code>test_concurrent_emit_no_torn_lines</code> — 3 threads × 1000 emits; file has 3001 lines; every line parses as JSON; <code>seq</code> is exactly 1…3001 with no gaps or repeats.</li>
+<li><code>test_stamps_present</code> — every line has <code>schema_version==1</code>, <code>seq</code>, <code>t</code>, <code>run</code>, <code>protocol_hash</code>, <code>type</code>, <code>summary</code>.</li>
+<li><code>test_unknown_type_raises</code> — <code>emit("failed", …)</code> raises; nothing is written.</li>
+<li><code>test_bad_state_raises</code> — <code>emit("state_changed", state="failed", …)</code> raises.</li>
+<li><code>test_missing_summary_raises</code>.</li>
+<li><code>test_heartbeat_sidecar</code> — 10 heartbeats land in <code>heartbeat.jsonl</code>; <code>events.jsonl</code> line count is unchanged.</li>
+<li><code>test_new_node_unique_under_threads</code> — 4 threads × 500 calls yield 2000 distinct ids.</li>
+<li><code>test_close_drains_then_refuses</code> — line count after close equals emits + 1; <code>emit</code> after close raises.</li>
+<li><code>test_seq_monotonic_same_millisecond</code> — 100 emits in a tight loop have strictly increasing <code>seq</code> even where <code>t</code> repeats.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 2</p><p>All tests green. <code>python -m harness init protocols/synthetic.yaml</code> creates a run directory; <code>tail -f runs/&lt;id&gt;/events.jsonl</code> shows the <code>run_started</code> line with the hash printed by the command.</p></div>
+<h3>Hands forward</h3>
+<p>The only write path to the log. Phase 2's fake run and every later module call <code>EventLog.emit</code> and nothing else.</p>
+
+<!-- ============================================================ -->
+<h2 id="p2">Phase 2 · Fake run, server, and the first three views</h2>
+<div class="meta"><span><b>Owner</b> B, days 1–2</span><span><b>Depends on</b> phase 1</span><span><b>Source</b> §4 "How the log reaches the frontend"</span></div>
+<h3>Goal</h3>
+<p>A scripted stream of every event type, written through the real <code>EventLog</code>, replayed through a real server, rendered by a reducer in the browser. From here on, every backend phase is watched through this app, and the frontend can be finished without waiting for the backend.</p>
+<h3>In scope</h3>
+<p><code>harness/fake_run.py</code>, <code>app/server.py</code>, <code>app/static/index.html</code>, <code>app/static/reducer.js</code>, <code>app/static/app.js</code>, <code>tests/test_02_fake_run.py</code>, <code>tests/test_02_server.py</code>, <code>app/static/reducer.test.js</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Any view beyond Run tree, Hypotheses, Now running. Audit endpoints (phase 9). Styling beyond legibility. Any state kept in the browser that is not the output of <code>reduce</code>. WebSockets or a message broker.</p></div>
+<h3>Interfaces</h3>
+<pre><code># harness/fake_run.py
+SCRIPT: list[dict]   # ~200 events, hand-authored in code, in this order:
+  run_started (by EventLog) → hypothesis_queued ×6 (two per stage: features, training, objective)
+  → node_created(kind=draft) → state_changed screening→running → heartbeat ×n → measurement
+  → verdict (state=inconclusive) → node_created → … → failure(class=cuda_oom) → recovery
+  → verdict(state=rejected) → rule_trip → research_source ×3 → cache_lookup(hit=false)
+  → cache_lookup(hit=true, confirmed=true) → queue_reordered → verdict(state=replicating)
+  → verdict(state=promoted) → submission_written → intervention → run_ended
+  Every node referenced by a later event is created first. Every state_changed is a legal transition
+  (table in phase 6; for now: screening→running→{replicating,inconclusive,rejected,debugging},
+  replicating→{promoted,inconclusive,rejected,leaked}, debugging→{running,retired}, *→retired).
+def write(run_dir, speed: float = 20.0, instant: bool = False) -> str   # returns run id
+# CLI: python -m harness fake [--instant] [--speed 20]
+
+# app/server.py  (FastAPI)
+GET /runs                                  -> [{run_id, task, protocol_hash, started}] from runs/*/events.jsonl line 1
+GET /runs/{id}/events?since=0&amp;stream=true  -> SSE: replay lines with seq&gt;since, then tail (poll 0.5 s)
+GET /runs/{id}/events?since=0&amp;stream=false -> JSON array of lines with seq&gt;since (polling fallback)
+GET /runs/{id}/heartbeat?since=0           -> same two shapes over heartbeat.jsonl
+unknown id -> 404
+
+# app/static/reducer.js  (pure; no DOM; ES module so node's test runner can import it)
+export const initial = () => ({run:null, nodes:{}, queue:[], workers:{}, verdicts:[], lastSeq:0})
+export function reduce(state, ev) -> newState    # never mutates input; switch on ev.type
+  run_started       -> state.run = {id, protocol_hash, task}
+  node_created      -> nodes[id] = {id, parent, state:"screening", kind, scores:{}, seeds:[]}
+  state_changed     -> nodes[id].state = ev.state
+  hypothesis_queued -> queue.push({...})
+  queue_reordered   -> queue = ev.order.map(id -> existing entry)
+  heartbeat         -> workers[ev.worker] = ev  (latest only)
+  verdict           -> verdicts.push(ev); nodes[id].state = ev.state; scores/seeds appended
+  everything else   -> unchanged (kept for later views)
+  always            -> lastSeq = ev.seq
+
+# app/static/app.js: EventSource(`/runs/${id}/events?since=${lastSeq}`); on message reduce + render;
+# on error reconnect with the remembered lastSeq. Three renders: tree (indent by parent), queue (ordered list), workers.</code></pre>
+<h3>Tests to pass — <code>tests/test_02_fake_run.py</code></h3>
+<ul class="tests">
+<li><code>test_covers_every_event_type</code> — with <code>instant=True</code>, the set of <code>type</code> values in the file equals <code>set(EVENT_TYPES)</code>.</li>
+<li><code>test_nodes_created_before_use</code> — every <code>node</code> field references an id that appeared in an earlier <code>node_created</code>.</li>
+<li><code>test_transitions_legal</code> — every <code>state_changed</code>/<code>verdict</code> moves a node along the transition table above.</li>
+<li><code>test_written_through_eventlog</code> — the fake run imports <code>EventLog</code> and never opens <code>events.jsonl</code> itself (grep the source for <code>open(</code>).</li>
+<li><code>test_summaries_are_sentences</code> — every event's <code>summary</code> is a non-empty string under 140 characters.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_02_server.py</code> (httpx against the app, fake run fixture)</h3>
+<ul class="tests">
+<li><code>test_list_runs</code> — the fake run appears with its hash.</li>
+<li><code>test_replay_from_zero</code> — <code>stream=false&amp;since=0</code> returns every line, in seq order.</li>
+<li><code>test_since_filters</code> — <code>since=100</code> returns only <code>seq &gt; 100</code>.</li>
+<li><code>test_sse_frames</code> — with <code>stream=true</code>, the first N frames are <code>data: {json}\n\n</code> and parse back to the same objects.</li>
+<li><code>test_tail_picks_up_new_line</code> — append one line after the stream opened; it arrives within 2 s.</li>
+<li><code>test_unknown_run_404</code>.</li>
+</ul>
+<h3>Tests to pass — <code>app/static/reducer.test.js</code> (<code>node --test</code>)</h3>
+<ul class="tests">
+<li><code>node count equals node_created count</code> over the fake stream.</li>
+<li><code>deterministic</code> — reducing the same stream twice gives deep-equal states.</li>
+<li><code>reconnect equivalence</code> — <code>reduce(all)</code> deep-equals <code>reduce(first 100)</code> then <code>reduce(rest)</code>.</li>
+<li><code>latest heartbeat only</code> — after 5 heartbeats from worker w1, <code>workers.w1</code> is the last one.</li>
+<li><code>no mutation</code> — the input state object is unchanged after <code>reduce</code>.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 3</p><p>All tests green. Manual: <code>python -m harness fake --speed 20</code> in one terminal, <code>uvicorn app.server:app</code> in another; the browser shows the tree growing, the queue reordering, and a worker going live and idle. Reload the page mid-run: same picture.</p></div>
+<h3>Hands forward</h3>
+<p>A frozen event schema v1 that every later backend phase writes to, and an app that shows whatever they write. The frontend person continues from here on the product-spec tabs without further backend dependency; schema gaps are filed as issues, not edits.</p>
+
+<!-- ============================================================ -->
+<h2 id="p3">Phase 3 · Synthetic task and the candidate contract</h2>
+<div class="meta"><span><b>Owner</b> A, days 1–2 (parallel with phase 2)</span><span><b>Depends on</b> phase 1</span><span><b>Source</b> §5 contract, §10</span></div>
+<h3>Goal</h3>
+<p>A generated dataset with the Ali-CCP funnel shape and four planted effects (strong, marginal, zero, leak); a task adapter that owns the splits; a baseline training script that honours the harness–candidate contract; the tiny library the candidate imports. This is what the runner spawns and what measurement is calibrated against.</p>
+<h3>In scope</h3>
+<p><code>harness/tasks/base.py</code>, <code>harness/tasks/synthetic.py</code>, <code>harness/candidate/template.py</code>, <code>harness/candidate/report.py</code>, <code>protocols/synthetic.yaml</code> (hash fields only), <code>tests/test_03_synthetic.py</code>, <code>tests/test_03_template.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Ali-CCP anything. Spawning the template as a subprocess (phase 4). Any statistics on the scores (phase 5). A model bigger than a small embedding + MLP on CPU.</p></div>
+<h3>Interfaces</h3>
+<pre><code># harness/tasks/base.py
+class Task(Protocol):
+    name: str
+    def prepare(self, protocol: Protocol, root: Path) -> TaskPaths
+        # TaskPaths: train, search_validation, holdout_validation (harness-only), scoring_script
+    def candidate_env(self, paths) -> dict        # ONLY TRAIN and VALID keys — never holdout
+    def score(self, preds_path: Path, split: Literal["search","holdout"]) -> dict[str, float]
+        # ctr_auc over all rows; cvr_auc over clicked rows only, on p_conversion_given_click
+    def rows(self, split) -> int
+
+# harness/tasks/synthetic.py
+def generate(seed: int, n_users=20_000, n_items=2_000, n_impressions=1_000_000) -> pyarrow.Table
+    # latent factors u·i drive click (~3%) and, given click, conversion (~10% of clicks → ~3K positives)
+    # columns: sample_id (monotone), user_id, item_id, cat_a, cat_b, cat_c (categoricals),
+    #          hist: list&lt;struct&lt;id:int32, weight:float&gt;&gt;, click, conversion,
+    #          f_true     (correlated with the conversion latent: +≈0.025 model AUC when used — 2.5× the promote floor),
+    #          f_marginal (weaker correlate: +≈0.010 model AUC — sits ON the bar by design; ~50% promotion expected),
+    #          f_zero     (pure noise), f_leak (= conversion + tiny noise; single-feature AUC &gt; 0.9)
+    # splits per protocol rule: last 10% by sample_id = search_validation, preceding 10% = holdout
+class SyntheticTask(Task): ...
+FAILURE_ENV = "SYNTHETIC_FAIL"   # read ONLY here and in template.py; values below
+
+# harness/candidate/template.py   (a script; run as python template.py)
+env: DEVICE (cpu|cuda|mps), SEED, TRAIN, VALID, FEATURES (comma list, default = base columns),
+     BATCH (default 4096), LR (1e-3), EPOCHS (1), WORKSPACE (where to write)
+steps: set seeds → load parquet → build vocab on train only → embedding(8) + MLP two heads
+       → per N minibatches: report.progress(step, total, loss) and checkpoint.save(state)
+       → predict on VALID → write preds.parquet(sample_id, p_click, p_conversion_given_click)
+       → report.result({"ctr_auc":…, "cvr_auc":…}, preds_path)
+SYNTHETIC_FAIL modes (checked once, at the matching moment):
+  crash → sys.exit(1) with a traceback; oom_cuda → raise RuntimeError("CUDA out of memory");
+  oom_host → os.kill(self, SIGKILL) (exit 137, no trace); nan → report loss=NaN then continue;
+  hang → sleep forever after first progress; no_result → exit 0 without result.json;
+  bad_schema → result.json missing "cvr_auc"
+
+# harness/candidate/report.py   (imports stdlib only — never harness.*)
+def progress(step, total, loss) -> None   # appends {"step","total","loss","t"} to WORKSPACE/progress.jsonl
+def result(metrics: dict, preds_path) -> None   # writes WORKSPACE/result.json {"metrics", "preds", "t"}
+class checkpoint: @staticmethod save(state) -> Path   # WORKSPACE/checkpoints/step-N.pt; keeps last 3</code></pre>
+<h3>Tests to pass — <code>tests/test_03_synthetic.py</code></h3>
+<ul class="tests">
+<li><code>test_deterministic</code> — <code>generate(1)</code> twice is table-equal; <code>generate(2)</code> differs.</li>
+<li><code>test_funnel_rates</code> — click rate in [2%, 4%]; conversions among clicks in [8%, 12%]; clicked positives ≥ 2,000.</li>
+<li><code>test_leak_feature_auc</code> — single-feature AUC of <code>f_leak</code> for conversion on clicked rows &gt; 0.9.</li>
+<li><code>test_zero_feature_auc</code> — <code>f_zero</code> single-feature AUC in [0.48, 0.52].</li>
+<li><code>test_true_feature_auc</code> — <code>f_true</code> single-feature AUC in [0.60, 0.72] (a real, clearly detectable signal).</li>
+<li><code>test_marginal_feature_auc</code> — <code>f_marginal</code> single-feature AUC in [0.53, 0.60] (real but on the noise floor).</li>
+<li><code>test_splits_by_rule</code> — search-val is exactly the last 10% by <code>sample_id</code>, holdout the preceding 10%; disjoint; union with train covers all rows.</li>
+<li><code>test_candidate_env_has_no_holdout</code> — <code>candidate_env()</code> keys are exactly <code>{TRAIN, VALID}</code> and no value contains the substring <code>holdout</code>.</li>
+<li><code>test_score_populations</code> — construct predictions where un-clicked rows would change the CVR AUC if included; <code>score()</code> returns the clicked-only value.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_03_template.py</code> (runs the script in-process or via <code>subprocess.run</code>, 50K-row synthetic)</h3>
+<ul class="tests">
+<li><code>test_contract_outputs</code> — after a run: <code>progress.jsonl</code> has ≥ 2 lines, <code>result.json</code> has both metric keys, <code>preds.parquet</code> row count == VALID row count, checkpoints dir non-empty.</li>
+<li><code>test_features_env_changes_model</code> — <code>FEATURES=base</code> vs <code>FEATURES=base,f_leak</code> at the same seed: the second's <code>cvr_auc</code> is higher by &gt; 0.2.</li>
+<li><code>test_seed_changes_result</code> — two seeds give different <code>cvr_auc</code>; same seed twice gives equal (CPU is deterministic).</li>
+<li><code>test_failure_modes_observable</code> — parametrised over the seven modes; each produces the exact observable listed in the interface (exit code, stderr substring, NaN in progress, no result.json, missing key, or still running after 3 s for <code>hang</code>).</li>
+<li><code>test_report_imports_stdlib_only</code> — parse <code>report.py</code>'s imports; none start with <code>harness</code>.</li>
+<li><code>test_runs_under_60s_cpu</code>.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 4</p><p>All tests green. Manual: run the template by hand under the env and read the two AUCs it prints; then <code>SYNTHETIC_FAIL=oom_host</code> and confirm exit 137.</p></div>
+<h3>Hands forward</h3>
+<p>Seven reproducible failure modes (phase 4's fixtures), four planted effects (phase 5's scorecard), and a task whose <code>score()</code> is the only way a number enters the system.</p>
+
+<!-- ============================================================ -->
+<h2 id="p4">Phase 4 · Runner</h2>
+<div class="meta"><span><b>Owner</b> A</span><span><b>Depends on</b> phases 1, 3 (B watches through phase 2's app)</span><span><b>Source</b> §5</span></div>
+<h3>Goal</h3>
+<p>Spawn the candidate as a child process, enforce a timeout, classify a failure from exit code and stderr together, recover per class, heartbeat, and return a <code>RunResult</code>. The runner trains nothing and decides nothing.</p>
+<h3>In scope</h3>
+<p><code>harness/runner.py</code>, <code>tests/test_04_runner.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Which node to run next. Any judgement on the metrics. The SSH backend (the <code>Backend</code> seam exists; only <code>LocalBackend</code> is implemented). The derived-timeout calibration loop — the formula is implemented, the inputs are passed in.</p></div>
+<h3>Interfaces</h3>
+<pre><code>class Backend(Protocol):
+    def run(self, workspace: Path, cmd: list[str], env: dict, timeout_s: float,
+            on_progress: Callable[[dict], None]) -> Completed   # returncode, stderr_tail, wall_s
+class LocalBackend: subprocess.Popen; polls WORKSPACE/progress.jsonl every 1 s and calls on_progress per new line
+
+FAILURE_CLASSES = ("cuda_oom","host_oom","diverged","timeout","contract_violation","crash")
+RECOVERY = {                      # applied to env for attempt 2; None = no retry, hand back to tree
+  "cuda_oom": lambda env: {**env, "BATCH": str(int(env["BATCH"]) // 2)},
+  "host_oom": lambda env: {**env, "LOADER_WORKERS": "0"},
+  "diverged": lambda env: {**env, "LR": str(float(env["LR"]) / 2)},
+  "timeout": None, "contract_violation": None, "crash": None }
+
+def derived_timeout(seconds_per_row_screen, rows, epochs, safety=2.0, floor_s=60) -> float
+def classify(returncode, stderr_tail, progress: list[dict], result_path) -> str | None
+    # order: NaN or loss &gt; 10× first loss in progress → diverged
+    #        "CUDA out of memory" in stderr → cuda_oom
+    #        returncode == 137 (or -9) and stderr_tail empty → host_oom
+    #        killed by us at deadline → timeout
+    #        returncode == 0 and (no result.json or missing metric keys) → contract_violation
+    #        returncode != 0 → crash;  else None (ok)
+
+class Runner:
+    def __init__(self, events: EventLog, task: Task, run_cfg: dict, backend: Backend = LocalBackend(),
+                 heartbeat_s: float = 30.0): ...
+    def run(self, node: Node, rung: Rung, seed: int, timeout_s: float, env_overrides: dict = {},
+            attempt: int = 1) -> RunResult
+        # env = {DEVICE, SEED, WORKSPACE, BATCH, LR, EPOCHS, FEATURES} + task.candidate_env(paths) + overrides
+        # if DEVICE == cuda: CUDA_VISIBLE_DEVICES = worker gpu index
+        # workspace = runs/&lt;id&gt;/workspace checked out at node.commit (phase 6 sets commit; here a plain dir)
+        # emits heartbeat every heartbeat_s with {node, step, total, loss}; kills on diverged
+        # on failure: emit failure{node, attempt, class, stderr_tail}; if RECOVERY[class]: emit recovery and
+        #   recurse with attempt=2 (max 2); cost of attempt 1 stays on the node
+        # on ok: metrics = task.score(result.preds, "search"); return RunResult(ok=True, …)</code></pre>
+<h3>Tests to pass — <code>tests/test_04_runner.py</code> (synthetic task, 50K rows, <code>heartbeat_s=0.5</code>)</h3>
+<ul class="tests">
+<li><code>test_success_returns_scored_metrics</code> — <code>ok=True</code>; <code>metrics</code> equals <code>task.score()</code> on the written preds (not the child's own numbers); <code>wall_s &gt; 0</code>.</li>
+<li><code>test_classify_table</code> — parametrised over the seven <code>SYNTHETIC_FAIL</code> modes → expected class (<code>no_result</code> and <code>bad_schema</code> both → <code>contract_violation</code>).</li>
+<li><code>test_timeout_kills_hang</code> — <code>hang</code> with <code>timeout_s=3</code> returns <code>timeout</code> within 5 s; no orphan process remains.</li>
+<li><code>test_retry_on_cuda_oom</code> — with a fake backend that fails once with the CUDA string then succeeds: two <code>failure</code>/<code>recovery</code> events, second call has <code>BATCH</code> halved and <code>attempt=2</code>, final <code>ok=True</code>.</li>
+<li><code>test_no_retry_on_contract_violation</code> — exactly one attempt; <code>ok=False</code>.</li>
+<li><code>test_max_two_attempts</code> — a backend that always OOMs stops after attempt 2.</li>
+<li><code>test_heartbeats_written</code> — a 3-second run yields ≥ 3 lines in <code>heartbeat.jsonl</code> carrying <code>node</code> and <code>step</code>.</li>
+<li><code>test_diverged_killed_early</code> — <code>nan</code> mode is killed before the child would have finished (wall_s &lt; the healthy run's).</li>
+<li><code>test_child_env_is_capability_safe</code> — capture the env passed to the backend: no key or value contains <code>holdout</code>, <code>protocols/</code>, or <code>rulebook</code>; <code>PYTHONPATH</code> does not include the harness package root.</li>
+<li><code>test_derived_timeout</code> — known inputs → expected seconds; floor applies.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 5</p><p>All tests green. Manual: run one real node through a real <code>EventLog</code> and watch the heartbeat go live and the failure/recovery pair appear in the app.</p></div>
+<h3>Hands forward</h3>
+<p><code>Runner.run</code> is the only way training happens. Phase 5 calls it repeatedly to calibrate; phase 6 calls it per node; phase 7's tuner calls it per trial.</p>
+
+<!-- ============================================================ -->
+<h2 id="p5">Phase 5 · Measurement</h2>
+<div class="meta"><span><b>Owner</b> A (numbers); B builds the Replication view off the verdict events</span><span><b>Depends on</b> phases 3, 4</span><span><b>Source</b> Harness Decisions (chronological) phases 4 and 11, as fixed by the Audit Redline §6 "Ladder" — 27 Aug 2026</span></div>
+<h3>Goal</h3>
+<p>Everything that decides whether a number is believed, as pure functions on numbers first, then one class that emits verdicts. The synthetic scorecard must show zero false promotions, the planted +0.025 promoted, the planted +0.010 never <em>rejected</em>, and the planted leak caught — before any GPU hour is spent.</p>
+<p><b>The ladder, in one paragraph.</b> Three rungs: <code>smoke</code> (60 s contract check, no score), <code>screen</code> (one paired seed on the training subsample, full search-validation), <code>replicate</code> (three paired seeds on the <em>full</em> training set; the incumbent's full-rung scores for seeds 0–2 are cached from its own promotion, so it costs three candidate runs). A candidate leaves the screen if its paired delta clears one screen-noise band; it is promoted if all three full-rung deltas are positive <em>and</em> their mean clears a bar derived from the full-rung noise, <em>and</em> attribution is clear. <b>Holdout is not a rung.</b> It is a run-level checkpoint visited at most twice — at the first promotion and at the end — with three paired seeds on the candidate side only, and it decides the <em>reported</em> number, never the incumbent.</p>
+<h3>In scope</h3>
+<p><code>harness/measure.py</code>, <code>tests/test_05_measure_pure.py</code>, <code>tests/test_05_scorecard.py</code> (marked <code>slow</code>).</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Choosing what to run next (phase 6 decides rung progression; measure only returns the verdict for the rung it is given). Attribution <em>adjudication</em> itself (phase 7 — measure only reads the label it is handed). The three remaining leak post-checks (phase 10). Bootstrap intervals, Benjamini–Hochberg, Student-t tables, difference-in-differences — all removed from the design on 27 Aug; do not reintroduce them.</p></div>
+<h3>Interfaces</h3>
+<pre><code># constants, each with a "# Redline §6 Ladder: …" comment
+SIGMA_UNSTABLE        = 0.020   # refuse to search if sigma_full exceeds this
+SCREEN_REJECT_DELTA   = -0.010  # screen: delta at or below this → rejected
+SCREEN_ADVANCE_SD     = 1.0     # screen: delta ≥ this × sd_delta_screen → replicating
+PROMOTE_FLOOR         = 0.010   # replicate: bar never below this
+PROMOTE_Z_OVER_SQRT_K = 0.95    # replicate: 1.645 / √3 — one-sided known-σ test, α = 0.05, k = 3
+REPLICATE_K           = 3       # seeds on the full rung; all three must be &gt; 0
+LEAK_TRIGGER_BANDS    = 5.0     # mean delta ≥ this × sd_delta_full → leak audit before any promotion
+LEAK_SINGLE_FEATURE_AUC = 0.90
+LADDER_ETA            = 0.005   # holdout: report a new number only if ≥ best + eta
+HOLDOUT_VISITS_MAX    = 2
+HOLDOUT_SEEDS         = 3       # candidate side only; incumbent holdout scores cached
+INCONCLUSIVE_REVISITS = 2       # third inconclusive → retired
+INCONCLUSIVE_PRIORITY = 0.5     # multiplier applied to the hypothesis on requeue
+RHO_REFRESH_AFTER     = 3       # replicated candidates before rho is re-estimated
+STALL_SD_MULT         = 2.0
+
+@dataclass Band:
+    sigma_screen: float; sigma_full: float; sigma_fix: float; ratio: float      # ratio = sigma_full / sigma_screen
+    rho: float; sd_delta_screen: float; sd_delta_full: float; bar: float
+    source: Literal["fixed_pair", "refreshed"]; n_replicated: int
+def calibrate(screen_per_seed: list[float], full_per_seed: list[float], fixed_seed_pair: tuple[float,float]) -> Band
+    # sigma_screen = SD over 5 screen seeds; sigma_full = SD over 3 full seeds; sigma_fix = |a−b|/√2
+    # rho = 0.5 if sigma_fix &gt; 0.5·sigma_screen else 0.8          (fixed-pair column rule, as before)
+    # sd_delta_x = sigma_x·√(2(1−rho)); bar = max(PROMOTE_FLOOR, PROMOTE_Z_OVER_SQRT_K·sd_delta_full)
+    # sigma_full &gt; SIGMA_UNSTABLE → raise CalibrationError
+def refresh_rho(band, per_seed_deltas: list[list[float]]) -> Band
+    # after RHO_REFRESH_AFTER replicated candidates: rho from the observed within-candidate delta spread,
+    # clamped to [0, 0.9]; recompute sd_delta_* and bar; source="refreshed"
+def screen_verdict(delta: float, band) -> Literal["rejected","replicating","inconclusive"]
+def promote_bar(band) -> float
+def replicate_verdict(deltas: list[Delta], band) -> Literal["pass","fail_sign","fail_mean"]
+    # every Delta carries rung; any rung != "full"/"replicate" → raise RungMismatch (never average screen into full)
+    # pass iff len == REPLICATE_K and all &gt; 0 and mean ≥ promote_bar(band)
+def leak_audit(mean_delta: float, band, single_feature_aucs: dict[str,float]) -> list[str]   # rule ids tripped
+def ladder_accepts(best_reported: float, new_holdout: float, eta=LADDER_ETA) -> bool
+def inconclusive_next(prior_inconclusives: int) -> Literal["requeue","retire"]
+def combine_inconclusive(a: Verdict, b: Verdict) -> Literal["re_measure"]     # never "pass"
+
+class Measure:
+    def __init__(self, events, protocol, band: Band | None): ...
+    def calibrate_from_runs(self, runner, baseline_node, screen_seeds=[1,2,3,4,5], full_seeds=[1,2,3], fixed_pair=[1,1]) -> Band
+        # 7 screen runs + 3 full runs; emits one measurement(stage="calibrate") carrying the whole Band
+    def verdict(self, node, results: list[RunResult], incumbent: SeedCache, rung, attribution: Literal["clear","unclear",None]=None) -> Verdict
+        # pairs per-seed deltas against incumbent scores for the SAME seeds (SeedCache raises on a missing seed);
+        # screen → screen_verdict; replicate → replicate_verdict, then leak_audit if mean ≥ LEAK_TRIGGER_BANDS·sd_delta_full,
+        # then attribution gate: pass + "clear" → promoted; pass + "unclear" → inconclusive(attribution="unclear");
+        # emits verdict (scores/seeds parallel lists, band, rung, attribution) + rule_trip per leak trip
+        # + incumbent_changed(reason="promotion") on promoted. Never emits anything holdout-related.
+    def holdout_report(self, node, runner, incumbent: SeedCache, best_reported: float) -> HoldoutReport
+        # visit counter: third call raises HoldoutBudgetExceeded BEFORE any run is launched;
+        # HOLDOUT_SEEDS candidate runs on the holdout split; incumbent side from cache;
+        # emits measurement(rung="holdout", visit=n) and, if ladder_accepts, prediction(...); returns report
+    def maybe_refresh(self) -> Band | None   # calls refresh_rho once n_replicated reaches RHO_REFRESH_AFTER; emits measurement(stage="calibrate", refreshed=True)</code></pre>
+<h3>Tests to pass — <code>tests/test_05_measure_pure.py</code> (σ_screen = 0.015, σ_full = 0.012 unless stated)</h3>
+<ul class="tests">
+<li><code>test_calibrate_columns</code> — σ_fix 0.004 → ρ 0.8, sd_delta_screen 0.0095, sd_delta_full 0.0076, bar 0.0100 (floor); σ_fix 0.010 → ρ 0.5, sd_delta_screen 0.0150, sd_delta_full 0.0120, bar 0.0114 (±0.0003). <code>ratio</code> 0.8.</li>
+<li><code>test_calibrate_unstable_raises</code> — σ_full 0.025 raises <code>CalibrationError</code>; σ_screen 0.025 with σ_full 0.012 does not.</li>
+<li><code>test_screen_table</code> — at ρ 0.5 (sd_delta_screen 0.015): Δ −0.011 → rejected; −0.010 → rejected; 0.016 → replicating; 0.015 → replicating; 0.0149 → inconclusive; 0.005 → inconclusive.</li>
+<li><code>test_promote_bar</code> — sd_delta_full 0.0150 → 0.01425; 0.0095 → 0.010; 0.030 → 0.0285.</li>
+<li><code>test_replicate_k3</code> — bar 0.01425: [0.03, 0.028, 0.032] → pass; [0.012, 0.015, 0.018] → pass (mean 0.015); [0.011, 0.012, 0.013] → fail_mean; [0.03, −0.001, 0.03] → fail_sign; two deltas → fail_sign.</li>
+<li><code>test_replicate_refuses_screen_rung</code> — one delta tagged <code>rung="screen"</code> in the list raises <code>RungMismatch</code>.</li>
+<li><code>test_leak_trigger</code> — mean Δ = 6·sd_delta_full → trip; single-feature AUC 0.95 → trip; both clean → empty list.</li>
+<li><code>test_attribution_gate</code> — replicate pass with <code>attribution="unclear"</code> → verdict state <code>inconclusive</code>, <code>attribution="unclear"</code> on the event, no <code>incumbent_changed</code>; with <code>"clear"</code> → <code>promoted</code> and exactly one <code>incumbent_changed(reason="promotion")</code>.</li>
+<li><code>test_ladder_eta</code> — 0.6551 vs best 0.6500 → True; 0.6549 → False; equal → False.</li>
+<li><code>test_holdout_budget</code> — two <code>holdout_report</code> calls succeed and emit <code>measurement(rung="holdout", visit=1|2)</code>; the third raises <code>HoldoutBudgetExceeded</code> and launches zero runs (fake runner call count unchanged).</li>
+<li><code>test_holdout_candidate_side_only</code> — a holdout visit launches exactly <code>HOLDOUT_SEEDS</code> runs, all for the candidate; incumbent scores come from the cache.</li>
+<li><code>test_inconclusive_revisits</code> — <code>inconclusive_next(0)</code> and <code>(1)</code> → requeue; <code>(2)</code> → retire.</li>
+<li><code>test_inconclusive_never_stacks</code>.</li>
+<li><code>test_verdict_pairs_by_seed</code> — results with seeds [1,2,3] and a cache holding seeds [3,1,2] pair by seed value; a cache missing seed 2 raises <code>MissingIncumbentSeed</code>.</li>
+<li><code>test_rho_refresh</code> — after three replicated candidates whose per-seed deltas are tight, ρ rises and <code>bar</code> falls; the refreshed Band is emitted once as <code>measurement(stage="calibrate", refreshed=True)</code>; a fourth candidate does not re-emit.</li>
+<li><code>test_verdict_emits_event</code> — one <code>verdict</code> event with <code>scores</code>/<code>seeds</code> parallel lists, <code>band</code>, <code>rung</code>; one <code>rule_trip</code> per leak trip; nothing with <code>rung="holdout"</code> from <code>verdict()</code>.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_05_scorecard.py</code> (<code>slow</code>; real runner, 200K-row synthetic, ρ measured)</h3>
+<ul class="tests">
+<li><code>test_baseline_calibrates</code> — 7 screen + 3 full runs produce a <code>Band</code> with σ_full &lt; 0.02 and a <code>bar</code> ≥ 0.010.</li>
+<li><code>test_zero_feature_not_promoted</code> — <code>FEATURES=base,f_zero</code> through screen → replicate ends rejected or inconclusive; never promoted.</li>
+<li><code>test_true_feature_promoted</code> — <code>FEATURES=base,f_true</code> (planted +0.025) leaves the screen and passes replicate with <code>attribution="clear"</code> (if it fails, the test prints the three deltas and the band so phase 3's planted size is adjusted — never the bar).</li>
+<li><code>test_marginal_feature_not_rejected</code> — <code>FEATURES=base,f_marginal</code> (planted +0.010, on the bar by design) ends promoted <em>or</em> inconclusive, never rejected; the test prints its measured mean Δ.</li>
+<li><code>test_leak_feature_trips</code> — <code>FEATURES=base,f_leak</code> trips <code>leak_audit</code> and the verdict state is <code>leaked</code>.</li>
+<li><code>test_holdout_never_in_ladder</code> — the whole scorecard run contains zero <code>measurement(rung="holdout")</code> events.</li>
+<li><code>test_scorecard_printed</code> — a summary line reads <code>FP=0 FN=0 marginal=&lt;promoted|inconclusive&gt; leak=caught</code>.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 6</p><p>Pure tests green; the slow scorecard prints <code>FP=0 FN=0 … leak=caught</code>. The band from calibration appears as a <code>measurement</code> event in the app with its <code>bar</code>. If the scorecard fails, the fix is in phase 3's planted effect size or in measure's arithmetic — never in loosening a constant. Write the per-candidate false-promotion rate (≈3% nominal: α 0.05 one-sided × the 1/8 sign rule) into the README now; a judge will ask.</p></div>
+<h3>Hands forward</h3>
+<p>A <code>Band</code>, a <code>verdict()</code> that phase 6 calls after every screen and replicate result, and a <code>holdout_report()</code> that phase 6 calls at most twice per run. The state a node moves to is decided here and only here.</p>
+<!-- ============================================================ -->
+<h2 id="p6">Phase 6 · Run tree with hand-written hypotheses</h2>
+<div class="meta"><span><b>Owner</b> B</span><span><b>Depends on</b> phases 4, 5</span><span><b>Source</b> §7 "the cheapest design the evidence supports"</span></div>
+<h3>Goal</h3>
+<p>The loop, end to end, with no LLM in it: a queue of hand-written hypotheses (each carrying a patch file), a git-backed workspace, the rung ladder driven by verdicts, greedy on the incumbent, fork only on stall, a lessons file. This is the fallback demo.</p>
+<h3>In scope</h3>
+<p><code>harness/tree.py</code>, <code>harness/__main__.py</code> (the <code>run</code> command), <code>hypotheses/hand.yaml</code> + <code>hypotheses/patches/*.diff</code> (five: base, +f_true, +f_marginal, +f_zero, +f_leak — each a one-line change to <code>FEATURES</code> default in the template), <code>tests/test_06_tree.py</code>, <code>tests/test_06_loop.py</code> (<code>slow</code>).</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Any LLM call. The convergence rule with ε/N (phase 9 — here the loop stops on empty queue, <code>max_nodes</code>, or budget). MCTS, UCT, island models, LLM-produced expected gains. Ensembling.</p></div>
+<h3>Interfaces</h3>
+<pre><code>TRANSITIONS = {  # the only legal edges; anything else raises IllegalTransition
+  "screening": {"running","retired"},  "running": {"replicating","inconclusive","rejected","debugging","leaked","retired"},
+  "replicating": {"promoted","inconclusive","rejected","leaked","retired"},  "debugging": {"running","retired"},
+  "inconclusive": {"replicating","retired"},  "promoted": {"retired"},  "rejected": set(), "leaked": set(), "retired": set() }
+STALL_STEPS = 4; MAX_LIVE_BRANCHES = 3; DEBUG_DEPTH = 3; LESSONS_WINDOW = 30
+
+class Coder(Protocol):  def materialise(self, hyp: Hypothesis, incumbent: Node, traceback: str | None) -> Path  # returns diff
+class PatchCoder:       # phase 6's coder: copies hyp.patch; ignores traceback
+
+class Workspace:        # git repo at runs/&lt;id&gt;/workspace, branch run/&lt;id&gt;, initial commit = template
+    def commit_node(self, node_id, diff_path) -> str      # git apply + commit "node NNN"; writes patches/node-NNN.diff
+    def checkout(self, commit) -> None
+
+class Queue:
+    def push(self, hyp) -> bool           # False (and a rule_trip "duplicate") if key(stage, mechanism, norm(description)) seen
+    def rerank(self, family_stats) -> list[str]   # score = (mean Δ_family + 1·sd_family) / mean gpu_min_family; emits queue_reordered
+    def pop(self) -> Hypothesis
+def family_stats(events: list[dict]) -> dict[str, dict]   # pure arithmetic over verdict events: mean Δ, sd, n, gpu_min
+
+class Tree:
+    def __init__(self, events, protocol, task, runner, measure, coder, queue, max_nodes, budget): ...
+    def step(self) -> bool                # one dequeue → node → ladder → verdict → update; False when done
+        # ladder per node: smoke (60 s) → screen (1 paired seed s0, subsample) → if replicating:
+        #   3 candidate runs on the FULL rung, seeds 0,1,2 (incumbent side from SeedCache) → measure.verdict(rung="replicate")
+        #   → promoted → incumbent = node (measure emits incumbent_changed). NO holdout runs inside the ladder.
+        # holdout: measure.holdout_report() exactly twice per run — at the first promotion and at run end
+        # seed cache: on promotion store the node's full-rung scores for seeds 0,1,2 as the new incumbent's cache
+        # greedy: incumbent replaced only on promoted; else revert (checkout incumbent.commit)
+        # debug: on failure_class in {crash, contract_violation} and depth &lt; 3 → state debugging → coder with traceback
+        # stall: STALL_STEPS consecutive non-promoted improve nodes → fork: two new drafts in the two best
+        #   OTHER families by family_stats score; never more than MAX_LIVE_BRANCHES nodes in running/replicating
+        # lessons: after every full-rung run append {node, family, delta, gpu_min, diff_summary} to runs/&lt;id&gt;/lessons.jsonl
+    def run(self) -> None                 # while step(): pass; emit run_ended with incumbent and counts
+# CLI: python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml [--max-nodes N]</code></pre>
+<h3>Tests to pass — <code>tests/test_06_tree.py</code> (fake runner returning canned <code>RunResult</code>s; fake measure returning canned verdicts; real <code>EventLog</code>)</h3>
+<ul class="tests">
+<li><code>test_illegal_transition_raises</code> — <code>rejected → running</code> raises; <code>screening → running</code> does not.</li>
+<li><code>test_queue_order_by_score</code> — three families with known stats rank in the expected order.</li>
+<li><code>test_rerank_after_rejection</code> — a <code>rejected</code> verdict in family X lowers X's score and emits <code>queue_reordered</code> with the new order.</li>
+<li><code>test_dedupe</code> — the same hypothesis under two descriptions differing only in case/whitespace is pushed once; a <code>rule_trip</code> is emitted.</li>
+<li><code>test_ladder_progression</code> — a node whose screen verdict is <code>replicating</code> receives exactly three runs on the full rung (seeds 0, 1, 2) and then one <code>verdict(rung="replicate")</code>; zero runs on the holdout split.</li>
+<li><code>test_seed_cache_rolls_on_promotion</code> — after a <code>promoted</code> verdict the incumbent cache holds that node's three full-rung scores keyed by seed.</li>
+<li><code>test_holdout_twice_per_run</code> — with two promotions in a canned run, <code>holdout_report</code> is called once at the first promotion and once at run end; a third promotion does not call it.</li>
+<li><code>test_greedy_revert</code> — after an <code>inconclusive</code> verdict the workspace HEAD equals the incumbent's commit.</li>
+<li><code>test_fork_on_stall</code> — after exactly 4 non-promoted improve nodes, two <code>node_created(kind=draft)</code> appear in the two highest-scoring other families; after 3 non-promoted, none.</li>
+<li><code>test_max_live_branches</code> — never more than 3 nodes in running/replicating at once.</li>
+<li><code>test_debug_depth</code> — three consecutive crashes on one lineage → the fourth is <code>retired</code>, not <code>debugging</code>.</li>
+<li><code>test_git_per_node</code> — each node has a commit; <code>patches/node-NNN.diff</code> equals <code>git diff parent..node</code>.</li>
+<li><code>test_lessons_appended</code> — one line per full-rung run with the five fields.</li>
+<li><code>test_loop_emits_only_vocab</code> — every event type and state in the log is in the vocabularies.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_06_loop.py</code> (<code>slow</code>; real runner + real measure, 200K synthetic, the four hand hypotheses)</h3>
+<ul class="tests">
+<li><code>test_incumbent_is_f_true</code> — at <code>run_ended</code> the incumbent node's hypothesis is <code>+f_true</code>; <code>+f_leak</code> is <code>leaked</code>; <code>+f_zero</code> is not promoted; <code>+f_marginal</code> is not rejected.</li>
+<li><code>test_holdout_visits_le_two</code> — the log holds at most two <code>measurement(rung="holdout")</code> visits.</li>
+<li><code>test_run_completes_unattended</code> — no <code>intervention</code> events; <code>run_ended</code> present.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 7</p><p>All tests green. Manual — the fallback demo: <code>python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml</code> with the app open shows the tree grow, a fork on stall, and the incumbent change. Record this run's id; it is the demo of last resort.</p></div>
+<h3>Hands forward</h3>
+<p>A <code>Coder</code> seam and a queue that phase 7 fills from an LLM instead of a yaml. Nothing else in the loop changes.</p>
+
+<!-- ============================================================ -->
+<h2 id="p7">Phase 7 · Agents</h2>
+<div class="meta"><span><b>Owner</b> B: researcher, coder, brief, cache · A: tuner</span><span><b>Depends on</b> phase 6</span><span><b>Source</b> §5 Optuna, §8</span></div>
+<h3>Goal</h3>
+<p>Swap the hand-written list for a researcher that proposes one schema-validated hypothesis, a coder that writes diffs from tracebacks, and an Optuna tuner on the screen rung. All tests run against a fake LLM client; the real client is a thin adapter.</p>
+<h3>In scope</h3>
+<p><code>harness/agents/llm.py</code>, <code>researcher.py</code>, <code>coder.py</code>, <code>tuner.py</code>, <code>brief.py</code>, <code>cache.py</code>, <code>hypotheses/bank.yaml</code> (the seeded bank from §3 priors: feature-side first, with expected gains), <code>tests/test_07_agents.py</code>, <code>tests/test_07_tuner.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Network calls in tests. Tuning on any rung but screen. More than six knobs. Optuna's dashboard, Terminator, multi-objective. Any change to <code>tree.py</code> beyond passing the new coder and a queue-refill hook.</p></div>
+<h3>Interfaces</h3>
+<pre><code># llm.py
+class LLM(Protocol): def complete(self, role: str, prompt: str, schema: dict | None) -> tuple[Any, Usage]  # Usage: tokens_in/out
+class FakeLLM: scripted list of responses per role; raises if exhausted
+class AnthropicLLM / OpenAILLM: adapters; model per role from run_cfg.models {researcher: strong, coder: cheap}
+def log_usage(events, node, slice, usage) -> None   # cost fields on a research_source / cache_lookup / node event
+
+HYPOTHESIS_SCHEMA = {stage ∈ Stage, mechanism: slug, description, citation | "no prior",
+                     expected_gain: number, expected_gpu_h: number}   # reject on any missing → rule_trip, unrun
+
+# researcher.py
+def propose(llm, brief: str, incumbent_summary: str, family_stats, lessons: list[dict], cache) -> Hypothesis | None
+    # prompt = brief + incumbent + family table + last 30 lessons + bank entries not yet tried
+    # emits research_source per cited paper; cache_lookup per query; returns None on schema failure
+
+# coder.py
+class LLMCoder(Coder):
+    def materialise(self, hyp, incumbent, traceback) -> Path
+        # prompt = hypothesis + incumbent template source + traceback (if debugging); output = unified diff
+        # capability: the prompt builder receives ONLY (hyp, template_source, traceback) — no paths object
+        # applies diff to a copy; if git apply fails → one retry with the apply error as traceback
+
+# tuner.py   (optuna==4.9.*; GPSampler(n_startup_trials=5); JournalStorage(JournalFileBackend))
+def tune(node, knob_space, runner, events, budget: int, screen_seed) -> list[Hypothesis]
+    # study_name = f"node-{node.id}"; enqueue incumbent knobs first; ask → runner.run(screen) → tell
+    # each trial: node_created(parent=node.id, kind="trial"); failures → TrialState.FAIL
+    # returns top-3 trials as child Hypotheses (stage="training", mechanism="knobs") — never promotions
+    # budget &lt; 10 → no study: enqueue only the incumbent + 2 hand configs
+
+# brief.py:  def compose(organisers_text: Path, protocol) -> str   # the designated cut; deterministic
+# cache.py:  key = sha256(normalise(query) + protocol_hash); get → (hit, confirmed|contradicted|None); put</code></pre>
+<h3>Tests to pass — <code>tests/test_07_agents.py</code> (FakeLLM)</h3>
+<ul class="tests">
+<li><code>test_valid_proposal_becomes_hypothesis</code> — a well-formed response yields a <code>Hypothesis</code> with family <code>features/target-encoding</code>.</li>
+<li><code>test_missing_expected_gain_rejected</code> — returns <code>None</code>, emits <code>rule_trip</code>, nothing queued.</li>
+<li><code>test_bad_stage_rejected</code> — <code>stage="method"</code> → <code>None</code>.</li>
+<li><code>test_bank_seeds_first_proposals</code> — with an empty log, the first proposal's family is one of the bank's feature-side entries.</li>
+<li><code>test_research_events_emitted</code> — two citations → two <code>research_source</code> events with the node id and slice <code>researching</code> and non-zero token counts.</li>
+<li><code>test_coder_applies_diff</code> — a canned diff yields a commit; the patch file equals the diff.</li>
+<li><code>test_coder_retries_on_apply_failure</code> — first canned diff malformed, second good → one retry, success.</li>
+<li><code>test_coder_prompt_capability</code> — the prompt string contains none of: the holdout path, <code>protocols/</code>, <code>measure.py</code>, <code>rulebook</code>.</li>
+<li><code>test_cache_hit_same_hash_miss_other_hash</code> — and the second visit under the same hash is labelled <code>confirmed</code> or <code>contradicted</code>, not a plain hit.</li>
+<li><code>test_brief_deterministic</code> — same inputs → identical string.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_07_tuner.py</code> (fake runner returning <code>−(lr−0.003)² − (emb−16)²/1000</code> + tiny noise)</h3>
+<ul class="tests">
+<li><code>test_converges</code> — after 15 trials, best <code>lr</code> within ×2 of 0.003 and <code>emb</code> within 8 of 16.</li>
+<li><code>test_trial_events</code> — 15 <code>node_created(kind=trial, parent=node)</code>; cost slice <code>tuning</code>.</li>
+<li><code>test_incumbent_first</code> — trial 1's params equal the incumbent's knobs.</li>
+<li><code>test_shortlist_not_promoted</code> — returns 3 hypotheses; no node state is <code>promoted</code>.</li>
+<li><code>test_failed_trial_marked</code> — a runner failure → <code>TrialState.FAIL</code>, study continues.</li>
+<li><code>test_small_budget_no_study</code> — budget 5 → 3 runs, no Optuna storage file.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 8</p><p>All tests green. Manual: one real LLM smoke call per role (not in tests), then the loop on synthetic with the real researcher for three nodes; the Research events appear in the app with token costs.</p></div>
+<h3>Hands forward</h3>
+<p>A complete search loop on the synthetic task. Phase 8 changes only the task underneath it.</p>
+
+<!-- ============================================================ -->
+<h2 id="p8">Phase 8 · Ali-CCP data and task</h2>
+<div class="meta"><span><b>Owner</b> A</span><span><b>Depends on</b> phase 3 (interface), phase 7 (to be useful)</span><span><b>Source</b> §1, §2</span></div>
+<h3>Goal</h3>
+<p>Parse the real files once into partitioned parquet with raw ids and list columns, carve the two validation sets inside train by the protocol's rule, subsample training rows only, and score through the organisers' populations. Fill the hashes in <code>aliccp.yaml</code>. Then reproduce the baseline (iteration 0).</p>
+<h3>In scope</h3>
+<p><code>data/ingest.py</code>, <code>data/schema.py</code>, <code>data/subsample.py</code>, <code>harness/tasks/aliccp.py</code>, <code>protocols/aliccp.yaml</code> (hash fields and the post-webinar values only), <code>tests/fixtures/aliccp_tiny/</code> (a 30-row hand-written sample in the real format), <code>tests/test_08_ingest.py</code>, <code>tests/test_08_aliccp_task.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Loading anything into pandas whole. Vocabulary building or frequency filtering (candidate-side). Any change to the template beyond reading the new columns. Reading the test file's labels — the organisers' hidden test is never opened by the harness beyond a row count.</p></div>
+<h3>Interfaces</h3>
+<pre><code># data/schema.py
+FIELDS = {101:"user", 205:"item", 206:"item_cat", 207:"shop", 210:"intention", 216:"brand",
+          121..129: user categoricals, 301:"position", 508,509,702,853: cross stats (dense),
+          109_14:"hist_cat", 110_14:"hist_shop", 127_14:"hist_brand", 150_14:"hist_intention"}
+KIND = {sparse: 23 fields, dense: 4 cross stats, list: the four _14 fields as list&lt;struct&lt;id,weight&gt;&gt;}
+
+# data/ingest.py
+def parse_feature_string(s: str) -> dict[int, list[tuple[int, float]]]   # \x01 / \x02 / \x03 levels
+def ingest(raw_dir, out_dir, n_buckets=100, row_group=200_000) -> str     # returns ingest_hash
+    # stream skeleton + common_features with pyarrow CSV readers; join on common-feature index in
+    # bounded batches; write out_dir/{train,test}/bucket=NNN/part.parquet with bucket = sample_id % n_buckets
+    # ingest_hash = sha256 over the sorted list of (relative path, sha256 of file)
+# CLI: python -m data.ingest &lt;raw&gt; &lt;out&gt; --write-hash protocols/aliccp.yaml
+
+# data/subsample.py
+def training_subsample(parquet_root, fraction, seed, keep_all_positives=True, exclude_sample_ids=...) -> list[Path]
+    # selects whole buckets when fraction ≥ 1/n_buckets; NEVER touches search_validation / holdout ids
+
+# harness/tasks/aliccp.py
+class AliCCPTask(Task): prepare() applies protocol.ruler.splits by sample_id order (assumption recorded in the yaml);
+    score() shells out to the pinned organisers' script if present, else the local implementation with the
+    same populations; candidate_env() exposes TRAIN and VALID only; rows("holdout") is harness-only</code></pre>
+<h3>Tests to pass — <code>tests/test_08_ingest.py</code> (tiny fixture)</h3>
+<ul class="tests">
+<li><code>test_parse_three_levels</code> — a string with two features, one multi-valued with weights, parses to the exact dict.</li>
+<li><code>test_join_correct</code> — each skeleton row picks up its common features by index; a row with no match gets empty lists, not a crash.</li>
+<li><code>test_list_columns_round_trip</code> — the four history fields are <code>list&lt;struct&lt;id,weight&gt;&gt;</code> and read back equal.</li>
+<li><code>test_raw_ids_kept</code> — an id that appears once survives ingest.</li>
+<li><code>test_partition_is_file_selection</code> — reading bucket 7 opens only bucket 7's file (patch <code>open</code> and count).</li>
+<li><code>test_ingest_hash_stable_and_sensitive</code> — two ingests equal; one byte changed in the raw file changes the hash.</li>
+<li><code>test_memory_bounded</code> — ingest of a 2M-row generated file keeps peak RSS under 2 GB (<code>resource.getrusage</code>).</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_08_aliccp_task.py</code></h3>
+<ul class="tests">
+<li><code>test_splits_by_sample_id_rule</code> — last 10% search-val, preceding 10% holdout, disjoint, cover.</li>
+<li><code>test_subsample_never_touches_validation</code> — no subsample id is in either validation set; all positives kept when flagged.</li>
+<li><code>test_candidate_env_no_holdout</code>.</li>
+<li><code>test_score_ctr_all_rows_cvr_clicked_only</code> — constructed predictions; matches a hand-computed AUC.</li>
+<li><code>test_scored_head</code> — a preds file with <code>p_click_and_conversion</code> instead of <code>p_conversion_given_click</code> raises.</li>
+<li><code>test_protocol_hash_changes_with_ingest_hash</code>.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 9</p><p>All tests green. Manual: full ingest of the real files under 8 GB RSS; <code>aliccp.yaml</code> hashes filled and the protocol hash printed. <strong>Iteration 0:</strong> the NISE baseline command × 5 seeds on the frozen split (GPU time) produces a band; the run refuses to search until it exists. Record σ_screen, σ_full and the bar — every ladder threshold scales with them.</p></div>
+<h3>Hands forward</h3>
+<p>A real task under an unchanged loop, and the zero point every reported delta is measured from.</p>
+
+<!-- ============================================================ -->
+<h2 id="p9">Phase 9 · Outputs and audit</h2>
+<div class="meta"><span><b>Owner</b> A: submission writer · B: audit, report, registry</span><span><b>Depends on</b> phases 6, 8; the app from phase 2</span><span><b>Source</b> §9</span></div>
+<h3>Goal</h3>
+<p>Pure projections over a log that already exists (replication, cost, reliability), the submission writer with its read-back check, the organisers' convergence rule, the pre-scoring prediction with its band, the run registry, and the report. The Audit tab lights up.</p>
+<h3>In scope</h3>
+<p><code>harness/audit.py</code>, <code>harness/outputs.py</code>, <code>app/server.py</code> (three audit endpoints only), <code>harness/tree.py</code> (two calls: convergence check per verdict, submission on promotion — nothing else), <code>reference/published_costs.yaml</code> (AIDE and MLE-bench figures with sources), <code>tests/test_09_audit.py</code>, <code>tests/test_09_outputs.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>Any new event type. Pooling runs with different protocol hashes (must refuse). Frontend rendering of the Audit tab beyond wiring the three endpoints.</p></div>
+<h3>Interfaces</h3>
+<pre><code># audit.py — every function takes list[dict] events, returns plain dicts; no I/O
+def replication_pairs(events) -> list[{node, screen_vs_full, one_vs_many_seeds, searchval_vs_holdout}]
+def cost_by_slice(events) -> {researching|coding|training|tuning: {tokens_in, tokens_out, gpu_h}}
+    # gpu_h = allocated wall time × device count, not utilisation
+def reliability(events) -> {failures_by_class, recoveries: {ok, failed}, time_to_first_valid_submission_s,
+                             longest_unattended_s (max gap between intervention events, or run length), rule_trips}
+def assert_single_protocol(events) -> None    # raises if &gt;1 distinct protocol_hash
+
+# outputs.py
+def write_submission(node, task, protocol, mode: Literal["predictions","checkpoint"], out_dir) -> Path
+    # predictions: columns from the example submission; head = p_conversion_given_click (refuse otherwise);
+    #   read-back: row count == task.rows("test"), all columns present, values in [0,1], no NaN
+    # checkpoint: copy checkpoint + inference script; dry-run inference on search-val must reproduce the node's cvr_auc ± 1e-4
+    # emits submission_written with path and read-back result
+class Convergence: def __init__(eps, n_rounds) ; def update(self, searchval_score) -> bool  # organisers' rule verbatim
+def write_prediction(events, holdout_score, band) -> int     # a measurement event {kind: "prediction", delta, band}; must precede scoring
+def register(run_dir, protocol, status, final_scores) -> None  # appends to runs/index.jsonl
+def report(events, out_path) -> Path                          # markdown: scorecard (FP, FN-strong, marginal rate, leak, recovery), tree summary, costs, reliability
+
+# server.py additions
+GET /runs/{id}/audit/replication | /cost | /reliability -> the three dicts above</code></pre>
+<h3>Tests to pass — <code>tests/test_09_audit.py</code> (fake run stream — scripted, so counts are fixed)</h3>
+<ul class="tests">
+<li><code>test_cost_slices_sum</code> — the four slices' token totals equal the sum of cost fields in the stream.</li>
+<li><code>test_reliability_counts</code> — failures by class and recovery outcomes equal the scripted counts; <code>rule_trips</code> equals the number of <code>rule_trip</code> events.</li>
+<li><code>test_longest_unattended</code> — with one <code>intervention</code> at a known seq, the gap is computed on both sides and the max returned.</li>
+<li><code>test_replication_pairs_per_node</code> — nodes that reached holdout have all three pairs; screen-only nodes have one.</li>
+<li><code>test_refuse_mixed_hashes</code> — two streams with different hashes concatenated → raises.</li>
+<li><code>test_endpoints</code> — the three endpoints return the same dicts as the functions.</li>
+</ul>
+<h3>Tests to pass — <code>tests/test_09_outputs.py</code></h3>
+<ul class="tests">
+<li><code>test_wrong_head_refused</code>.</li>
+<li><code>test_readback_catches_row_count_and_range</code> — a short file and a file with 1.2 in it both raise before <code>submission_written</code>.</li>
+<li><code>test_checkpoint_dry_run</code> — the copied checkpoint reproduces the node's search-val score.</li>
+<li><code>test_convergence_rule</code> — for ε=0.001, N=3 and a scripted score sequence, <code>update</code> returns True at exactly the expected index.</li>
+<li><code>test_prediction_precedes_submission</code> — the prediction event's seq is lower than <code>submission_written</code>'s.</li>
+<li><code>test_registry_line</code> — one JSON line with run id, task, hash, status, scores.</li>
+<li><code>test_report_renders</code> — from the fake run, without error, containing the five scorecard headings.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Gate to phase 10</p><p>All tests green. Manual: the Audit tab shows real numbers on the phase-6 fallback run and on a synthetic run with agents. A submission file is written on the first promotion and passes read-back.</p></div>
+<h3>Hands forward</h3>
+<p>A run that ends with a valid submission and a written prediction, and a report a judge can read. The only thing missing is the leak checks that need a real run to set.</p>
+
+<!-- ============================================================ -->
+<h2 id="p10">Phase 10 · Rulebook post-checks</h2>
+<div class="meta"><span><b>Owner</b> A: checks · B: Audit rows</span><span><b>Depends on</b> phase 9 and one full Ali-CCP run observed</span><span><b>Source</b> §3</span></div>
+<h3>Goal</h3>
+<p>The three remaining post-checks in <code>measure.leak_audit</code>, with thresholds set from what the first real run showed, plus one static warn-only check on the diff. Every trip is an <code>Audit → Reliability</code> row. There is no <code>rulebook.py</code>.</p>
+<h3>In scope</h3>
+<p><code>harness/measure.py</code> (the <code>leak_audit</code> function and its constants only), <code>harness/agents/coder.py</code> (call the static check after producing a diff — one line), <code>tests/test_10_rulebook.py</code>.</p>
+<div class="stop"><p class="eyebrow">Out of scope</p><p>A rule engine, a rules file, a "rulebook" tab. Any check that only works on Ali-CCP — every check must run on the synthetic task too. Prompt-level "rules" (they are not on the enforcement ladder).</p></div>
+<h3>Interfaces</h3>
+<pre><code>RULES = {  # id → (statement, severity, stage)
+  "R1_eval_rows":     ("evaluation row count equals the protocol's", "fail", "post"),
+  "R2_population":    ("metric computed on the declared population", "fail", "post"),
+  "R3_single_feature":("no single feature with AUC &gt; LEAK_SINGLE_FEATURE_AUC", "fail", "post"),   # from phase 5
+  "R4_positives":     ("subsample positive count within ±POS_TOL of expected", "fail", "post"),
+  "R5_static_split":  ("diff adds train_test_split( without a time key", "warn", "static"),
+  "R6_static_target": ("diff adds groupby(...).transform('mean') over the label", "warn", "static") }
+POS_TOL = &lt;set from the observed run, with provenance comment&gt;
+def leak_audit(delta, band, single_feature_aucs, eval_rows, expected_rows, population_ok, pos_count, pos_expected) -> list[str]
+def static_check(diff_text: str) -> list[str]     # warn ids only; never blocks
+# every "fail" id → rule_trip event {rule, statement, node}; "warn" → rule_trip with severity warn</code></pre>
+<h3>Tests to pass — <code>tests/test_10_rulebook.py</code></h3>
+<ul class="tests">
+<li><code>test_each_rule_pass_fail</code> — parametrised: for R1–R4, one input that passes and one that fails; the failing one returns the id.</li>
+<li><code>test_static_warns</code> — a diff containing <code>train_test_split(X, y)</code> → R5; one with <code>groupby("user").transform("mean")</code> on the label column → R6; a clean diff → none.</li>
+<li><code>test_trip_events</code> — each failing rule emits one <code>rule_trip</code> with the right severity.</li>
+<li><code>test_runs_on_synthetic</code> — the checks execute on a synthetic <code>RunResult</code> without error (domain-blind).</li>
+<li><code>test_planted_leak_trips_two</code> — the synthetic <code>f_leak</code> variant trips R3 and at least one of R1/R2/R4 or the gain trigger.</li>
+<li><code>test_reliability_counts_trips</code> — phase 9's <code>reliability()</code> reports the new trips by rule id.</li>
+</ul>
+<div class="gate"><p class="eyebrow">Done</p><p>All tests green across all phases. The Reliability view lists rule trips by id. A second full Ali-CCP run under the same protocol hash pools with the first on the Replication view. Write the report; the five scorecard numbers in it are the run's evaluation.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="vocab">Fixed vocabularies</h2>
+<p>Copied from <em>Harness Decisions</em> §4, §7 and §11. These are not to be extended by any phase without a schema-version bump.</p>
+<h4>Event types (16)</h4>
+<p><code>run_started</code> <code>node_created</code> <code>state_changed</code> <code>heartbeat</code> <code>measurement</code> <code>verdict</code> <code>failure</code> <code>recovery</code> <code>rule_trip</code> <code>research_source</code> <code>cache_lookup</code> <code>hypothesis_queued</code> <code>queue_reordered</code> <code>submission_written</code> <code>intervention</code> <code>run_ended</code></p>
+<h4>Node states (9)</h4>
+<p><code>screening</code> <code>running</code> <code>replicating</code> <code>promoted</code> <code>inconclusive</code> <code>rejected</code> <code>retired</code> <code>leaked</code> <code>debugging</code> — "failed" is an event on a node in <code>debugging</code>, never a state.</p>
+<h4>Stages (6), cost slices (4), rungs (5), failure classes (6)</h4>
+<p>Stages: <code>data</code> <code>features</code> <code>objective</code> <code>architecture</code> <code>training</code> <code>ensemble</code>. Slices: <code>researching</code> <code>coding</code> <code>training</code> <code>tuning</code>. Rungs: <code>smoke</code> <code>screen</code> <code>full</code> <code>replicate</code> <code>holdout</code>. Failure classes: <code>cuda_oom</code> <code>host_oom</code> <code>diverged</code> <code>timeout</code> <code>contract_violation</code> <code>crash</code>.</p>
+<h4>Three words</h4>
+<p><strong>Baseline</strong> is the organisers' pipeline only. <strong>Incumbent</strong> is our current best. <strong>Protocol</strong> is the frozen ruler; its values are frozen and hashed before iteration 0, whoever typed them.</p>
+
+<p class="foot">Companion to <em>Harness Decisions</em> (artifact 2651312a…), <em>product-spec.md</em> and <em>backend-spec.md</em>. Precedence on any number: the <em>Audit Redline</em> §6 decisions (27 Aug, artifact d07a0e74…) win over this page, and this page wins over <em>Harness Decisions</em>. Phase 5 was rewritten to the locked ladder on 27 Aug; every constant carries a rule reference so a disagreement can be found.</p>
+</div>
