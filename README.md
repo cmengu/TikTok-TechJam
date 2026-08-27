@@ -15,3 +15,6 @@ python -m app          # or: python -m app.server
 
 Serves on http://127.0.0.1:8000 with reload. Point it at a live run by
 starting `python -m harness fake --speed 20` in a second shell.
+## Measurement
+
+Per-candidate false-promotion rate ≈ 3% nominal (one-sided α = 0.05 × the fraction that reach replicate).

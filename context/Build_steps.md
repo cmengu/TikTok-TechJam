@@ -270,3 +270,81 @@ All tests green. Manual: one real node through a real `EventLog`; watch heartbea
 
 `Runner.run` is the only way training happens. Phase 5 calibrates with it; phase 6 calls it per node; phase 7 tuner per trial.
 
+---
+
+## Phase 5 · Measurement
+
+**Owner** A: `measure.py`  
+**Depends on** phases 3, 4  
+**Source** Build_phases `#p5` / Audit Redline §6 Ladder (27 Aug); Plan_delta §4 = no BH / DiD / bootstrap / Student-t only
+
+### Goal
+
+Everything that decides whether a number is believed: pure functions on numbers first, then `Measure` that emits verdicts. The synthetic scorecard must show zero false promotions, the planted true feature promoted, the marginal never *rejected*, and the planted leak caught — before any GPU hour is spent.
+
+### In scope
+
+`harness/measure.py`, `tests/test_05_measure_pure.py`, `tests/test_05_scorecard.py` (`@pytest.mark.slow`), event types `incumbent_changed` + `prediction`, this page, README Measurement line.
+
+### Out of scope
+
+Choosing the next node / queue / git workspace (phase 6). Attribution adjudication (phase 7 hands `attribution=` in). Phase-10 post-checks beyond `leak_audit`. BH, bootstrap CIs, Student-t tables, DiD. Smoke logic in `measure.py` (runner pass/fail only). Ali-CCP ingest.
+
+### Interfaces
+
+```python
+# constants — each with a "# Redline §6 Ladder: …" comment
+SIGMA_UNSTABLE, SCREEN_REJECT_DELTA, SCREEN_ADVANCE_SD, PROMOTE_FLOOR,
+PROMOTE_Z_OVER_SQRT_K, REPLICATE_K, LEAK_TRIGGER_BANDS, LEAK_SINGLE_FEATURE_AUC,
+LADDER_ETA, HOLDOUT_VISITS_MAX, HOLDOUT_SEEDS, INCONCLUSIVE_REVISITS,
+INCONCLUSIVE_PRIORITY, RHO_REFRESH_AFTER, STALL_SD_MULT
+
+@dataclass
+class Band:
+    sigma_screen, sigma_full, sigma_pair, ratio, rho
+    sd_delta_screen, sd_delta_full, bar
+    source: Literal["fixed_pair","refreshed"]; n_replicated: int
+
+def calibrate(screen_per_seed, full_per_seed, fixed_seed_pair) -> Band
+def refresh_rho(band, per_seed_deltas) -> Band
+def screen_verdict(delta, band) -> Literal["rejected","replicating","inconclusive"]
+def promote_bar(band) -> float
+def replicate_verdict(deltas, band) -> Literal["pass","fail_sign","fail_mean"]
+def leak_audit(mean_delta, band, single_feature_aucs) -> list[str]
+def ladder_accepts(best_reported, new_holdout, eta=LADDER_ETA) -> bool
+def inconclusive_next(prior_inconclusives) -> Literal["requeue","retire"]
+def combine_inconclusive(a, b) -> Literal["re_measure"]  # never "pass"
+
+class Measure:
+    def calibrate_from_runs(self, runner, baseline_node, ...) -> Band
+    def verdict(self, node, results, incumbent, rung, attribution=None) -> Verdict
+    def holdout_report(self, node, runner, incumbent, best_reported) -> HoldoutReport
+    def maybe_refresh(self) -> Band | None
+```
+
+Ladder: **smoke** (contract only, not in measure) → **screen** (one paired seed) → **replicate** (k=3 full, all Δ>0 and mean ≥ bar, attribution clear). **Holdout is not a rung** — ≤2 visits, candidate-side only; decides the *reported* number.
+
+### Locked decisions (phase 5)
+
+1. **Redline surface** — full `#p5` (screen + replicate + leak + attribution + holdout_report + ρ refresh). Plan_delta §4 only forbids BH / DiD / bootstrap / Student-t.
+2. **Smoke** — no smoke logic in `measure.py`; `verdict()` raises `RungMismatch` on smoke.
+3. **Constants** — never loosen a Redline constant to green the scorecard; retune planted weights only if pure tests pass and `f_true`/`f_marginal` miss.
+4. **Events** — additive `incumbent_changed` and `prediction` (Plan_delta §1; no schema bump); `fake_run` covers both.
+5. **False-promotion rate** — README + this page: ≈ 3% nominal (one-sided α = 0.05 × the fraction that reach replicate).
+
+### Tests to pass — `tests/test_05_measure_pure.py`
+
+`test_calibrate_columns`, `test_calibrate_unstable_raises`, `test_screen_table`, `test_promote_bar`, `test_replicate_k3`, `test_replicate_refuses_screen_rung`, `test_leak_trigger`, `test_attribution_gate`, `test_ladder_eta`, `test_holdout_budget`, `test_holdout_candidate_side_only`, `test_inconclusive_revisits`, `test_inconclusive_never_stacks`, `test_verdict_pairs_by_seed`, `test_rho_refresh`, `test_verdict_emits_event`.
+
+### Tests to pass — `tests/test_05_scorecard.py` (`slow`, ~200K)
+
+`test_baseline_calibrates`, `test_zero_feature_not_promoted`, `test_true_feature_promoted`, `test_marginal_feature_not_rejected`, `test_leak_feature_trips`, `test_holdout_never_in_ladder`, `test_scorecard_printed` → `FP=0 FN=0 marginal=<promoted|inconclusive> leak=caught`.
+
+### Gate to phase 6
+
+Pure tests green; slow scorecard prints `FP=0 FN=0 … leak=caught`. Calibration `Band` visible as a `measurement` event in the app. Nominal false-promotion rate recorded in README.
+
+### Hands forward
+
+Phase 6 calls `Measure.verdict` after every screen/replicate batch and `holdout_report` at most twice per run. The state a node moves to is decided here and only here.
+
