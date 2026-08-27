@@ -13,6 +13,7 @@ const metaEl = () => document.getElementById("meta");
 const treeEl = () => document.getElementById("tree");
 const queueEl = () => document.getElementById("queue");
 const workersEl = () => document.getElementById("workers");
+const logEl = () => document.getElementById("log");
 
 function render() {
   const run = state.run;
@@ -49,6 +50,18 @@ function render() {
     .map((h) => {
       const label = `${h.id} · ${h.stage}/${h.mechanism || "?"}`;
       return `<li>${escapeHtml(label)}</li>`;
+    })
+    .join("");
+
+  logEl().innerHTML = state.log
+    .map((ev) => {
+      const bits = [`#${ev.seq}`, ev.type];
+      if (ev.node != null) bits.push(`node=${ev.node}`);
+      if (ev.class) bits.push(`class=${ev.class}`);
+      if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
+      if (ev.state) bits.push(`state=${ev.state}`);
+      bits.push(`— ${ev.summary || ""}`);
+      return `<li>${escapeHtml(bits.join(" "))}</li>`;
     })
     .join("");
 

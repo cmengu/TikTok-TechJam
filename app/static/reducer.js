@@ -6,6 +6,7 @@ export const initial = () => ({
   queue: [],
   workers: {},
   verdicts: [],
+  log: [],
   lastSeq: 0,
 });
 
@@ -28,6 +29,7 @@ export function reduce(state, ev) {
     queue: [...state.queue],
     workers: { ...state.workers },
     verdicts: [...state.verdicts],
+    log: [...state.log, ev].slice(-200),
     lastSeq: ev.seq,
   };
 
