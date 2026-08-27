@@ -472,11 +472,15 @@ class Runner:
             checkpoint_path=self._latest_checkpoint(workspace),
         )
 
-    @staticmethod
-    def _stage_candidate(workspace: Path) -> None:
-        """Copy template + report into workspace so the child never imports harness.*."""
+    def _stage_candidate(self, workspace: Path) -> None:
+        """Copy template + report into the attempt dir (never import harness.*).
+
+        Phase 6 may set ``run_cfg["candidate_src"]`` to the git Workspace working
+        tree so patches apply; otherwise copies from repo ``candidate/``.
+        """
+        src_dir = Path(self.run_cfg["candidate_src"]) if self.run_cfg.get("candidate_src") else CANDIDATE_DIR
         for name in ("template.py", "report.py"):
-            src = CANDIDATE_DIR / name
+            src = src_dir / name
             if not src.is_file():
                 raise FileNotFoundError(f"missing candidate script: {src}")
             shutil.copy2(src, workspace / name)

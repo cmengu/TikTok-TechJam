@@ -1,0 +1,50 @@
+# Phase 6 hand-written hypotheses (no LLM). Patches flip FEATURES in template.py.
+- id: h-base
+  stage: features
+  mechanism: baseline
+  description: baseline FEATURES=base (no planted columns)
+  citation: no prior
+  expected_gain: 0.0
+  expected_gpu_h: 0.1
+  parent_node: null
+  patch: hypotheses/patches/base.diff
+
+- id: h-f-true
+  stage: features
+  mechanism: planted_true
+  description: add planted f_true column to FEATURES
+  citation: no prior
+  expected_gain: 0.05
+  expected_gpu_h: 0.1
+  parent_node: null
+  patch: hypotheses/patches/f_true.diff
+
+- id: h-f-marginal
+  stage: features
+  mechanism: planted_marginal
+  description: add planted f_marginal column to FEATURES
+  citation: no prior
+  expected_gain: 0.02
+  expected_gpu_h: 0.1
+  parent_node: null
+  patch: hypotheses/patches/f_marginal.diff
+
+- id: h-f-zero
+  stage: features
+  mechanism: planted_zero
+  description: add planted f_zero column to FEATURES
+  citation: no prior
+  expected_gain: 0.01
+  expected_gpu_h: 0.1
+  parent_node: null
+  patch: hypotheses/patches/f_zero.diff
+
+- id: h-f-leak
+  stage: features
+  mechanism: planted_leak
+  description: add planted f_leak column to FEATURES
+  citation: no prior
+  expected_gain: 0.08
+  expected_gpu_h: 0.1
+  parent_node: null
+  patch: hypotheses/patches/f_leak.diff

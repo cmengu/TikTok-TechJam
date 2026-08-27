@@ -19,6 +19,9 @@ export const EVENT_TYPES = [
   "submission_written",
   "intervention",
   "run_ended",
+  // Phase 5+ (Plan_delta §1 additive — keep in sync with harness/types.py)
+  "incumbent_changed",
+  "prediction",
 ];
 
 export const STATES = [
@@ -50,6 +53,8 @@ const FEED_TYPES = new Set([
   "submission_written",
   "intervention",
   "run_ended",
+  "incumbent_changed",
+  "prediction",
 ]);
 
 const LOG_CAP = 500;
@@ -101,6 +106,9 @@ export const initial = () => ({
 
   submissions: [],
   interventions: [],
+
+  /** Current incumbent node id (null until first promotion / incumbent_changed). */
+  incumbent: null,
 
   log: [],
   feed: [],
@@ -383,11 +391,24 @@ export function reduce(state, ev) {
         endReason: ev.reason,
         status: "ended",
       };
+      if (ev.incumbent != null) {
+        next.incumbent = ev.incumbent;
+      }
       break;
     }
 
     case "measurement": {
       next.measurements = capPush(state.measurements, ev, MEASUREMENTS_CAP);
+      break;
+    }
+
+    case "incumbent_changed": {
+      next.incumbent = ev.node ?? state.incumbent;
+      break;
+    }
+
+    case "prediction": {
+      // Stored on the log/feed path only; no dedicated panel yet.
       break;
     }
 

@@ -118,12 +118,25 @@ function buildWorkersHtml(state) {
     .join("");
 }
 
+function buildIncumbentHtml(state) {
+  const id = state.incumbent;
+  if (id == null) return `<li>${escapeHtml("— none yet")}</li>`;
+  const node = state.nodes[id];
+  const hyp = node?.hypothesisId != null ? String(node.hypothesisId) : "?";
+  const st = node?.state != null ? String(node.state) : "?";
+  return `<li>${escapeHtml(`#${id} ${hyp} [${st}]`)}</li>`;
+}
+
 function renderDashboard(state) {
   viewEl().innerHTML = `
     <div class="dashboard-grid">
       <section>
         <h2>Run tree</h2>
         <ul>${buildTreeHtml(state)}</ul>
+      </section>
+      <section>
+        <h2>Incumbent</h2>
+        <ul>${buildIncumbentHtml(state)}</ul>
       </section>
       <section>
         <h2>Hypotheses</h2>
