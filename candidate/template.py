@@ -1,7 +1,11 @@
-"""Phase 3: baseline training script the agent edits (run as python -m harness.candidate.template)."""
+"""Baseline training script the agent edits (run as: python template.py).
+
+Copied into the workspace with report.py; must not import the harness package.
+"""
 
 from __future__ import annotations
 
+import io
 import os
 import sys
 import time
@@ -9,11 +13,12 @@ import traceback
 from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 import torch.nn as nn
 
-from harness.candidate import report
+import report
 
 BASE_FEATURES = ("user_id", "item_id", "cat_a", "cat_b", "cat_c")
 FAILURE_ENV = "SYNTHETIC_FAIL"
@@ -32,7 +37,6 @@ def _parse_features(raw: str | None) -> list[str]:
             parts.extend(BASE_FEATURES)
         else:
             parts.append(tok)
-    # de-dupe, preserve order
     seen: set[str] = set()
     out: list[str] = []
     for p in parts:
@@ -42,9 +46,7 @@ def _parse_features(raw: str | None) -> list[str]:
     return out
 
 
-def _inject_failure(mode: str, when: str) -> None:
-    if mode != when:
-        return
+def _fire_failure(mode: str) -> None:
     if mode == "crash":
         raise RuntimeError("SYNTHETIC_FAIL=crash")
     if mode == "oom_cuda":
@@ -52,15 +54,8 @@ def _inject_failure(mode: str, when: str) -> None:
     if mode == "oom_host":
         os.kill(os.getpid(), 9)
     if mode == "hang":
-        report.progress(0, 1, 0.0)
         while True:
             time.sleep(60)
-    if mode == "nan":
-        return  # handled at first progress
-    if mode == "no_result":
-        return
-    if mode == "bad_schema":
-        return
 
 
 class _Model(nn.Module):
@@ -68,7 +63,7 @@ class _Model(nn.Module):
         super().__init__()
         self.embs = nn.ModuleDict(
             {
-                name: nn.Embedding(n + 1, emb_dim, padding_idx=OOV)  # +1 for OOV@0
+                name: nn.Embedding(n + 1, emb_dim, padding_idx=OOV)
                 for name, n in n_emb.items()
             }
         )
@@ -90,25 +85,29 @@ class _Model(nn.Module):
         return self.head_click(h).squeeze(-1), self.head_cvr(h).squeeze(-1)
 
 
-def _build_vocab(train_cols: dict[str, np.ndarray], features: list[str]) -> dict[str, dict[int, int]]:
+def _build_vocab(
+    train_cols: dict[str, np.ndarray], features: list[str]
+) -> dict[str, dict[int, int]]:
     vocabs: dict[str, dict[int, int]] = {}
     for name in features:
         if name.startswith("f_"):
-            continue  # continuous planted features — no vocab
+            continue
         vals = train_cols[name]
         uniq = np.unique(vals)
-        # reserve 0 for OOV
         vocabs[name] = {int(v): i + 1 for i, v in enumerate(uniq.tolist())}
     return vocabs
 
 
-def _encode(cols: dict[str, np.ndarray], features: list[str], vocabs: dict[str, dict[int, int]], idx: np.ndarray) -> dict[str, torch.Tensor]:
+def _encode(
+    cols: dict[str, np.ndarray],
+    features: list[str],
+    vocabs: dict[str, dict[int, int]],
+    idx: np.ndarray,
+) -> dict[str, torch.Tensor]:
     batch: dict[str, torch.Tensor] = {}
     for name in features:
         if name.startswith("f_"):
-            # bucket continuous features into a small embedding via digitization
             raw = cols[name][idx].astype(np.float64)
-            # map to 1..16 via ranks within batch is wrong; use fixed bins from sign/magnitude
             buckets = np.clip((raw * 2).astype(np.int64) + 8, 1, 16)
             batch[name] = torch.tensor(buckets, dtype=torch.long)
         else:
@@ -120,6 +119,12 @@ def _encode(cols: dict[str, np.ndarray], features: list[str], vocabs: dict[str, 
             )
             batch[name] = torch.from_numpy(mapped)
     return batch
+
+
+def _save_checkpoint(step: int, state_dict) -> None:
+    buf = io.BytesIO()
+    torch.save(state_dict, buf)
+    report.checkpoint.save(step, buf.getvalue())
 
 
 def main() -> None:
@@ -137,13 +142,7 @@ def main() -> None:
     lr = float(os.environ.get("LR", "1e-3"))
     epochs = int(os.environ.get("EPOCHS", "1"))
 
-    _inject_failure(fail, "crash")
-    _inject_failure(fail, "oom_cuda")
-    _inject_failure(fail, "oom_host")
-    _inject_failure(fail, "hang")
-
     torch.manual_seed(seed)
-    np.random.seed(seed)
     device = torch.device(device_s)
 
     train_tbl = pq.read_table(train_path)
@@ -151,9 +150,10 @@ def main() -> None:
     train_cols = {c: np.asarray(train_tbl.column(c)) for c in train_tbl.column_names}
     valid_cols = {c: np.asarray(valid_tbl.column(c)) for c in valid_tbl.column_names}
 
-    # Continuous planted features need an embedding slot too.
     emb_features = list(features)
-    vocabs = _build_vocab(train_cols, [f for f in emb_features if not f.startswith("f_")])
+    vocabs = _build_vocab(
+        train_cols, [f for f in emb_features if not f.startswith("f_")]
+    )
     n_emb: dict[str, int] = {f: len(vocabs[f]) for f in vocabs}
     for f in emb_features:
         if f.startswith("f_"):
@@ -165,8 +165,11 @@ def main() -> None:
 
     n = len(train_cols["sample_id"])
     n_steps = max(1, (n + batch_size - 1) // batch_size * epochs)
+    mid = max(1, n_steps // 2)
+    report_every = max(1, n_steps // 10)
     step = 0
     rng = np.random.default_rng(seed)
+    hung = False
 
     model.train()
     for _epoch in range(epochs):
@@ -181,7 +184,6 @@ def main() -> None:
             y_cvr = torch.tensor(
                 train_cols["conversion"][idx].astype(np.float32), device=device
             )
-            # Only clicked rows contribute to CVR loss.
             click_mask = y_click > 0.5
 
             logit_c, logit_v = model(batch)
@@ -197,18 +199,24 @@ def main() -> None:
             loss_v = float(loss.detach().cpu())
             if fail == "nan" and step == 1:
                 loss_v = float("nan")
-            report.progress(step, n_steps, loss_v)
-            report.checkpoint.save(
-                {"step": step, "state_dict": model.state_dict()}
-            )
+
+            if step % report_every == 0 or step == n_steps or step == 1:
+                report.progress(step, n_steps, loss_v)
+                _save_checkpoint(step, model.state_dict())
+
+            if fail == "hang" and step == 1 and not hung:
+                hung = True
+                _fire_failure("hang")
+            if fail in {"crash", "oom_cuda", "oom_host"} and step == mid:
+                _fire_failure(fail)
 
     if fail == "no_result":
         sys.exit(0)
     if fail == "bad_schema":
-        report.result({"ctr_auc": 0.5}, preds_path=workspace / "preds.parquet")
+        # Incomplete contract: result.json without a real preds file.
+        report.result({}, preds_path=workspace / "preds.parquet")
         sys.exit(0)
 
-    # Predict on VALID.
     model.eval()
     v_n = len(valid_cols["sample_id"])
     p_click = np.zeros(v_n, dtype=np.float32)
@@ -222,8 +230,6 @@ def main() -> None:
             p_click[idx] = torch.sigmoid(logit_c).cpu().numpy()
             p_cvr[idx] = torch.sigmoid(logit_v).cpu().numpy()
 
-    import pyarrow as pa
-
     preds_path = workspace / "preds.parquet"
     preds = pa.table(
         {
@@ -233,21 +239,8 @@ def main() -> None:
         }
     )
     pq.write_table(preds, preds_path, compression="zstd")
-
-    # Local AUCs for the printed summary (harness score() is authoritative).
-    from sklearn.metrics import roc_auc_score
-
-    y_c = np.asarray(valid_cols["click"], dtype=np.float64)
-    ctr = float(roc_auc_score(y_c, p_click))
-    clicked = y_c > 0.5
-    cvr = float(
-        roc_auc_score(
-            np.asarray(valid_cols["conversion"], dtype=np.float64)[clicked],
-            p_cvr[clicked],
-        )
-    )
-    report.result({"ctr_auc": ctr, "cvr_auc": cvr}, preds_path=preds_path)
-    print(f"ctr_auc={ctr:.6f} cvr_auc={cvr:.6f}")
+    # Harness task.score() is the only numeric authority.
+    report.result({}, preds_path=preds_path)
 
 
 if __name__ == "__main__":

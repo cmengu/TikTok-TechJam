@@ -1,4 +1,8 @@
-"""Phase 3: candidate-side progress/result/checkpoint writers (stdlib only)."""
+"""Candidate-side progress/result/checkpoint writers (stdlib only).
+
+Lives outside the harness package so the child never imports harness.*.
+Copied into the workspace next to template.py by the runner.
+"""
 
 from __future__ import annotations
 
@@ -44,22 +48,13 @@ def result(metrics: dict, preds_path: Path | str) -> None:
 
 class checkpoint:
     @staticmethod
-    def save(state) -> Path:
-        import torch  # local: report.py's module-level imports stay stdlib-only
-
+    def save(step: int, blob: bytes) -> Path:
+        """Write already-serialized checkpoint bytes; keep last 3 by step."""
         ws = _workspace()
         ckpt_dir = ws / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-        step = int(state.get("step", 0)) if isinstance(state, dict) else 0
-        if isinstance(state, dict) and "state_dict" in state:
-            to_save = state["state_dict"]
-            meta_step = step
-        else:
-            to_save = state
-            meta_step = step
-        out = ckpt_dir / f"step-{meta_step}.pt"
-        torch.save(to_save, out)
-        # keep last 3 by step number in filename
+        out = ckpt_dir / f"step-{int(step)}.pt"
+        out.write_bytes(blob)
         files = sorted(
             ckpt_dir.glob("step-*.pt"),
             key=lambda p: int(p.stem.split("-", 1)[1]),

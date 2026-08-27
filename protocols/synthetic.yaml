@@ -1,26 +1,24 @@
-# Synthetic benchmark — complete day-one values; same schema as aliccp.
 schema_version: 1
 task: synthetic
-
 ruler:
   rulebook_version: 3
   data:
-    ingest_hash: "synthetic-inmem-v1"
+    ingest_hash: synthetic-inmem-v1
     train:
       source: generate
-      sha256: "749e1e9007d3d98ffff8a0d843242b4751c0536ca91f333fe8d42c839c9c657b"
+      sha256: 7c6c8d6d5bc8e527e7d760e70fc565d68dc5b933b01583df00eb8fe5d6586848
     test:
       source: generate
-      sha256: "2db3d3a4ea8217b3f4e140e3ed0f1e69526c868a287c814d256fdca10a8c27f1"
+      sha256: 201c571f91610c4f4229743cf5fd27910782de48c8195cd4f339492cc4678da9
   splits:
     search_validation:
       from: train
-      rule: "last 10% by sample_id"
-      sha256: "806c14108d00d3ae969708f5d28802d9859aa0d11e7a42b46e67c969e94a4fb8"
+      rule: last 10% by sample_id
+      sha256: d18ef6b9946230a2981cd59feb93bb47f8abdd3c096708edee2c657e62817b49
     holdout_validation:
       from: train
-      rule: "preceding 10% by sample_id"
-      sha256: "d0482d601ef6192d240fbc77f15fdabbc389a7e7a8479708f41dff3a4b6f50e0"
+      rule: preceding 10% by sample_id
+      sha256: 2e7ee0e3f96bdf730d9d074f57b7271b3f3ca55fb8c6416d4fb9d5e5fdf92ca5
   metrics:
     ctr_auc:
       population: all_impressions
@@ -31,25 +29,37 @@ ruler:
       positive: conversion
       output: p_conversion_given_click
   scoring:
-    script_sha: "e069cb03cc92422e5ac1985f0e06b7bdec2fa0d6b581ccbd85e55ccc310e47d4"
+    script_sha: 7352521e6d25fd49b3ddc59f9a0474b7ef21f18778611ee52beac1bd03aa9730
     aggregation: mean_absolute_delta
   baseline:
     repo: local/synthetic
-    commit: "synthetic-baseline-v1"
-    command: "python -m harness.candidate.template"
+    commit: synthetic-baseline-v1
+    command: python template.py
     published:
-      ctr_auc: 0.50
-      cvr_auc: 0.50
+      ctr_auc: 0.5
+      cvr_auc: 0.5
     reproduced:
-      ctr_auc: [0.50, 0.50, 0.50, 0.50, 0.50]
-      cvr_auc: [0.50, 0.50, 0.50, 0.50, 0.50]
+      ctr_auc:
+      - 0.5
+      - 0.5
+      - 0.5
+      - 0.5
+      - 0.5
+      cvr_auc:
+      - 0.5
+      - 0.5
+      - 0.5
+      - 0.5
+      - 0.5
   convergence:
     epsilon: 0.001
     n_rounds: 3
   seeds:
-    pinned: [data_shuffle, init, dropout]
+    pinned:
+    - data_shuffle
+    - init
+    - dropout
     cuda_deterministic: false
-
 run:
   budget:
     gpu_hours: 1.0

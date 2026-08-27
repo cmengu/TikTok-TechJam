@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from typing import Literal
@@ -36,26 +37,15 @@ def _sha256_file(path: Path) -> str:
 
 def _write_parquet(table: pa.Table, path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # store_schema=False keeps digests stable across Arrow builds.
     pq.write_table(
         table,
         path,
         compression="zstd",
         use_dictionary=False,
         write_statistics=False,
-        store_schema=True,
+        store_schema=False,
     )
-    # Strip any Arrow schema metadata that could vary by writer build.
-    # Re-read and rewrite once with metadata cleared if present.
-    t = pq.read_table(path)
-    if t.schema.metadata:
-        t = t.replace_schema_metadata(None)
-        pq.write_table(
-            t,
-            path,
-            compression="zstd",
-            use_dictionary=False,
-            write_statistics=False,
-        )
     return _sha256_file(path)
 
 
@@ -107,7 +97,6 @@ def generate(
         cvr_scores = cvr_latent[clicked_idx]
         cvr_cut = float(np.partition(cvr_scores, -n_conv)[-n_conv])
         take = cvr_scores >= cvr_cut
-        # trim ties
         chosen = clicked_idx[take]
         extra_c = int(take.sum()) - n_conv
         if extra_c > 0:
@@ -117,32 +106,30 @@ def generate(
             chosen = np.array([i for i in chosen if i not in drop], dtype=np.int64)
         conversion[chosen] = 1
 
-    # Planted effects (scored on clicked rows for conversion).
-    # Tuned so single-feature AUC(f_true) ∈ ~[0.55, 0.65] at n≈200K.
-    f_true = (0.12 * cvr_latent + rng.normal(0.0, 1.15, size=n_impressions)).astype(
+    # Four planted effects (scored on clicked rows for conversion).
+    # Tuned at 1M: f_true ≈ 0.65, f_marginal ≈ 0.56 (bands in tests).
+    f_true = (0.30 * cvr_latent + rng.normal(0.0, 1.15, size=n_impressions)).astype(
         np.float32
     )
+    f_marginal = (
+        0.15 * cvr_latent + rng.normal(0.0, 1.40, size=n_impressions)
+    ).astype(np.float32)
     f_zero = rng.normal(0.0, 1.0, size=n_impressions).astype(np.float32)
     f_leak = (
         conversion.astype(np.float32) + rng.normal(0.0, 0.05, size=n_impressions)
     ).astype(np.float32)
 
     # Short user history lists (excluded from base FEATURES in v1).
-    hist_lists: list[list[dict]] = []
-    for i in range(n_impressions):
-        k = int(rng.integers(0, 5))
-        if k == 0:
-            hist_lists.append([])
-        else:
-            ids = rng.integers(0, n_items, size=k, dtype=np.int32)
-            w = rng.random(k).astype(np.float32)
-            hist_lists.append(
-                [{"id": int(ids[j]), "weight": float(w[j])} for j in range(k)]
-            )
-
-    hist_type = pa.list_(
-        pa.struct([("id", pa.int32()), ("weight", pa.float32())])
+    k = rng.integers(0, 5, size=n_impressions, dtype=np.int32)
+    offsets = np.concatenate([[0], np.cumsum(k, dtype=np.int64)]).astype(np.int32)
+    total = int(offsets[-1])
+    hist_ids = rng.integers(0, n_items, size=total, dtype=np.int32)
+    hist_w = rng.random(total).astype(np.float32)
+    hist_values = pa.StructArray.from_arrays(
+        [hist_ids, hist_w], names=["id", "weight"]
     )
+    hist = pa.ListArray.from_arrays(offsets, hist_values)
+
     sample_id = np.arange(n_impressions, dtype=np.int64)
 
     return pa.table(
@@ -153,10 +140,11 @@ def generate(
             "cat_a": cat_a,
             "cat_b": cat_b,
             "cat_c": cat_c,
-            "hist": pa.array(hist_lists, type=hist_type),
+            "hist": hist,
             "click": click,
             "conversion": conversion,
             "f_true": f_true,
+            "f_marginal": f_marginal,
             "f_zero": f_zero,
             "f_leak": f_leak,
         }
@@ -174,6 +162,12 @@ def _split_tables(table: pa.Table) -> tuple[pa.Table, pa.Table, pa.Table]:
     return train, search, holdout
 
 
+def _score_script_sha() -> str:
+    return hashlib.sha256(
+        inspect.getsource(SyntheticTask.score).encode("utf-8")
+    ).hexdigest()
+
+
 class SyntheticTask:
     name = "synthetic"
 
@@ -182,17 +176,21 @@ class SyntheticTask:
         self._paths: TaskPaths | None = None
         self._tables: dict[str, pa.Table] = {}
 
-    def prepare(self, protocol: Protocol, root: Path) -> TaskPaths:
+    def prepare(self, protocol: Protocol, root: Path, *, seed: int = 0) -> TaskPaths:
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
-        seed = 0
+        harness_only = root / "harness_only"
+        harness_only.mkdir(parents=True, exist_ok=True)
+
         full = generate(seed=seed, n_impressions=self.n_impressions)
         train, search, holdout = _split_tables(full)
 
+        # Candidate-visible: train + search only.
         train_path = root / "train.parquet"
         search_path = root / "search_validation.parquet"
-        holdout_path = root / "holdout_validation.parquet"
-        full_path = root / "generated.parquet"  # data.test identity; not in candidate_env
+        # Harness-only: holdout, full dump, digests — never in candidate_env.
+        holdout_path = harness_only / "holdout_validation.parquet"
+        full_path = harness_only / "generated.parquet"
 
         digests = {
             "train": _write_parquet(train, train_path),
@@ -200,9 +198,7 @@ class SyntheticTask:
             "holdout": _write_parquet(holdout, holdout_path),
             "test": _write_parquet(full, full_path),
         }
-        script_sha = hashlib.sha256(
-            Path(__file__).read_bytes()
-        ).hexdigest()
+        script_sha = _score_script_sha()
 
         ruler = protocol.ruler
         expected = {
@@ -238,8 +234,7 @@ class SyntheticTask:
             "search": search,
             "holdout": holdout,
         }
-        # Persist digests for the phase gate filler.
-        (root / "digests.json").write_text(
+        (harness_only / "digests.json").write_text(
             json.dumps({**digests, "script": script_sha}, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -273,6 +268,8 @@ class SyntheticTask:
 
         lab_ids_arr = np.asarray(labels.column("sample_id"), dtype=np.int64)
         pred_ids_arr = np.asarray(preds.column("sample_id"), dtype=np.int64)
+        if len(pred_ids_arr) != len(set(pred_ids_arr.tolist())):
+            raise ValueError("duplicate sample_id values in preds")
         lab_ids = set(lab_ids_arr.tolist())
         pred_ids = set(pred_ids_arr.tolist())
         if lab_ids != pred_ids:
@@ -282,7 +279,9 @@ class SyntheticTask:
             )
         # Align preds to label row order via sample_id (never assume row order).
         pred_pos = {int(i): k for k, i in enumerate(pred_ids_arr.tolist())}
-        idx = np.fromiter((pred_pos[int(i)] for i in lab_ids_arr.tolist()), dtype=np.int64)
+        idx = np.fromiter(
+            (pred_pos[int(i)] for i in lab_ids_arr.tolist()), dtype=np.int64
+        )
 
         y_click = np.asarray(labels.column("click"), dtype=np.float64)
         y_conv = np.asarray(labels.column("conversion"), dtype=np.float64)
