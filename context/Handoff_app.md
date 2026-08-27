@@ -486,7 +486,7 @@ on every route. Five slots, four of them live:
 | Slot | Source |
 |---|---|
 | Run state | `state.run.status` (`waiting`/`running`/`ended`) + `state.run.endReason` when ended |
-| Submission validity | `state.submissions.length > 0` → green; zero → amber "no valid submission yet" |
+| Submission written | `state.submissions.length > 0` → green "submission written"; zero → amber "no submission yet" |
 | Spend | **PARKED.** Render a dimmed `—` with a `title` saying spend is not yet instrumented. Do not invent a number, do not compute one from anything |
 | Interventions | `state.interventions.length` |
 | Elapsed vs budget | `state.run.startedAt` → now, against `state.run.protocol.run.budget.wall_clock_h` |
@@ -499,9 +499,12 @@ Notes:
   `status === "ended"`.
 - Budget may be `null` (aliccp until the webinar). Show elapsed alone with a
   "no budget set" chip rather than dividing by null.
-- Submission validity is a *light*, not a count. The product spec's claim is
-  "a valid submission exists from the first promotion onward"; the header
-  answers yes/no at a glance.
+- Submission written is a *light*, not a count. `submission_written` carries
+  only `{node, path, summary}` — no validity field; validation is the
+  teammate's phase 9/10 and does not exist in the stream yet. The header
+  reports what happened (a file was written), not a verdict on it. The green
+  state's `title` says so explicitly: "written from a promoted node; not
+  validated — rulebook post-checks are not instrumented yet".
 - The header is not a control panel. Nothing in it is clickable except, if you
   like, a link to the route that explains it.
 

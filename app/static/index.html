@@ -118,11 +118,12 @@
       margin-bottom: 1.25rem;
     }
 
-    /* --- dashboard (provisional, Phase 2 layout) --- */
+    /* --- dashboard: five panels, "is it alive / what's it doing / how far
+       along / is anything wrong" at a glance --- */
     .dashboard-grid {
       display: grid;
       gap: 1.25rem;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     }
     .dashboard-grid section h2 {
       font-size: 0.95rem;
@@ -140,6 +141,48 @@
       padding: 0.2rem 0;
       font-variant-numeric: tabular-nums;
       white-space: pre-wrap;
+    }
+    .panel-empty {
+      color: #4a5a55;
+      font-style: italic;
+    }
+    .worker-list li.worker-stale {
+      background: rgba(196, 90, 60, 0.1);
+      border-radius: 0.3rem;
+      padding-left: 0.35rem;
+    }
+    .score-table {
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      width: 100%;
+    }
+    .score-table th,
+    .score-table td {
+      text-align: left;
+      padding: 0.25rem 1rem 0.25rem 0;
+    }
+    .score-table thead th {
+      color: #4a5a55;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+    }
+    .score-value.score-above {
+      color: #2f8a5e;
+      font-weight: 700;
+    }
+    .score-value.score-below {
+      color: #a3402a;
+      font-weight: 700;
+    }
+    .score-inconclusive {
+      color: #7a8a84;
+      font-style: italic;
+      font-weight: 600;
+    }
+    .band-note {
+      color: #4a5a55;
+      font-size: 0.8rem;
     }
 
     .stub {

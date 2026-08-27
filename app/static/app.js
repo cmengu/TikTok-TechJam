@@ -46,96 +46,164 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
-// --- Dashboard: the existing Phase 2 four-panel view, moved as-is. This is
-// the provisional pre-redesign layout (see Handoff_app.md, "Explicitly
-// parked" — Dashboard redesign is not this batch); only the container
-// changed, from a fixed <main> to a route-owned render function. ---
+// --- Dashboard: five panels answering "is it alive, what's it doing, how far
+// along, is anything wrong" per the product spec (Handoff_app.md, Task 5).
+// This batch builds panels 1-3 only; 4 (stopping progress) and 5 (paper
+// ticker) land next checkpoint. No control here may change a run. ---
 
-function buildTreeHtml(state) {
-  const nodes = Object.values(state.nodes);
-  const byParent = new Map();
-  for (const n of nodes) {
-    const key = n.parent == null ? "root" : String(n.parent);
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key).push(n);
-  }
-  for (const list of byParent.values()) {
-    list.sort((a, b) => a.id - b.id);
-  }
-  const lines = [];
-  function walk(parentKey, depth) {
-    const kids = byParent.get(parentKey) || [];
-    for (const n of kids) {
-      const pad = "  ".repeat(depth);
-      lines.push(
-        `${pad}#${n.id} ${n.kind} [${n.state}]` +
-          (n.parent != null ? ` ← ${n.parent}` : ""),
-      );
-      walk(String(n.id), depth + 1);
-    }
-  }
-  walk("root", 0);
-  return lines.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
-}
+// Heartbeat cadence isn't specified anywhere; 5s is a judgment call for "the
+// worker has gone quiet" that comfortably exceeds normal inter-heartbeat gaps
+// even at the fake-run's default 20x speed.
+const WORKER_STALE_MS = 5000;
 
-function buildQueueHtml(state) {
-  return state.queue
-    .map((h) => {
-      const label = `${h.id} · ${h.stage}/${h.mechanism || "?"}`;
-      return `<li>${escapeHtml(label)}</li>`;
-    })
-    .join("");
-}
-
-function buildFeedHtml(state) {
-  return state.feed
-    .map((ev) => {
-      const bits = [`#${ev.seq}`, ev.type];
-      if (ev.node != null) bits.push(`node=${ev.node}`);
-      if (ev.class) bits.push(`class=${ev.class}`);
-      if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
-      if (ev.state) bits.push(`state=${ev.state}`);
-      bits.push(`— ${ev.summary || ""}`);
-      return `<li>${escapeHtml(bits.join(" "))}</li>`;
-    })
-    .join("");
-}
-
-function buildWorkersHtml(state) {
-  return Object.entries(state.workers)
-    .map(([w, ev]) => {
+function buildNowRunningPanel(state, nowMs) {
+  const entries = Object.entries(state.workers);
+  if (!entries.length) return `<p class="panel-empty">no workers yet</p>`;
+  const rows = entries
+    .map(([worker, ev]) => {
+      const heartbeatMs = ev.t ? new Date(ev.t).getTime() : NaN;
+      const stale = Number.isFinite(heartbeatMs) && nowMs - heartbeatMs > WORKER_STALE_MS;
       const prog =
         ev.total != null && ev.total > 0
           ? `${ev.step ?? 0}/${ev.total}`
           : ev.progress != null
             ? String(ev.progress)
             : "—";
-      const loss = ev.loss != null ? ` loss=${Number(ev.loss).toFixed(4)}` : "";
-      const attempt = ev.attempt != null ? ` attempt=${ev.attempt}` : "";
-      const label = `${w}: ${ev.status || "running"} node=${ev.node ?? "—"} step=${prog}${loss}${attempt}`;
-      return `<li>${escapeHtml(label)}</li>`;
+      const bits = [`node ${ev.node ?? "—"}`, `step ${prog}`];
+      if (ev.loss != null) bits.push(`loss ${Number(ev.loss).toFixed(4)}`);
+      if (ev.attempt != null) bits.push(`attempt ${ev.attempt}`);
+      const label = `${worker}: ${ev.status || "running"} — ${bits.join(" · ")}`;
+      const staleTag = stale ? ` ${chip("stale", "chip-null")}` : "";
+      return `<li class="${stale ? "worker-stale" : ""}">${escapeHtml(label)}${staleTag}</li>`;
     })
     .join("");
+  return `<ul class="worker-list">${rows}</ul>`;
+}
+
+function mean(arr) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+// The incumbent for a metric is the latest verdict that actually promoted a
+// node on it — not just the latest verdict, which might be a screen tick on
+// an unrelated node.
+function latestPromoted(state, metric) {
+  for (let i = state.verdicts.length - 1; i >= 0; i--) {
+    const v = state.verdicts[i];
+    if (v.metric === metric && v.state === "promoted") return v;
+  }
+  return null;
+}
+
+// The whole point of this panel: a value inside its own band is
+// indistinguishable from noise and must never render as if it were a clean
+// read, regardless of what lifecycle state produced it.
+function renderScoreCell(verdict) {
+  if (!verdict || !Array.isArray(verdict.scores) || !verdict.scores.length) {
+    return chip("not yet promoted", "chip-null");
+  }
+  const band = Array.isArray(verdict.band) && verdict.band.length === 2 ? verdict.band : null;
+  if (!band) return chip("not yet promoted", "chip-null");
+  const value = mean(verdict.scores);
+  const [lo, hi] = band;
+  const bandText = `band ${fmtNum(lo)}–${fmtNum(hi)}`;
+  if (value >= lo && value <= hi) {
+    return `<span class="score-inconclusive" title="inside noise band: ${escapeAttr(bandText)}">inconclusive</span> <span class="band-note">(${escapeHtml(bandText)})</span>`;
+  }
+  const cls = value > hi ? "score-above" : "score-below";
+  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)})</span>`;
+}
+
+function buildScorePanel(state) {
+  const protocol = state.run.protocol;
+  if (!protocol) return `<p class="waiting">Waiting for run_started…</p>`;
+  const ruler = protocol.ruler || {};
+  const metricNames = Object.keys(ruler.metrics || {});
+  if (!metricNames.length) return `<p class="panel-empty">no metrics defined</p>`;
+  const published = ruler.baseline?.published || {};
+  const reproduced = ruler.baseline?.reproduced || {};
+  const rows = metricNames
+    .map(
+      (metric) => `<tr>
+        <td>${escapeHtml(metric)}</td>
+        <td>${renderScalar(published[metric])}</td>
+        <td>${formatReproduced(reproduced[metric])}</td>
+        <td>${renderScoreCell(latestPromoted(state, metric))}</td>
+      </tr>`,
+    )
+    .join("");
+  return `
+    <table class="metrics score-table">
+      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// A verdict's event "kind" for feed purposes is its outcome state, not the
+// generic "verdict" type — inconclusive and rejected must never collapse
+// into each other or into a shared "verdict" bucket.
+function feedKind(ev) {
+  return ev.type === "verdict" ? ev.state || "verdict" : ev.type;
+}
+
+function feedLabel(kind) {
+  return kind.replaceAll("_", " ");
+}
+
+function collapseFeed(feed) {
+  const groups = [];
+  for (const ev of feed) {
+    const kind = feedKind(ev);
+    const last = groups[groups.length - 1];
+    if (last && last.kind === kind) {
+      last.count += 1;
+      last.last = ev;
+    } else {
+      groups.push({ kind, count: 1, first: ev, last: ev });
+    }
+  }
+  return groups;
+}
+
+function buildEventsPanel(state) {
+  const groups = collapseFeed(state.feed);
+  const lastFive = groups.slice(-5).reverse();
+  if (!lastFive.length) return `<p class="panel-empty">no events yet</p>`;
+  const rows = lastFive
+    .map((g) => {
+      const label = feedLabel(g.kind);
+      if (g.count === 1) {
+        const ev = g.last;
+        const bits = [`#${ev.seq}`, label];
+        if (ev.node != null) bits.push(`node=${ev.node}`);
+        if (ev.class) bits.push(`class=${ev.class}`);
+        if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
+        bits.push(`— ${ev.summary || ""}`);
+        return `<li>${escapeHtml(bits.join(" "))}</li>`;
+      }
+      const text = `#${g.first.seq}–#${g.last.seq} ${g.count}× ${label} — ${g.last.summary || ""}`;
+      return `<li>${escapeHtml(text)}</li>`;
+    })
+    .join("");
+  return `<ul class="event-list">${rows}</ul>`;
 }
 
 function renderDashboard(state) {
+  const nowMs = Date.now();
   viewEl().innerHTML = `
     <div class="dashboard-grid">
       <section>
-        <h2>Run tree</h2>
-        <ul>${buildTreeHtml(state)}</ul>
-      </section>
-      <section>
-        <h2>Hypotheses</h2>
-        <ul>${buildQueueHtml(state)}</ul>
-      </section>
-      <section>
         <h2>Now running</h2>
-        <ul>${buildWorkersHtml(state)}</ul>
+        ${buildNowRunningPanel(state, nowMs)}
       </section>
       <section>
-        <h2>Event log</h2>
-        <ul>${buildFeedHtml(state)}</ul>
+        <h2>Score against baseline</h2>
+        ${buildScorePanel(state)}
+      </section>
+      <section>
+        <h2>Last five events</h2>
+        ${buildEventsPanel(state)}
       </section>
     </div>
   `;
@@ -460,12 +528,19 @@ function renderRunStateSlot(run) {
     `${dot(colorClass)}${escapeHtml(text)}`;
 }
 
-function renderSubmissionLightSlot(state) {
-  const valid = state.submissions.length > 0;
-  const colorClass = valid ? "dot-green" : "dot-amber";
-  const text = valid ? "valid submission" : "no valid submission yet";
+// submission_written carries only {node, path, summary} — no validity field.
+// Validation is the teammate's phase 9/10 and does not exist in the stream
+// yet, so this reports what happened (a file was written), not a verdict on
+// it. Same honesty rule as spend: say what the stream says, nothing more.
+function renderSubmissionSlot(state) {
+  const written = state.submissions.length > 0;
+  const colorClass = written ? "dot-green" : "dot-amber";
+  const text = written ? "submission written" : "no submission yet";
+  const title = written
+    ? ' title="written from a promoted node; not validated — rulebook post-checks are not instrumented yet"'
+    : "";
   document.getElementById("hdr-submission-light").innerHTML =
-    `${dot(colorClass)}${escapeHtml(text)}`;
+    `<span${title}>${dot(colorClass)}${escapeHtml(text)}</span>`;
 }
 
 // Spend is parked (see Handoff_app.md): no cost data exists in the event
@@ -499,7 +574,7 @@ function renderElapsedBudgetSlot(run) {
 
 function renderHeader(state) {
   renderRunStateSlot(state.run);
-  renderSubmissionLightSlot(state);
+  renderSubmissionSlot(state);
   renderSpendSlot();
   renderInterventionsSlot(state);
   renderElapsedBudgetSlot(state.run);
@@ -579,6 +654,8 @@ function updateMeta(state) {
 
 function renderApp(state) {
   renderHeader(state);
+  if (state.run.status === "ended") stopHeaderTick();
+  else startHeaderTick();
   updateMeta(state);
   renderRoute();
 }
@@ -589,8 +666,22 @@ store.subscribe(renderApp);
 // Elapsed-vs-budget needs to tick even when no new event arrives. This is the
 // only interval in the app and it touches the header alone — never
 // renderRoute() — so an in-progress route (e.g. a text selection on
-// Protocol) is never disturbed by the clock.
-setInterval(() => renderHeader(store.getState()), 1000);
+// Protocol) is never disturbed by the clock. Stopped once the run ends: the
+// elapsed value is frozen at endedAt by then, so a still-firing tick would
+// only repaint the same text forever. Restarted by renderApp if
+// followNewestRun later swings onto a fresh (non-ended) run.
+let headerTickId = null;
+
+function startHeaderTick() {
+  if (headerTickId != null) return;
+  headerTickId = setInterval(() => renderHeader(store.getState()), 1000);
+}
+
+function stopHeaderTick() {
+  if (headerTickId == null) return;
+  clearInterval(headerTickId);
+  headerTickId = null;
+}
 
 // --- live source: two EventSource connections, reconnect-with-since and the
 // newest-run poller. Unchanged from Phase 2 other than routing through the
