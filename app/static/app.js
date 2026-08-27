@@ -104,7 +104,11 @@ function latestPromoted(state, metric) {
 //                                       screen — that's the good outcome,
 //                                       render it normally.
 // Neither function exists yet (both raise NotImplementedError); this mapping
-// is the contract to update once they're real.
+// is the contract to update once they're real. The "screening" branch is
+// unreachable from the Score panel today — renderScoreCell only ever sees
+// verdicts from latestPromoted(), which filters to state === "promoted" — it
+// exists for the node dossier (batch 3), where a node's full verdict history
+// includes its inconclusive/rejected screens too.
 function verdictBandTest(state) {
   if (state === "inconclusive" || state === "rejected") return "screening";
   if (state === "replicating" || state === "promoted") return "replication";
@@ -113,16 +117,18 @@ function verdictBandTest(state) {
 
 // The app reports the harness's verdict; it never computes or overrides one.
 // The number and its band are always shown — greying flags "no signal", it
-// never deletes the reading or relabels the verdict.
+// never deletes the reading or relabels the verdict. No per-row verdict
+// badge: every row reaching this panel is "promoted" (see latestPromoted),
+// so a badge would just repeat the same constant on every line — the
+// panel's own "Incumbent" heading already says that once.
 function renderScoreCell(verdict) {
   if (!verdict || !Array.isArray(verdict.scores) || !verdict.scores.length) {
     return chip("not yet promoted", "chip-null");
   }
   const value = mean(verdict.scores);
-  const badge = chip(verdict.state);
   const band = Array.isArray(verdict.band) && verdict.band.length === 2 ? verdict.band : null;
   if (!band) {
-    return `<span class="score-value">${fmtNum(value)}</span> ${badge}`;
+    return `<span class="score-value">${fmtNum(value)}</span>`;
   }
   const [lo, hi] = band;
   const bandText = `band ${fmtNum(lo)}–${fmtNum(hi)}`;
@@ -130,7 +136,7 @@ function renderScoreCell(verdict) {
   const isNoSignal = inside && verdictBandTest(verdict.state) === "screening";
   const cls = isNoSignal ? "score-inconclusive" : !inside && value > hi ? "score-above" : !inside ? "score-below" : "";
   const noteSuffix = isNoSignal ? ", within noise band" : "";
-  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)}${escapeHtml(noteSuffix)})</span> ${badge}`;
+  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)}${escapeHtml(noteSuffix)})</span>`;
 }
 
 function buildScorePanel(state) {
@@ -153,9 +159,10 @@ function buildScorePanel(state) {
     .join("");
   return `
     <table class="metrics score-table">
-      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent (verdict)</th></tr></thead>
+      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    <p class="hdr-dim panel-note" title="a promoted verdict's band tests whether the replicate agreed with the screen, not whether the lead over baseline clears run-to-run noise — that calibration is harness/measure.py::calibrate, which raises NotImplementedError today">vs-baseline significance: not yet instrumented</p>
   `;
 }
 
@@ -208,6 +215,50 @@ function buildEventsPanel(state) {
   return `<ul class="event-list">${rows}</ul>`;
 }
 
+// Counts verdicts after the most recent "promoted" one (all of them, if
+// there has been no promotion yet) — a stand-in for the convergence counter
+// outputs.py (phase 9) is specified to emit on every verdict and does not
+// yet (ConvergenceTracker.update() raises NotImplementedError). This panel
+// switches to that event the day it exists; until then the count is derived
+// here, in the view, from state.verdicts — never presented as harness-
+// reported.
+function verdictsSinceLastPromoted(state) {
+  const verdicts = state.verdicts;
+  for (let i = verdicts.length - 1; i >= 0; i--) {
+    if (verdicts[i].state === "promoted") return verdicts.length - 1 - i;
+  }
+  return verdicts.length;
+}
+
+function buildStoppingPanel(state) {
+  const protocol = state.run.protocol;
+  if (!protocol) return `<p class="waiting">Waiting for run_started…</p>`;
+  const convergence = protocol.ruler?.convergence || {};
+  const since = verdictsSinceLastPromoted(state);
+  return `
+    <p class="derived-note" title="outputs.py (phase 9) is specified to emit a convergence counter on every verdict and does not yet — this count is derived in the app from state.verdicts, not reported by the harness">${chip("derived in the app", "chip-derived")}</p>
+    <dl class="kv">
+      ${kv("epsilon target", renderScalar(convergence.epsilon))}
+      ${kv("n_rounds target", renderScalar(convergence.n_rounds))}
+      ${kv("verdicts since last promotion", String(since))}
+    </dl>
+  `;
+}
+
+// Titles only — the Research tab (out of scope this batch) is where a paper
+// is attached to the hypothesis it produced.
+function buildPaperTickerPanel(state) {
+  const research = state.research;
+  const titles = research.sources.map((s) => s.title).filter(Boolean);
+  const list = titles.length
+    ? `<ul class="ticker"><li class="ticker-track">${titles.map((t) => `<span>${escapeHtml(t)}</span>`).join("")}</li></ul>`
+    : `<p class="panel-empty">no research sources yet</p>`;
+  return `
+    ${list}
+    <p class="cache-tally">cache hits: ${research.hits} · misses: ${research.misses}</p>
+  `;
+}
+
 function renderDashboard(state) {
   const nowMs = Date.now();
   viewEl().innerHTML = `
@@ -223,6 +274,14 @@ function renderDashboard(state) {
       <section>
         <h2>Last five events</h2>
         ${buildEventsPanel(state)}
+      </section>
+      <section>
+        <h2>Progress toward stopping</h2>
+        ${buildStoppingPanel(state)}
+      </section>
+      <section>
+        <h2>Paper ticker</h2>
+        ${buildPaperTickerPanel(state)}
       </section>
     </div>
   `;

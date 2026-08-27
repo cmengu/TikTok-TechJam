@@ -184,6 +184,61 @@
       color: #4a5a55;
       font-size: 0.8rem;
     }
+    .panel-note {
+      margin: 0.5rem 0 0;
+      font-size: 0.85rem;
+    }
+    .chip-derived {
+      background: rgba(196, 154, 60, 0.22);
+      color: #6a5220;
+    }
+    .derived-note {
+      margin: 0 0 0.6rem;
+    }
+    .ticker {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .ticker-track {
+      display: inline-block;
+      padding: 0.2rem 0 0.2rem 100%;
+      animation: ticker-scroll 18s linear infinite;
+    }
+    @keyframes ticker-scroll {
+      from {
+        transform: translateX(0);
+      }
+      to {
+        transform: translateX(-100%);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ticker-track {
+        animation: none;
+        padding-left: 0;
+      }
+    }
+    .ticker-track span {
+      display: inline-block;
+      margin-right: 2.5rem;
+    }
+    .ticker-track span::after {
+      content: "•";
+      margin-left: 2.5rem;
+      color: #9aa8a3;
+    }
+    .ticker-track span:last-child::after {
+      content: "";
+      margin-left: 0;
+    }
+    .cache-tally {
+      margin: 0.5rem 0 0;
+      font-size: 0.85rem;
+      color: #4a5a55;
+    }
 
     .stub {
       color: #4a5a55;
