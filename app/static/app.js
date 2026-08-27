@@ -18,7 +18,7 @@ const logEl = () => document.getElementById("log");
 function render() {
   const run = state.run;
   metaEl().textContent = run
-    ? `run ${run.id} · ${run.task || "?"} · ${run.protocol_hash || ""} · events@${eventsSince}`
+    ? `run ${run.id} · ${run.task || "?"} · ${run.protocolHash || ""} · events@${eventsSince}`
     : `run ${runId || "?"} · events@${eventsSince}`;
 
   const nodes = Object.values(state.nodes);
@@ -53,7 +53,7 @@ function render() {
     })
     .join("");
 
-  logEl().innerHTML = state.log
+  logEl().innerHTML = state.feed
     .map((ev) => {
       const bits = [`#${ev.seq}`, ev.type];
       if (ev.node != null) bits.push(`node=${ev.node}`);
