@@ -79,12 +79,37 @@
       padding: 1rem 1.25rem 2rem;
     }
 
-    /* Header strip: named slots only, intentionally unpopulated this batch. */
+    /* Header strip: run state · submission light · spend · interventions ·
+       elapsed/budget. Visible on every route, not a control panel. */
     #header-strip {
       display: flex;
+      align-items: center;
       gap: 1.5rem;
       min-height: 1.5rem;
       margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: #2f4f45;
+    }
+    .hdr-dot {
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .dot-green {
+      background: #2f8a5e;
+    }
+    .dot-amber {
+      background: #c49a3c;
+    }
+    .dot-grey {
+      background: #9aa8a3;
+    }
+    .hdr-dim {
+      color: #9aa8a3;
+      font-style: italic;
     }
 
     #meta {

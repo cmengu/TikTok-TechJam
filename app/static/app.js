@@ -424,6 +424,87 @@ function initClickToCopy() {
   });
 }
 
+// --- header strip: visible on every route. Reads only from reduced state,
+// plus wall-clock time for the elapsed figure — the reducer stays pure (no
+// Date.now()), so the view owns the one clock that needs it. Handoff_app.md,
+// "header strip". ---
+
+function fmtNum(n) {
+  return Number(n.toFixed(6)).toString();
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function dot(colorClass) {
+  return `<span class="hdr-dot ${colorClass}"></span>`;
+}
+
+function renderRunStateSlot(run) {
+  let colorClass = "dot-grey";
+  let text = "waiting";
+  if (run.status === "running") {
+    colorClass = "dot-green";
+    text = "running";
+  } else if (run.status === "ended") {
+    colorClass = "dot-grey";
+    text = run.endReason ? `ended — ${run.endReason}` : "ended";
+  }
+  document.getElementById("hdr-run-state").innerHTML =
+    `${dot(colorClass)}${escapeHtml(text)}`;
+}
+
+function renderSubmissionLightSlot(state) {
+  const valid = state.submissions.length > 0;
+  const colorClass = valid ? "dot-green" : "dot-amber";
+  const text = valid ? "valid submission" : "no valid submission yet";
+  document.getElementById("hdr-submission-light").innerHTML =
+    `${dot(colorClass)}${escapeHtml(text)}`;
+}
+
+// Spend is parked (see Handoff_app.md): no cost data exists in the event
+// stream. A dimmed em dash is a visible gap; a computed zero would look like
+// a real reading and be worse than the gap it hides.
+function renderSpendSlot() {
+  document.getElementById("hdr-spend").innerHTML =
+    `<span class="hdr-dim" title="spend is not yet instrumented — no cost data in the event stream">spend —</span>`;
+}
+
+function renderInterventionsSlot(state) {
+  document.getElementById("hdr-interventions").textContent =
+    `interventions: ${state.interventions.length}`;
+}
+
+function renderElapsedBudgetSlot(run) {
+  const el = document.getElementById("hdr-elapsed-budget");
+  if (!run.startedAt) {
+    el.textContent = "not started";
+    return;
+  }
+  const end = run.status === "ended" && run.endedAt ? new Date(run.endedAt) : new Date();
+  const elapsed = formatDuration(end - new Date(run.startedAt));
+  const budgetH = run.protocol?.run?.budget?.wall_clock_h;
+  if (budgetH == null) {
+    el.innerHTML = `${escapeHtml(elapsed)} ${chip("no budget set", "chip-null")}`;
+  } else {
+    el.textContent = `${elapsed} / ${fmtNum(budgetH)}h budget`;
+  }
+}
+
+function renderHeader(state) {
+  renderRunStateSlot(state.run);
+  renderSubmissionLightSlot(state);
+  renderSpendSlot();
+  renderInterventionsSlot(state);
+  renderElapsedBudgetSlot(state.run);
+}
+
 function renderStub(label) {
   return () => {
     viewEl().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
@@ -497,12 +578,19 @@ function updateMeta(state) {
 }
 
 function renderApp(state) {
+  renderHeader(state);
   updateMeta(state);
   renderRoute();
 }
 
 window.addEventListener("hashchange", renderRoute);
 store.subscribe(renderApp);
+
+// Elapsed-vs-budget needs to tick even when no new event arrives. This is the
+// only interval in the app and it touches the header alone — never
+// renderRoute() — so an in-progress route (e.g. a text selection on
+// Protocol) is never disturbed by the clock.
+setInterval(() => renderHeader(store.getState()), 1000);
 
 // --- live source: two EventSource connections, reconnect-with-since and the
 // newest-run poller. Unchanged from Phase 2 other than routing through the

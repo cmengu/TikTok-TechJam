@@ -463,3 +463,92 @@ so the teammate can see what was deliberately left.
 - Do not add a control that changes a run. Every such control is an
   intervention, and interventions are 20% of the grade.
 - Do not download or touch Ali-CCP (step 8).
+
+---
+
+# Handoff — App batch 2 (header strip · Dashboard) · 27 Aug
+
+Batch 1 is merged/open as PR #9. Branch `app-batch-2` off updated `main` once
+#9 lands; if it has not landed, branch off `app-batch-1` and say so in the PR.
+
+**Framework decision, now settled: stay vanilla.** No framework, no bundler, no
+npm dependency. Revisit only if batch 3 (Run tree + node dossier) proves it
+necessary. Adopting one now would mean rewriting the shell and Protocol page.
+
+Everything below reads from reduced state. The reducer does not change in this
+batch. If you believe it must, stop and say so rather than editing it.
+
+## Task 4 — header strip
+
+Populate the `<header id="header-strip">` slots left empty in batch 1. Visible
+on every route. Five slots, four of them live:
+
+| Slot | Source |
+|---|---|
+| Run state | `state.run.status` (`waiting`/`running`/`ended`) + `state.run.endReason` when ended |
+| Submission validity | `state.submissions.length > 0` → green; zero → amber "no valid submission yet" |
+| Spend | **PARKED.** Render a dimmed `—` with a `title` saying spend is not yet instrumented. Do not invent a number, do not compute one from anything |
+| Interventions | `state.interventions.length` |
+| Elapsed vs budget | `state.run.startedAt` → now, against `state.run.protocol.run.budget.wall_clock_h` |
+
+Notes:
+
+- **Elapsed needs a clock, and the reducer has none by design** (it is pure —
+  no `Date.now()`). The view owns the ticking: one `setInterval` at 1s that
+  re-renders only the header, never the route. Freeze it at `endedAt` once
+  `status === "ended"`.
+- Budget may be `null` (aliccp until the webinar). Show elapsed alone with a
+  "no budget set" chip rather than dividing by null.
+- Submission validity is a *light*, not a count. The product spec's claim is
+  "a valid submission exists from the first promotion onward"; the header
+  answers yes/no at a glance.
+- The header is not a control panel. Nothing in it is clickable except, if you
+  like, a link to the route that explains it.
+
+## Task 5 — Dashboard
+
+Replace the provisional four-panel view. Per the product spec, the Dashboard
+answers four questions in five seconds: **is it alive, what's it doing, how far
+along, is anything wrong.** Five panels:
+
+1. **Now running** — one panel per worker from `state.workers`. Status, node,
+   step/total, loss, attempt. A worker whose latest heartbeat is stale should
+   look stale (the heartbeat's `t` vs now, same clock as the header).
+2. **Score against baseline** — the incumbent's latest promoted scores per
+   metric, each **with its noise band**, against
+   `protocol.ruler.baseline.published` and the `reproduced` spread. No bare
+   numbers anywhere: any value inside its band renders grey and labelled
+   `inconclusive`. This rule is the whole point of the screen.
+3. **Last five events** — from `state.feed`, newest first. `inconclusive` must
+   appear as its own event kind, never folded into `rejected`. Collapse
+   consecutive same-type rows (the six startup `hypothesis_queued` events
+   should be one row saying so, not six).
+4. **Progress toward stopping** — `protocol.ruler.convergence` (`epsilon`,
+   `n_rounds`) plus verdicts since the last `promoted` verdict. **Label this
+   "derived in the app" explicitly**: the harness is specified to emit a
+   convergence counter on every verdict (`outputs.py`, phase 9) and does not
+   yet. When that event arrives, this panel switches to it. Do not present a
+   derived number as if the harness reported it.
+5. **Paper ticker** — titles from `state.research.sources`, ticking past. Titles
+   only here; the Research tab is where a paper is attached to the hypothesis
+   it produced. Show cache hit/miss tallies from `state.research` beside it.
+
+**Nothing on the Dashboard changes the run.** Every control that could is an
+intervention, and interventions are 20% of the grade.
+
+## Out of scope for batch 2
+
+Run tree redesign, node dossier, Research, Hypotheses, Audit, Report, and
+everything on the batch-1 parked list (cost/spend, `rung` on verdicts, Brief).
+
+## Gate
+
+- `python -m pytest` and `node --test "app/static/*.test.js"` green.
+- Real browser, not the DOM shim: `python -m harness fake --speed 20` +
+  `python -m app`, look at it.
+- Confirm: header visible on every route and updates live; elapsed ticks
+  without re-rendering the route; spend slot dimmed, not fabricated; all five
+  Dashboard panels populate; no bare score without a band; inconclusive renders
+  grey and labelled; a mid-stream refresh reproduces the same state; zero
+  console errors.
+- Pre-commit sync as always.
