@@ -103,12 +103,18 @@ function latestPromoted(state, metric) {
 //                                       means the replicate agreed with the
 //                                       screen — that's the good outcome,
 //                                       render it normally.
-// Neither function exists yet (both raise NotImplementedError); this mapping
-// is the contract to update once they're real. The "screening" branch is
-// unreachable from the Score panel today — renderScoreCell only ever sees
-// verdicts from latestPromoted(), which filters to state === "promoted" — it
-// exists for the node dossier (batch 3), where a node's full verdict history
-// includes its inconclusive/rejected screens too.
+// Both functions are implemented now (harness/measure.py: screen_verdict,
+// replicate_verdict) but neither actually tests "value inside a [lo, hi]
+// band" — they compare delta / mean(deltas) against calibrated thresholds
+// (sd_delta_screen, promote_bar). This inside/outside mapping matches what
+// harness/fake_run.py's demo script still hardcodes per verdict — a plain
+// [lo, hi] two-tuple, unchanged — which is what this app reads today; it
+// will need reconciling once verdicts come from real runs instead of the
+// fake script. The "screening" branch is unreachable from the Score panel
+// today either way — renderScoreCell only ever sees verdicts from
+// latestPromoted(), which filters to state === "promoted" — it exists for
+// the node dossier (batch 3), where a node's full verdict history includes
+// its inconclusive/rejected screens too.
 function verdictBandTest(state) {
   if (state === "inconclusive" || state === "rejected") return "screening";
   if (state === "replicating" || state === "promoted") return "replication";
@@ -162,7 +168,7 @@ function buildScorePanel(state) {
       <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="hdr-dim panel-note" title="a promoted verdict's band tests whether the replicate agreed with the screen, not whether the lead over baseline clears run-to-run noise — that calibration is harness/measure.py::calibrate, which raises NotImplementedError today">vs-baseline significance: not yet instrumented</p>
+    <p class="hdr-dim panel-note" title="a promoted verdict's band tests whether the replicate agreed with the screen, not whether the lead over baseline clears run-to-run noise. harness/measure.py::calibrate is implemented and computes a Band from screen/full run noise, but nothing in the harness compares that Band — or the incumbent's score — against protocol.ruler.baseline.published for significance">vs-baseline significance: not yet instrumented</p>
   `;
 }
 
