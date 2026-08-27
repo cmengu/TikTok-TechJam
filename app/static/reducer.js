@@ -2,7 +2,7 @@
 
 // Mirrors harness/types.py. No Python at run time (purity rule below), so
 // these are copied by hand — keep in sync if those tuples change.
-const EVENT_TYPES = [
+export const EVENT_TYPES = [
   "run_started",
   "node_created",
   "state_changed",
@@ -21,7 +21,7 @@ const EVENT_TYPES = [
   "run_ended",
 ];
 
-const STATES = [
+export const STATES = [
   "screening",
   "running",
   "replicating",
@@ -33,10 +33,10 @@ const STATES = [
   "debugging",
 ];
 
-// hypothesis_queued is named in neither the "feed includes" nor "feed
-// excludes" list in Handoff_app.md's state contract. Treated as feed-worthy
-// here — a new hypothesis is as discrete and significant as queue_reordered —
-// pending confirmation from the doc owner.
+// hypothesis_queued is feed-worthy: a new hypothesis is the only visible
+// output of the researcher agent, and Innovation is judged on what the agent
+// chose to try. (Startup bursts are a rendering concern — collapse
+// consecutive same-type rows in the view — not a reducer concern.)
 const FEED_TYPES = new Set([
   "run_started",
   "node_created",
@@ -117,6 +117,12 @@ function bump(map, key) {
 }
 
 export function reduce(state, ev) {
+  // Per-stream duplicate guard: events.jsonl and heartbeat.jsonl each have
+  // their own seq counter, so a replay or an overlapping ?since= page must be
+  // checked against the matching cursor, not a shared one.
+  if (ev.type === "heartbeat" && ev.seq <= state.lastHeartbeatSeq) return state;
+  if (ev.type !== "heartbeat" && ev.seq <= state.lastSeq) return state;
+
   if (ev.type === "heartbeat") {
     // Independent seq counter from events.jsonl (EventLog._heartbeat_seq vs
     // _event_seq) — must never touch lastSeq, and never enters log/feed.
