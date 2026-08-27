@@ -150,3 +150,90 @@ check + K-candidates) → 8 (ingest + aliccp) → 9 (outputs + audit) →
 10 (rulebook; optional falsifiable attribution). The fallback demo stays step 6.
 Break-and-fix beats spec-and-stall from here on: the log is the contract, so
 anything behind it can be rewritten cheaply.
+
+---
+
+## 27 Aug, session 2 — locks made in chat, now written down
+
+Recorded after the fact by the planner session. Everything here was decided in
+conversation with the human on 27 Aug while phases 3–4 were being built; none
+of it was in the plan page or this file until now. Items marked **B to review**
+were built by the planner session without owner B and are open to be reshaped.
+
+### Phase 4 policy (confirmed by the human)
+
+- Failure class names stay as in `types.py`: `cuda_oom, host_oom, diverged,
+  timeout, contract_violation, crash`. `stall` is added as a class. `infra` and
+  `llm_api` wait for step 7 (nothing can raise them before an LLM exists).
+- `diverged` → **abandon**, no LR÷2 retry (a NaN at the same config is
+  deterministic; a retry spends a run to learn nothing). Class name unchanged.
+- `classify` treats returncode `-9` and `137` as the same `host_oom`; the
+  `failure` event carries `137`.
+- `host_oom` recovery = halve `BATCH` (same knob as `cuda_oom`). Never add
+  `LOADER_WORKERS` to the template — it has no DataLoader, the knob would be fake.
+- Stall watchdog ships in phase 4: no new progress line for
+  `max(5 min, 3× median step gap)` → kill, retry once.
+- Runner must absolutize `TaskPaths` in `_build_env` — the child runs with
+  `cwd=workspace`, so a relative data path crashes with `FileNotFoundError`.
+  (Worked around in `run-one` only; still open in `runner.py`.)
+
+### Phase 3 locks (confirmed by the human; being applied on `fix/phase-3-review`)
+
+- `harness/candidate/rules.jsonl` is the one rules file: one JSON object per
+  line — `id, statement, check ("static"|"llm"), pattern (regex|null),
+  mode ("forbid"|"require"), severity ("fail"|"warn"), source`. Seeded with the
+  seven contract clauses from §5 above; step 7 copies it to
+  `runs/<id>/rules.jsonl` and appends root-caused rules with `source: "node NNN"`.
+  No separate CONTRACT.md. Distinct from phase-10 R1–R6.
+- `prepare()` computes real sha256 of the written parquets and raises on
+  mismatch against `synthetic.yaml` when the yaml value is not a `000…`
+  placeholder. Fill the yaml once at the phase gate. Pin `pyarrow==<installed>`,
+  write with fixed compression and no user metadata (footers embed the writer
+  version). `script_sha` hashes only `score()`'s source, not the whole file.
+- Four planted effects, not three: `f_true` (single-feature CVR AUC on clicked
+  rows ≈ 0.65, band [0.60, 0.72]), `f_marginal` (≈ 0.56, band [0.53, 0.60]),
+  `f_zero`, `f_leak` (> 0.90). Retune against 1M rows; if phase 5's scorecard
+  later misses +0.025 at the model level, adjust the planted size, never the bar.
+- scikit-learn is a dependency; `roc_auc_score` is the AUC, guarded by a
+  10-row hand-computed fixture test. `score()` joins preds on `sample_id`,
+  asserts id-set equality and no duplicates.
+- Base features = `user_id, item_id, cat_a, cat_b, cat_c`; `hist` excluded in v1.
+- `n_impressions` is a `SyntheticTask` constructor arg (default 1M); no env override.
+- Capability: the candidate must not import `harness.*`. `report.py` moves to
+  `candidate/report.py` at repo root, `template.py` does `import report`, the
+  runner copies both into the workspace and spawns `python template.py`.
+  `report.checkpoint.save` takes bytes (template does `torch.save` to a buffer).
+  Template does not self-score (`metrics={}`); `task.score()` is the only
+  numeric entry.
+- Failure injections fire at the matching moment (mid-training at
+  `total // 2`; `hang` after the first real progress line), not before data load.
+- Tests: `crash` asserts returncode == 1 exactly; `oom_host` accepts `-9` or
+  `137`; `hang` kills in `finally`; `slow` deselected by default in pyproject.
+
+### Added without a ticket (PR #6, merged) — **B to review**
+
+- `python -m harness run-one [--fail MODE] [--rows N] [--seed S] [--timeout T]
+  [--heartbeat S]` in `harness/__main__.py`: the phase-4 manual gate as a
+  command. Creates its own run (EventLog always opens with `run_started` at
+  seq 1, so an existing run id cannot be reused), uses a demo protocol with
+  placeholder hashes when `--rows != 1_000_000`, emits `node_created` itself
+  (a phase-6 event, standing in for the tree), prints the app URL. Test:
+  `tests/test_04_cli.py`. Phase 6 should replace the `node_created` emit with
+  the tree's own.
+- App (owner B's phase-2 views, changed by the planner session): a fourth
+  "Event log" panel (`log` array in the reducer, last 200, heartbeats
+  excluded); "Now running" renders the runner's `step/total/loss/attempt` as
+  well as the fake run's `status/progress`; with no `?run=` pinned the page
+  polls `/runs` every 2 s and switches to the newest run. Reason: the phase-4
+  gate says "watch the failure/recovery pair appear in the app", but the
+  reducer had no case for `failure`/`recovery` and the tree only lists
+  `node_created` nodes. B may fold the log panel into a proper view or keep it
+  as the raw feed.
+
+### Branch order for the review fixes
+
+`fix/phase-3-review` (blocks 4 and 5) → `fix/phase-2-review` (SSE partial-line
+buffer, cwd-relative `runs/` path, fake-run wipe guard, `lastSeq` split; plus
+the two one-liners: drop the nested lock in `events.py`, `STATES =
+get_args(State)`; nothing else) → merge `main` into whatever phase-4 follow-up
+exists. Merge, don't rebase, branches that have a PR.

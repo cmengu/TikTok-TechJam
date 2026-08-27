@@ -22,10 +22,21 @@ re-ask; implement against that table.**
 
 ## Current state
 
-- **Merged to main (confirm with `git log origin/main`):** phases 0–2 (+ docs
-  build-plan). **Phase 3 may still be on `phase-3-synthetic-template` —
-  merge it to main before branching `phase-4-runner`. Never stack Phase 4 on
-  the unmerged Phase 3 branch.**
+- **Merged to main as of 27 Aug 06:47 UTC (confirm with `git log origin/main`):**
+  PR #4 phase 3, PR #5 phase 4 (runner, classify, recover, heartbeat, stall
+  watchdog), PR #6 `run-one` CLI verb + app event-log panel / follow-newest-run
+  (see Plan_delta "27 Aug, session 2"). **In progress:** `fix/phase-3-review`
+  (the 27 Aug review's phase-3 findings — candidate moved out of `harness/`,
+  `f_marginal` restored, `f_true` retuned, rules `mode` field, no self-scoring).
+  **Not started:** `fix/phase-2-review`. Phase 5 is next after both land.
+- Manual gate for phase 4 (works today): `source .venv/bin/activate &&
+  uvicorn app.server:app` in one terminal, `python -m harness run-one --fail
+  oom_cuda --heartbeat 1` in another, open http://127.0.0.1:8000/ — expect
+  `failure(cuda_oom,1) → recovery(halve_batch) → failure(cuda_oom,2)`. The
+  conda `base` python cannot run it (project not installed there).
+- Known open items from the 27 Aug review not yet on any branch: runner should
+  absolutize `TaskPaths`; candidate is still spawned as
+  `-m harness.candidate.template` until `fix/phase-3-review` lands.
 - Phase 3 delivered (inherit after merge):
   - `harness/tasks/synthetic.py` — generate / prepare / score / rows;
     `n_impressions` constructor arg (default 1M); tests use 50K + placeholder
