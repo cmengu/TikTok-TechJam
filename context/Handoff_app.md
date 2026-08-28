@@ -783,6 +783,10 @@ raise it without asking.
 Scale: 44 / 27 display · 17 / 15 / 13 / 11 sans. Line-height 1.55 body,
 1.15 display. Eyebrow labels are 11px, uppercase, `letter-spacing: .09em`.
 
+The 2.75rem display size in the type scale has no element in the app. `h1`
+is the sidebar wordmark at 1.5rem. If a page title is ever added it is a
+markup change and needs its own checkpoint.
+
 **Every number rendered from the stream gets `font-variant-numeric: tabular-nums`**
 so live values stop jittering as digits change.
 
@@ -861,3 +865,27 @@ woff2 files. app.js currently renders `Δ` 3 times and `⚠` 2 times; both fall
 back to a system font, and on macOS `⚠` may render as a colour emoji.
 Deferred to a later checkpoint, where app.js is in scope. Do not fix it by
 swapping the character, adding a CDN font, or hiding the glyph.
+
+## Contrast floor
+
+Measured on the real palette, not estimated.
+
+`--ink-faint` (#9d9a96) is 2.58:1 on `--canvas` and 2.80:1 on `--surface`.
+It is a decorative mark colour only — separators and rules. It must never
+carry text.
+
+Any text that carries meaning uses `--ink-muted` (5.11:1) or darker. This
+binds especially on:
+  - the three deliberate gaps — spend, vs-baseline significance,
+    "no threshold available". A gap that is technically present but sits
+    below 3:1 has half-disappeared, which is the thing the honesty rule
+    exists to prevent.
+  - any harness state word rendered verbatim.
+
+Reference values on `--canvas`: --ink 16.16:1, --ink-muted 5.11:1,
+--pos 5.68:1. On their washes: --crit 6.52:1, --warn 4.46:1.
+On `--rail`: --rail-ink 9.45:1, --rail-ink-dim 3.97:1 (non-interactive
+group labels only), --rail-ink-hi 19.29:1.
+
+The near-invisible hairline (--hairline at 1.16:1 on canvas) is intended.
+Panel separation comes from the surface value step, not the border.
