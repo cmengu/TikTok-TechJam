@@ -560,27 +560,23 @@
        which fields define comparability (hashed) and which merely bound this
        run (not hashed) without reading the heading text. */
     .protocol-tier {
-      padding: 1rem 1.25rem;
-      margin: 0 0 1.5rem;
-      border-radius: var(--r-panel);
-    }
-    .protocol-tier.hashed {
       background: var(--surface);
       border: 1px solid var(--hairline);
+      border-radius: var(--r-panel);
+      padding: var(--s5);
+      margin: 0 0 var(--s5);
+    }
+    .protocol-tier.hashed {
       border-left: 3px solid var(--ink);
     }
     .protocol-tier.not-hashed {
-      background: var(--warn-wash);
-      border: 1px dashed var(--warn);
       border-left: 3px solid var(--warn);
     }
     .protocol-tier h2 {
-      font-size: 0.6875rem;
-      letter-spacing: 0.09em;
-      text-transform: uppercase;
+      font-size: 1.0625rem;
       font-weight: 500;
-      color: var(--ink-faint);
-      margin: 0 0 0.25rem;
+      letter-spacing: 0;
+      margin: 0 0 var(--s2);
     }
     .protocol-tier.hashed h2 {
       color: var(--ink);
@@ -589,12 +585,13 @@
       color: var(--warn);
     }
     .protocol-tier .tier-note {
-      font-size: 0.8rem;
+      font-size: 0.8125rem;
       color: var(--ink-muted);
-      margin: 0 0 0.9rem;
+      margin: 0 0 var(--s5);
+      max-width: 68ch;
     }
     .protocol-block {
-      margin: 0 0 1.1rem;
+      margin: 0 0 var(--s5);
     }
     .protocol-block:last-child {
       margin-bottom: 0;
@@ -605,25 +602,36 @@
       text-transform: uppercase;
       font-weight: 500;
       color: var(--ink-muted);
-      margin: 0 0 0.35rem;
+      margin: 0 0 var(--s2);
     }
     .kv {
       display: grid;
-      grid-template-columns: max-content 1fr;
-      gap: 0.2rem 0.9rem;
+      grid-template-columns: minmax(140px, max-content) 1fr;
+      gap: 0 var(--s5);
       margin: 0;
     }
     .kv dt {
       color: var(--ink-muted);
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
+      padding: var(--s2) 0;
+      border-top: 1px solid var(--hairline);
     }
     .kv dd {
       margin: 0;
+      padding: var(--s2) 0;
+      font-variant-numeric: tabular-nums;
+      border-top: 1px solid var(--hairline);
+    }
+    .kv > dt:first-of-type,
+    .kv > dt:first-of-type + dd {
+      border-top: 0;
     }
     table.metrics {
       border-collapse: collapse;
       font-size: 0.9rem;
       margin-top: 0.25rem;
+      width: 100%;
+      table-layout: fixed;
     }
     table.metrics th,
     table.metrics td {
@@ -631,10 +639,19 @@
       padding: 0.25rem 1rem 0.25rem 0;
     }
     table.metrics thead th {
-      color: var(--ink-muted);
-      font-weight: 600;
-      font-size: 0.8rem;
+      font-size: 0.6875rem;
       text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-weight: 500;
+      color: var(--ink-muted);
+      padding-bottom: var(--s2);
+      border-bottom: 1px solid var(--hairline);
+    }
+    table.metrics td {
+      border-bottom: 1px solid var(--hairline);
+    }
+    table.metrics tr:last-child td {
+      border-bottom: 0;
     }
     table.metrics tr.metric-highlight td {
       font-weight: 700;
@@ -665,13 +682,25 @@
     }
     .hash-value {
       font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
+      background: var(--sunken);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-ctl);
+      padding: 0.1rem 0.4rem;
       cursor: pointer;
-      border-bottom: 1px dotted var(--hairline-hi);
+      border-bottom: 1px solid var(--hairline);
+      transition: background-color 120ms ease-out, border-color 120ms ease-out;
+    }
+    .hash-value:hover {
+      border-color: var(--hairline-hi);
+    }
+    .hash-value:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 2px;
     }
     .hash-value.copied {
       background: var(--pos-wash);
-      border-bottom-style: solid;
+      border-color: var(--pos);
     }
     .range-note {
       color: var(--ink-muted);
