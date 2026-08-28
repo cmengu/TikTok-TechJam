@@ -3,6 +3,7 @@
 import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
+import { buildDossier } from "./dossier.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -574,24 +575,49 @@ function initClickToCopy() {
 // "#/run/<id>" -> "<id>" (as a string; node ids from node_created come over
 // the wire as numbers, but plain-object property access coerces either way,
 // so state.nodes[selectedId] and String(node.id) === selectedId both work
-// without parsing). "#/run" alone -> null (nothing selected yet).
+// without further parsing). initRunTreeClicks encodes the id with
+// encodeURIComponent when it builds the hash, so this must decode it back —
+// guarded, since a hand-edited or corrupted hash can carry a malformed
+// escape sequence that would otherwise throw out of the router. "#/run"
+// alone -> null (nothing selected yet).
 function selectedRunNodeId(path) {
   const m = /^run\/(.+)$/.exec(path);
-  return m ? m[1] : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (_) {
+    return m[1]; // malformed escape sequence: fall back to the raw segment
+  }
 }
 
 // Render key for the "run" route: only the things this screen actually
 // displays (which nodes exist, each one's verbatim state, the incumbent,
-// and which node is selected) should force a rebuild. Everything else that
-// flows through the store — heartbeats, measurement ticks, cache lookups —
-// must not re-render the tree. Same pattern as Protocol's key
-// (Handoff_app.md, batch 1), just keyed on Run's own slice of state plus
-// the selected id, since selection lives in the URL, not in state.
+// which node is selected, and that selected node's dossier contents) should
+// force a rebuild. Everything else that flows through the store —
+// heartbeats, measurement ticks, cache lookups — must not re-render the
+// tree. Same pattern as Protocol's key (Handoff_app.md, batch 1), just keyed
+// on Run's own slice of state plus the selected id, since selection lives in
+// the URL, not in state.
+//
+// The trap this closes: a new verdict, failure, recovery or rule trip does
+// not always change the node's `state` (e.g. an "inconclusive" screen
+// verdict on an already-"screening" node, or a rule_trip that doesn't
+// retarget the node's state). nodeSig alone would then stay identical and
+// renderRoute's early-return would leave the dossier showing stale data.
+// Counting the selected node's own dossier-relevant arrays (via buildDossier
+// — dossier.js already does the id-type-safe ev.node filtering) closes that
+// gap without keying on state.lastSeq, which changes on every heartbeat and
+// would defeat the whole point of a key.
 function runRouteKey(state, path) {
   const nodeSig = state.nodeOrder
     .map((id) => `${id}:${state.nodes[id] ? state.nodes[id].state : "?"}`)
     .join(",");
-  return `${path}|${nodeSig}|${state.incumbent}`;
+  const selectedId = selectedRunNodeId(path);
+  const dossier = selectedId != null ? buildDossier(state, selectedId) : null;
+  const selectedSig = dossier
+    ? `${dossier.verdicts.length}:${dossier.node.failures.length}:${dossier.node.recoveries.length}:${dossier.node.ruleTrips.length}`
+    : "none";
+  return `${path}|${nodeSig}|${state.incumbent}|${selectedSig}`;
 }
 
 function renderTreeNode(entry, state, selectedId) {
@@ -625,6 +651,178 @@ function renderTreeNode(entry, state, selectedId) {
   `;
 }
 
+// --- Node dossier: the panel beside the tree, for the selected node
+// (dossier.js — pure, no DOM). Handoff_app.md, "Task 8". Never re-derives
+// band logic: threshold/thresholdLabel/side come straight from
+// dossier.js's verdictReading; the "why" text for a missing threshold comes
+// straight from band.js's own verdictAnnotation, same as the Score panel. ---
+
+function fmtSeedValues(arr) {
+  if (!Array.isArray(arr) || !arr.length) return chip("none", "chip-null");
+  return arr
+    .map((n) => (typeof n === "number" && Number.isFinite(n) ? fmtNum(n) : escapeHtml(String(n))))
+    .join(", ");
+}
+
+function renderDossierHeader(node) {
+  const hypHtml =
+    node.hypothesisId != null
+      ? escapeHtml(String(node.hypothesisId))
+      : chip("no hypothesis id", "chip-null");
+  return `
+    <div class="dossier-header">
+      <span class="dossier-id">#${escapeHtml(String(node.id))}</span>
+      <span class="dossier-hyp">hyp ${hypHtml}</span>
+      <span class="dossier-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
+      <span class="dossier-state">${escapeHtml(String(node.state ?? "?"))}</span>
+    </div>
+  `;
+}
+
+function renderDossierHistory(node) {
+  const history = Array.isArray(node.stateHistory) ? node.stateHistory : [];
+  if (!history.length) return `<p class="panel-empty">no state history</p>`;
+  const rows = history
+    .map(
+      (h) =>
+        `<li>${escapeHtml(String(h.state))} <span class="dossier-dim">— seq ${escapeHtml(String(h.seq))} — ${escapeHtml(String(h.t))}</span></li>`,
+    )
+    .join("");
+  return `<ol class="dossier-history">${rows}</ol>`;
+}
+
+// side is verdictReading's own "above"/"below"/"at" — "at" passes in both
+// screen_verdict (>=) and replicate_verdict (<), per band.js's comment on
+// the boundary. Rendered verbatim, not relabelled.
+function sideLabel(side) {
+  if (side === "above") return "above";
+  if (side === "below") return "below";
+  if (side === "at") return "at (passes)";
+  return "—";
+}
+
+function renderVerdictEntry({ verdict, reading }) {
+  let thresholdHtml;
+  if (reading.threshold != null) {
+    thresholdHtml = `<div>threshold: ${fmtNum(reading.threshold)} (${escapeHtml(reading.thresholdLabel)}) — side: ${escapeHtml(sideLabel(reading.side))}</div>`;
+  } else {
+    // Rule 2/3 of the band contract (Handoff_app.md): a missing rung or a
+    // legacy/none band shape never gets a fabricated threshold — say which
+    // comparison is unavailable and why, via band.js's own verdictAnnotation,
+    // never invent one here.
+    const { reason } = verdictAnnotation(verdict);
+    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || "no band was reported for this verdict")}</div>`;
+  }
+  const deltaMeanHtml =
+    typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)
+      ? `<div>Δ mean: ${fmtNum(verdict.delta_mean)}</div>`
+      : `<div>Δ mean: ${chip("not reported", "chip-null")}</div>`;
+  const rungHtml = `<div>rung: ${verdict.rung != null ? escapeHtml(String(verdict.rung)) : chip("not reported", "chip-null")}</div>`;
+  const deltaPerSeedHtml = `<div>Δ per seed: ${fmtSeedValues(verdict.delta_per_seed)}</div>`;
+  const attributionHtml =
+    verdict.attribution != null
+      ? `<div>attribution: ${escapeHtml(String(verdict.attribution))}</div>`
+      : "";
+  // A leak trip is the most important thing a node can carry — visually
+  // prominent, not just another line item (Handoff_app.md, "Task 8").
+  const ruleTripsHtml =
+    Array.isArray(verdict.rule_trips) && verdict.rule_trips.length
+      ? `<div class="dossier-rule-trip">⚠ rule trips: ${verdict.rule_trips.map((r) => escapeHtml(String(r))).join(", ")}</div>`
+      : "";
+  return `
+    <li class="dossier-verdict">
+      <div class="dossier-verdict-head">
+        <span class="dossier-verdict-state">${escapeHtml(String(verdict.state ?? "?"))}</span>
+        <span class="dossier-dim">metric ${escapeHtml(String(verdict.metric ?? "?"))} · seq ${escapeHtml(String(verdict.seq ?? "?"))} · ${escapeHtml(String(verdict.t ?? ""))}</span>
+      </div>
+      ${rungHtml}
+      ${deltaMeanHtml}
+      ${thresholdHtml}
+      ${deltaPerSeedHtml}
+      ${attributionHtml}
+      ${ruleTripsHtml}
+    </li>
+  `;
+}
+
+function renderDossierVerdicts(verdicts) {
+  if (!verdicts.length) return `<p class="panel-empty">no verdicts yet</p>`;
+  return `<ul class="dossier-verdicts">${verdicts.map(renderVerdictEntry).join("")}</ul>`;
+}
+
+function renderReliabilityList(items, formatOne) {
+  if (!items.length) return `<p class="panel-empty">none</p>`;
+  return `<ul class="dossier-reliability">${items.map((ev) => `<li>${formatOne(ev)}</li>`).join("")}</ul>`;
+}
+
+function renderDossierReliability(node) {
+  const failures = Array.isArray(node.failures) ? node.failures : [];
+  const recoveries = Array.isArray(node.recoveries) ? node.recoveries : [];
+  const ruleTrips = Array.isArray(node.ruleTrips) ? node.ruleTrips : [];
+  const failuresHtml = renderReliabilityList(failures, (ev) =>
+    escapeHtml(`${ev.class ?? "?"} — ${ev.summary ?? ""}`),
+  );
+  const recoveriesHtml = renderReliabilityList(recoveries, (ev) =>
+    escapeHtml(`${ev.action ?? "?"} (${ev.class ?? "?"}) — ${ev.summary ?? ""}`),
+  );
+  const ruleTripsHtml = ruleTrips.length
+    ? `<ul class="dossier-reliability">${ruleTrips
+        .map(
+          (ev) =>
+            `<li class="dossier-rule-trip">⚠ ${escapeHtml(`${ev.rule ?? "?"} — ${ev.summary ?? ""}`)}</li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="panel-empty">none</p>`;
+  return `
+    <div class="dossier-section">
+      <h3>Failures</h3>
+      ${failuresHtml}
+    </div>
+    <div class="dossier-section">
+      <h3>Recoveries</h3>
+      ${recoveriesHtml}
+    </div>
+    <div class="dossier-section">
+      <h3>Rule trips</h3>
+      ${ruleTripsHtml}
+    </div>
+  `;
+}
+
+function renderDossierScores(node) {
+  const scores = node.scores && typeof node.scores === "object" ? node.scores : {};
+  const metricNames = Object.keys(scores);
+  if (!metricNames.length) return `<p class="panel-empty">no scores yet</p>`;
+  const rows = metricNames
+    .map((m) => `${kv(m, fmtSeedValues(scores[m]))}`)
+    .join("");
+  return `<dl class="kv">${rows}</dl>`;
+}
+
+function renderDossier(dossier) {
+  const { node, verdicts } = dossier;
+  return `
+    ${renderDossierHeader(node)}
+    <div class="dossier-section">
+      <h3>State history</h3>
+      ${renderDossierHistory(node)}
+    </div>
+    <div class="dossier-section">
+      <h3>Verdicts</h3>
+      ${renderDossierVerdicts(verdicts)}
+    </div>
+    ${renderDossierReliability(node)}
+    <div class="dossier-section">
+      <h3>Scores</h3>
+      ${renderDossierScores(node)}
+    </div>
+    <div class="dossier-section">
+      <h3>Seeds</h3>
+      <p>${fmtSeedValues(node.seeds)}</p>
+    </div>
+  `;
+}
+
 function renderRun(state, path) {
   const selectedId = selectedRunNodeId(path);
   const roots = buildTree(state);
@@ -640,7 +838,8 @@ function renderRun(state, path) {
   } else if (!Object.prototype.hasOwnProperty.call(state.nodes, selectedId)) {
     dossierHtml = `<p class="panel-empty">no such node</p>`;
   } else {
-    dossierHtml = `<p class="panel-empty">dossier — Task 8</p>`;
+    const dossier = buildDossier(state, selectedId);
+    dossierHtml = dossier ? renderDossier(dossier) : `<p class="panel-empty">no such node</p>`;
   }
 
   requireView().innerHTML = `

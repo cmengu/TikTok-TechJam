@@ -228,8 +228,9 @@
       color: #4a5a55;
     }
 
-    /* --- run tree: tree panel + a placeholder dossier panel beside it
-       (Task 8 builds the dossier itself). --- */
+    /* --- run tree: tree panel + the node dossier panel beside it
+       (Task 8, app/static/dossier.js — pure reader; this file only styles
+       app.js's render of it). --- */
     .run-grid {
       display: grid;
       grid-template-columns: minmax(280px, 1.4fr) minmax(220px, 1fr);
@@ -305,6 +306,119 @@
       background: rgba(47, 138, 94, 0.2);
       color: #205a3d;
       font-weight: 600;
+    }
+
+    /* --- node dossier (Task 8): header line, state history, verdicts
+       (each run through band.js's verdictReading — never re-derived here),
+       reliability arrays, scores/seeds. --- */
+    .dossier-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.9rem;
+      font-size: 0.9rem;
+    }
+    .dossier-id {
+      font-variant-numeric: tabular-nums;
+      color: #16403a;
+      font-weight: 700;
+    }
+    .dossier-hyp,
+    .dossier-kind {
+      color: #4a5a55;
+      font-size: 0.85rem;
+    }
+    .dossier-state {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #2f4f45;
+      background: rgba(47, 79, 69, 0.1);
+      border-radius: 0.3rem;
+      padding: 0.05rem 0.5rem;
+    }
+    .dossier-section {
+      margin: 0 0 1.1rem;
+    }
+    .dossier-section:last-child {
+      margin-bottom: 0;
+    }
+    .dossier-section h3 {
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #4a5a55;
+      margin: 0 0 0.4rem;
+    }
+    .dossier-history {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.85rem;
+    }
+    .dossier-history li {
+      margin: 0.1rem 0;
+    }
+    .dossier-dim {
+      color: #9aa8a3;
+      font-size: 0.8rem;
+    }
+    .dossier-verdicts {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .dossier-verdict {
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(47, 79, 69, 0.15);
+      border-radius: 0.4rem;
+      padding: 0.5rem 0.7rem;
+      font-size: 0.85rem;
+    }
+    .dossier-verdict > div {
+      margin: 0.15rem 0;
+    }
+    .dossier-verdict-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.2rem;
+    }
+    .dossier-verdict-state {
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: #16403a;
+      font-size: 0.8rem;
+    }
+    .dossier-no-threshold {
+      color: #6a5220;
+      font-style: italic;
+    }
+    /* A rule trip is the most important thing a node can carry — deliberately
+       the loudest element in the dossier, not just another line item. */
+    .dossier-rule-trip {
+      background: rgba(163, 64, 42, 0.16);
+      border: 1px solid rgba(163, 64, 42, 0.5);
+      border-left: 4px solid #a3402a;
+      border-radius: 0.3rem;
+      color: #8a3d24;
+      font-weight: 700;
+      padding: 0.3rem 0.6rem;
+      margin-top: 0.35rem;
+    }
+    .dossier-reliability {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
 
     /* --- protocol page ---
