@@ -57,22 +57,6 @@ export function readBand(raw) {
   return { shape: "none", fields: null };
 }
 
-// Same state split as app.js:118-122's verdictBandTest, duplicated (not
-// moved — band.js may not import from app.js):
-//   function verdictBandTest(state) {
-//     if (state === "inconclusive" || state === "rejected") return "screening";
-//     if (state === "replicating" || state === "promoted") return "replication";
-//     return null;
-//   }
-// app.js's own comment there notes this state-based split doesn't perfectly
-// track which harness function (screen_verdict vs replicate_verdict)
-// actually produced the state — that ambiguity is inherited here as-is.
-function verdictBandTest(state) {
-  if (state === "inconclusive" || state === "rejected") return "screening";
-  if (state === "replicating" || state === "promoted") return "replication";
-  return null;
-}
-
 export function verdictReading(verdict) {
   const raw = verdict ? verdict.band : undefined;
   const { shape, fields } = readBand(raw);
@@ -87,16 +71,22 @@ export function verdictReading(verdict) {
     valueKind = "score";
   }
 
+  // harness/measure.py:417 (`rung=rung,`) and :433 (`"rung": rung,`) put the
+  // rung that actually produced this verdict straight into the payload —
+  // read it, don't re-derive it from state. A dict band with no rung (e.g.
+  // fake_run.py's demo verdicts) means "I don't know which comparison the
+  // harness made", not a guess: threshold/thresholdLabel stay null.
+  const rung = verdict ? (verdict.rung ?? null) : null;
+
   let threshold = null;
   let thresholdLabel = null;
   if (shape === "measure") {
-    const split = verdict ? verdictBandTest(verdict.state) : null;
-    if (split === "screening" && isFiniteNumber(fields.sd_delta_screen)) {
+    if (rung === "screen" && isFiniteNumber(fields.sd_delta_screen)) {
       // harness/measure.py:194 (screen_verdict):
       //   if delta >= SCREEN_ADVANCE_SD * band.sd_delta_screen:
       threshold = SCREEN_ADVANCE_SD * fields.sd_delta_screen;
       thresholdLabel = "sd_delta_screen";
-    } else if (split === "replication" && isFiniteNumber(fields.bar)) {
+    } else if (rung === "replicate" && isFiniteNumber(fields.bar)) {
       // harness/measure.py:199-200 (promote_bar):
       //   def promote_bar(band: Band) -> float:
       //       return _bar_from(band.sd_delta_full)
@@ -110,6 +100,12 @@ export function verdictReading(verdict) {
   // threshold the harness compared against — fabricating one from them
   // would misrepresent what screen_verdict/promote_bar actually did.
 
+  // harness/measure.py:194 (screen_verdict): `if delta >= SCREEN_ADVANCE_SD * band.sd_delta_screen:`
+  //   advances on >=, so a delta exactly at the threshold passes.
+  // harness/measure.py:214 (replicate_verdict): `if statistics.mean(values) < promote_bar(band):`
+  //   fails on <, so a mean exactly at the bar also passes.
+  // Either way "at" falls on the passing side — this is recorded here, not
+  // changed: side below still reports "at" as its own value, not "above".
   let side = null;
   if (value != null && threshold != null) {
     if (value > threshold) side = "above";
@@ -117,5 +113,5 @@ export function verdictReading(verdict) {
     else side = "at";
   }
 
-  return { shape, value, valueKind, threshold, thresholdLabel, side };
+  return { shape, value, valueKind, threshold, thresholdLabel, side, rung };
 }

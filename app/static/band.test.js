@@ -75,10 +75,16 @@ describe("band — readBand shapes", () => {
   });
 });
 
+// harness/measure.py:417 (`rung=rung,`) and :433 (`"rung": rung,`) are how
+// the harness itself tags a verdict with the comparison that produced it —
+// that's why real-verdict.jsonl's verdicts carry a "rung" key: it's not
+// inferable from "state" alone (see test_replicating_uses_the_screen_threshold
+// and test_rejected_at_replicate_uses_bar below for why state guessing fails).
 describe("band — verdictReading against the real fixture", () => {
   it("test_screening_verdict_threshold_is_sd_delta_screen_derived", () => {
     const verdicts = loadRealVerdicts();
     const screening = verdicts.find((e) => e.type === "verdict" && e.state === "inconclusive");
+    assert.equal(screening.rung, "screen");
     const reading = verdictReading(screening);
     assert.equal(reading.shape, "measure");
     assert.equal(reading.valueKind, "delta");
@@ -88,11 +94,13 @@ describe("band — verdictReading against the real fixture", () => {
     assert.equal(reading.thresholdLabel, "sd_delta_screen");
     assert.ok(reading.value < reading.threshold);
     assert.equal(reading.side, "below");
+    assert.equal(reading.rung, "screen");
   });
 
   it("test_promoted_verdict_threshold_is_bar", () => {
     const verdicts = loadRealVerdicts();
     const promoted = verdicts.find((e) => e.type === "verdict" && e.state === "promoted");
+    assert.equal(promoted.rung, "replicate");
     const reading = verdictReading(promoted);
     assert.equal(reading.shape, "measure");
     assert.equal(reading.valueKind, "delta");
@@ -102,6 +110,98 @@ describe("band — verdictReading against the real fixture", () => {
     assert.equal(reading.thresholdLabel, "bar");
     assert.ok(reading.value > reading.threshold);
     assert.equal(reading.side, "above");
+    assert.equal(reading.rung, "replicate");
+  });
+
+  it("test_replicating_uses_the_screen_threshold", () => {
+    // The old state -> split mapping (deleted from band.js) treated
+    // "replicating" as a replication-rung state, but harness/measure.py:369
+    // (`state = decision  # rejected | replicating | inconclusive`) shows
+    // "replicating" is one of screen_verdict's own outcomes — it is what the
+    // *screen* rung produces when it passes, before any replicate rung has
+    // run. Rung, not state, says which comparison was made.
+    const verdict = {
+      type: "verdict",
+      state: "replicating",
+      rung: "screen",
+      metric: "cvr_auc",
+      delta_mean: 0.02,
+      band: {
+        sigma_screen: 0.02,
+        sigma_full: 0.012,
+        sigma_pair: 0.01,
+        ratio: 0.6,
+        rho: 0.8,
+        sd_delta_screen: 0.012649,
+        sd_delta_full: 0.007589,
+        bar: 0.01,
+        source: "fixed_pair",
+        n_replicated: 0,
+      },
+    };
+    const reading = verdictReading(verdict);
+    assert.equal(reading.thresholdLabel, "sd_delta_screen");
+    assert.equal(reading.threshold, SCREEN_ADVANCE_SD * verdict.band.sd_delta_screen);
+  });
+
+  it("test_rejected_at_replicate_uses_bar", () => {
+    // harness/measure.py:406 and :409 both assign state = "rejected" inside
+    // the rung === "replicate" branch (fail_sign, fail_mean) — "rejected" is
+    // not exclusively a screen-rung outcome either; the old mapping treated
+    // it as one.
+    const verdict = {
+      type: "verdict",
+      state: "rejected",
+      rung: "replicate",
+      metric: "cvr_auc",
+      delta_mean: 0.002,
+      band: {
+        sigma_screen: 0.02,
+        sigma_full: 0.012,
+        sigma_pair: 0.01,
+        ratio: 0.6,
+        rho: 0.8,
+        sd_delta_screen: 0.012649,
+        sd_delta_full: 0.007589,
+        bar: 0.01,
+        source: "fixed_pair",
+        n_replicated: 1,
+      },
+    };
+    const reading = verdictReading(verdict);
+    assert.equal(reading.thresholdLabel, "bar");
+    assert.equal(reading.threshold, verdict.band.bar);
+  });
+
+  it("test_dict_band_without_rung_has_no_threshold", () => {
+    // fake_run.py emits no "rung" field at all today. A dict-shaped band
+    // with no rung is a real, honest case: we don't know which comparison
+    // the harness made, so we must not guess from state.
+    const verdict = {
+      type: "verdict",
+      state: "promoted",
+      metric: "cvr_auc",
+      delta_mean: 0.02,
+      band: {
+        sigma_screen: 0.02,
+        sigma_full: 0.012,
+        sigma_pair: 0.01,
+        ratio: 0.6,
+        rho: 0.8,
+        sd_delta_screen: 0.012649,
+        sd_delta_full: 0.007589,
+        bar: 0.01,
+        source: "fixed_pair",
+        n_replicated: 1,
+      },
+      // no "rung" key at all
+    };
+    const reading = verdictReading(verdict);
+    assert.equal(reading.shape, "measure");
+    assert.equal(reading.threshold, null);
+    assert.equal(reading.thresholdLabel, null);
+    assert.equal(reading.rung, null);
+    assert.equal(reading.value, 0.02);
   });
 });
 
