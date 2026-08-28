@@ -148,6 +148,30 @@ async def api_get_heartbeat(
     return get_heartbeat(run_id, since=since, stream=stream, request=request)
 
 
+@app.get("/runs/{run_id}/audit/replication")
+def api_audit_replication(run_id: str):
+    from harness.audit import replication_pairs
+
+    events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
+    return replication_pairs(events)
+
+
+@app.get("/runs/{run_id}/audit/cost")
+def api_audit_cost(run_id: str):
+    from harness.audit import cost_by_slice
+
+    events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
+    return cost_by_slice(events)
+
+
+@app.get("/runs/{run_id}/audit/reliability")
+def api_audit_reliability(run_id: str):
+    from harness.audit import reliability
+
+    events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
+    return reliability(events)
+
+
 @app.get("/")
 def index():
     return FileResponse(

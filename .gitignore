@@ -25,3 +25,7 @@ data/cache/
 .DS_Store
 .idea/
 .vscode/
+
+# One-shot codemods (applied locally; delete after branch merges)
+scripts/patch_*.py
+scripts/apply_*.py

@@ -1,2 +1,9 @@
-# Published costs (AIDE, MLE-bench, …) — filled in phase 9 with sourced figures.
-[]
+# Judge-facing published figures for comparison (phase 9).
+- system: AIDE
+  metric: MLE-bench Lite medal rate
+  value: 0.386
+  source: "Jiang et al., AIDE (arXiv:2410.16384), Table 2, GPT-4o default config"
+- system: MLE-bench
+  metric: valid submission rate (baseline agents)
+  value: 0.788
+  source: "Chan et al., MLE-bench (arXiv:2410.07095), §4.2 aggregate before checkers"

@@ -86,10 +86,12 @@ def _build_script() -> list[dict]:
             "type": "verdict",
             "node": 1,
             "state": "inconclusive",
+            "rung": "screen",
             "metric": "cvr_auc",
             "scores": [0.512],
             "seeds": [1],
             "band": [0.50, 0.52],
+            "gpu_min": 2.5,
             "summary": _s("node 1 inconclusive: +0.012 cvr_auc inside band"),
         }
     )
@@ -164,10 +166,12 @@ def _build_script() -> list[dict]:
             "type": "verdict",
             "node": 2,
             "state": "rejected",
+            "rung": "screen",
             "metric": "cvr_auc",
             "scores": [0.498],
             "seeds": [1],
             "band": [0.50, 0.52],
+            "gpu_min": 1.2,
             "summary": _s("node 2 rejected: −0.002 cvr_auc below band"),
         }
     )
@@ -188,6 +192,12 @@ def _build_script() -> list[dict]:
                 "type": "research_source",
                 "id": f"src-{i}",
                 "title": title,
+                "cost": {
+                    "gpu_s": 0.0,
+                    "tokens_in": 100 if i == 1 else 50,
+                    "tokens_out": 40 if i == 1 else 20,
+                    "slice": "researching" if i == 1 else "coding",
+                },
                 "summary": _s(f"research source {i}: {title}"),
             }
         )
@@ -206,6 +216,20 @@ def _build_script() -> list[dict]:
             "hit": True,
             "confirmed": True,
             "summary": _s("cache hit confirmed for training/lr-schedule"),
+        }
+    )
+    events.append(
+        {
+            "type": "research_source",
+            "id": "src-tuning",
+            "title": "tuner sweep",
+            "cost": {
+                "gpu_s": 0.0,
+                "tokens_in": 30,
+                "tokens_out": 10,
+                "slice": "tuning",
+            },
+            "summary": _s("research source tuning: tuner sweep"),
         }
     )
     events.append(
@@ -270,10 +294,12 @@ def _build_script() -> list[dict]:
             "type": "verdict",
             "node": 3,
             "state": "replicating",
+            "rung": "screen",
             "metric": "cvr_auc",
             "scores": [0.531],
             "seeds": [1],
             "band": [0.52, 0.54],
+            "gpu_min": 3.0,
             "summary": _s("node 3 replicating: +0.031 cvr_auc cleared screen"),
         }
     )
@@ -294,10 +320,12 @@ def _build_script() -> list[dict]:
             "type": "verdict",
             "node": 3,
             "state": "promoted",
+            "rung": "replicate",
             "metric": "cvr_auc",
-            "scores": [0.529],
-            "seeds": [2],
+            "scores": [0.529, 0.530, 0.528],
+            "seeds": [1, 2, 3],
             "band": [0.52, 0.54],
+            "gpu_min": 4.5,
             "summary": _s("node 3 promoted: replicate held within band"),
         }
     )

@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from harness.events import EventLog
 from harness.measure import METRIC, SeedCache
+from harness.outputs import Convergence, write_submission
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -401,6 +402,11 @@ class Tree:
         self._lessons_path = events.run_dir / "lessons.jsonl"
         self._gpu_spent_s = 0.0
         self._ended = False
+        conv = protocol.ruler.get("convergence") or {}
+        self._convergence = Convergence(
+            float(conv.get("epsilon") or 0.001),
+            int(conv.get("n_rounds") or 3),
+        )
 
         # Point runner at the git workspace working tree when present.
         if self.workspace is not None:
@@ -668,6 +674,9 @@ class Tree:
                 if self.workspace and self.incumbent and self.incumbent.commit:
                     self.workspace.checkout(self.incumbent.commit)
                 return
+            if self._convergence.update(float(screen.metrics[METRIC])):
+                self._finish("convergence")
+                return
             self._set_state(node, "replicating")
             results: list[RunResult] = []
             retry = False
@@ -708,8 +717,23 @@ class Tree:
                 self.full_inc = SeedCache({r.seed: float(r.metrics[METRIC]) for r in results})
                 self.incumbent = node
                 self._holdout_if_needed(node, at_end=False)
+                if results[-1].result_path is not None:
+                    preds = self.runner._preds_from_result(results[-1].result_path)
+                    write_submission(
+                        node,
+                        self.task,
+                        self.protocol,
+                        "predictions",
+                        self.events.run_dir,
+                        events=self.events,
+                        preds_path=preds,
+                    )
             elif self.workspace and self.incumbent and self.incumbent.commit:
                 self.workspace.checkout(self.incumbent.commit)
+            rep_mean = statistics.mean(float(r.metrics[METRIC]) for r in results)
+            if self._convergence.update(rep_mean):
+                self._finish("convergence")
+                return
             self.measure.maybe_refresh()
             return
 
