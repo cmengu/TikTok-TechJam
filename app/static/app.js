@@ -62,7 +62,13 @@ function buildNowRunningPanel(state, nowMs) {
   const rows = entries
     .map(([worker, ev]) => {
       const heartbeatMs = ev.t ? new Date(ev.t).getTime() : NaN;
-      const stale = Number.isFinite(heartbeatMs) && nowMs - heartbeatMs > WORKER_STALE_MS;
+      // reducer.js:397 sets run.status to "ended" on run_ended; once the run
+      // has ended, heartbeat silence is expected, not a fault, so the stale
+      // test is meaningless there.
+      const stale =
+        state.run.status !== "ended" &&
+        Number.isFinite(heartbeatMs) &&
+        nowMs - heartbeatMs > WORKER_STALE_MS;
       const prog =
         ev.total != null && ev.total > 0
           ? `${ev.step ?? 0}/${ev.total}`
@@ -260,7 +266,7 @@ function buildPaperTickerPanel(state) {
   const research = state.research;
   const titles = research.sources.map((s) => s.title).filter(Boolean);
   const list = titles.length
-    ? `<ul class="ticker"><li class="ticker-track">${titles.map((t) => `<span>${escapeHtml(t)}</span>`).join("")}</li></ul>`
+    ? `<ul class="ticker">${titles.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>`
     : `<p class="panel-empty">no research sources yet</p>`;
   return `
     ${list}
@@ -734,9 +740,14 @@ function renderRoute() {
 
 function updateMeta(state) {
   const run = state.run;
+  // reducer.js:149 sets lastSeq synchronously inside reduce(), before
+  // store.applyEvent()'s notify() fires — the module-level eventsSince
+  // variable below is only reassigned *after* notify() returns (line 783),
+  // so a render triggered by that same applyEvent() would see the previous
+  // value. state.lastSeq is always current at render time.
   metaEl().textContent = run.id
-    ? `run ${run.id} · ${run.task || "?"} · ${run.protocolHash || ""} · events@${eventsSince}`
-    : `run ${runId || "?"} · events@${eventsSince}`;
+    ? `run ${run.id} · ${run.task || "?"} · ${run.protocolHash || ""} · events@${state.lastSeq}`
+    : `run ${runId || "?"} · events@${state.lastSeq}`;
 }
 
 function renderApp(state) {
