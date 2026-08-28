@@ -103,7 +103,7 @@
       display: inline-block;
       transform: scaleX(1.06);
       transform-origin: left center;
-      margin: 0 0 0.9rem;
+      margin: 0 0 var(--s6);
     }
     .app {
       display: flex;
@@ -114,41 +114,57 @@
     /* --- sidebar: the dark rail --- */
     #sidebar {
       flex: 0 0 228px;
-      padding: 1.25rem 1rem;
+      padding: var(--s5) var(--s3);
       background: var(--rail);
     }
     #sidebar ul {
       list-style: none;
       margin: 0;
       padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
     #sidebar li {
-      margin: 0.1rem 0;
+      margin: 0;
     }
     #sidebar .nav-group-label {
       display: block;
-      padding: 0.35rem 0.5rem;
+      padding: var(--s3) 0.625rem var(--s1);
       color: var(--rail-ink-dim);
-      font-size: 0.9rem;
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-weight: 500;
     }
     #sidebar .nav-sub {
-      margin-left: 0.5rem;
+      margin-left: 0.625rem;
+      padding-left: var(--s2);
       border-left: 1px solid var(--rail-raised);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
     #sidebar .nav-sub a {
-      font-size: 0.85rem;
-      padding-left: 0.75rem;
+      font-size: 0.8125rem;
+      padding-left: var(--s3);
     }
     #sidebar a {
-      display: block;
+      display: flex;
+      align-items: center;
+      min-height: 36px;
       padding: 0.5rem 0.625rem;
       border-radius: var(--r-ctl);
       color: var(--rail-ink);
       text-decoration: none;
-      font-size: 0.9rem;
+      font-size: 0.875rem;
     }
     #sidebar a:hover {
       background: var(--rail-hover);
+    }
+    #sidebar a:focus-visible {
+      outline: 2px solid var(--rail-ink-hi);
+      outline-offset: -2px;
     }
     #sidebar a.active {
       background: var(--rail-raised);
@@ -243,10 +259,16 @@
       padding: 0.2rem 0;
       white-space: pre-wrap;
     }
-    .panel-empty {
+    .panel-empty,
+    .waiting,
+    .stub {
       color: var(--ink-muted);
       font-style: italic;
       font-weight: 400;
+      margin: 0;
+    }
+    .stub {
+      padding: var(--s5) 0;
     }
     .worker-list li {
       padding: var(--s2) 0;
@@ -355,10 +377,6 @@
       content: "";
       margin-left: 0;
     }
-    .stub {
-      color: var(--ink-muted);
-    }
-
     /* --- run tree: tree panel + the node dossier panel beside it
        (Task 8, app/static/dossier.js — pure reader; this file only styles
        app.js's render of it). --- */
@@ -724,10 +742,6 @@
     .range-note {
       color: var(--ink-muted);
       font-size: 0.85rem;
-    }
-    .waiting {
-      color: var(--ink-muted);
-      font-style: italic;
     }
   </style>
 </head>

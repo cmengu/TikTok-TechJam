@@ -940,3 +940,51 @@ from the keyboard. `.tree-node:focus-visible` is styled and ready; making it
 live needs `tabindex="0"`, a `keydown` handler for Enter and Space, and
 probably `role="treeitem"`. That is an app.js change with its own checkpoint,
 and it is not in batch 4's scope.
+
+## Gap grammar — the closed list
+
+Dashed edges have exactly five sanctioned uses, audited at checkpoint 5:
+
+| Element | Selector | Means |
+|---|---|---|
+| Spend slot | `.hdr-dim` | no cost field in the stream |
+| Vs-baseline significance | `.hdr-dim.panel-note` | nothing compares Band to baseline.published |
+| No threshold available | `.dossier-no-threshold` | verdict carries no usable threshold |
+| Not-hashed protocol tier | `.protocol-tier.not-hashed` | bounds this run only, not comparability |
+| Orphan tree node | `.tree-node-orphan` | parent missing from the tree |
+
+Ordinary empty states — `.panel-empty`, `.waiting`, `.stub` — are italic and
+--ink-muted but NOT dashed. They mean "nothing here yet", which is different
+from "deliberately withheld". Diluting dashed across both would cost the
+honesty rule its only visual signal.
+
+Tinted backgrounds have exactly two sanctioned uses: `.dossier-rule-trip`
+(--crit-wash) and `tr.metric-highlight` (--warn-wash). Nothing else in the
+app may take a tint. The rule trip's fill plus stripe is what keeps it the
+loudest element on any screen.
+
+Anything added later that is genuinely provisional should be dashed and added
+to the table above. Anything else should not be.
+
+**Checkpoint 5 audit exception — the tint rule is currently violated.** Two
+more selectors carry a wash background beyond the two sanctioned ones, both
+confirmed live (not just read from CSS):
+`.worker-list li.worker-stale` (--crit-wash, index.html:276) — caught live by
+polling the Dashboard during an active fake run until a real >5s heartbeat gap
+occurred; and `.hash-value.copied` (--pos-wash, index.html:738) — confirmed by
+a real click on a Protocol hash chip. Their triggers are ordinary app state
+(app.js:80-95 staleness check; app.js:560-561 the 800ms copy flash), not dead
+code. Per checkpoint 5's instructions these were named rather than fixed — CSS
+tint removal is a design call for a later checkpoint, not this one.
+
+A third candidate, `.chip-incumbent` (--pos-wash, index.html:465), turned out
+**not** to be live — this is why the check has to run against the DOM and not
+just the stylesheet. `.chip` is declared later in the file (index.html:697)
+with `background: var(--sunken)` and equal selector specificity, so on any
+element carrying both classes the later rule wins the cascade and silently
+overrides the incumbent's intended green wash back to a neutral sunken chip.
+Confirmed on a live incumbent badge: computed `background-color` is
+`--sunken`, not `--pos-wash`. This is a separate, pre-existing bug (a dead
+rule masquerading as live, the mirror image of checkpoint 4a's dead
+`:focus-visible` rule) and is left unfixed for the same reason — not this
+checkpoint's scope.
