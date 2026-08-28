@@ -348,3 +348,95 @@ Pure tests green; slow scorecard prints `FP=0 FN=0 … leak=caught`. Calibration
 
 Phase 6 calls `Measure.verdict` after every screen/replicate batch and `holdout_report` at most twice per run. The state a node moves to is decided here and only here.
 
+
+---
+
+## Phase 6 · Run tree with hand-written hypotheses
+
+**Owner** B: `tree.py` · queue · workspace · `run` CLI  
+**Depends on** phases 4, 5  
+**Source** Build_phases `#p6` / Backend §7; Plan_delta §2–§3 (resume deferred)
+
+### Goal
+
+The loop end-to-end with no LLM: hand-written hypotheses (each a patch), a
+git-backed workspace, the rung ladder driven by Measure verdicts, greedy on the
+incumbent, fork only on stall, a lessons file. Fallback demo for judges.
+
+### In scope
+
+`harness/tree.py`, `harness/__main__.py` (`run` only — **no `resume` verb**),
+`hypotheses/hand.yaml` + `hypotheses/patches/*.diff` (five: base, +f_true,
++f_marginal, +f_zero, +f_leak), `tests/test_06_tree.py`,
+`tests/test_06_loop.py` (`slow`), app `incumbent_changed` reducer + dashboard
+render, this page.
+
+### Out of scope
+
+Any LLM call. `harness resume` (deferred; ship `Tree.rebuild` fold +
+`test_rebuild_matches_live` instead). Convergence ε/N (phase 9). MCTS / UCT /
+bandit / ensemble. Optuna / researcher (phase 7). Loosening Redline constants.
+`"orphaned"` failure class (with resume).
+
+### Interfaces
+
+```python
+TRANSITIONS = { ... }  # IllegalTransition on any other edge
+STALL_STEPS = 4; MAX_LIVE_BRANCHES = 3; DEBUG_DEPTH = 3; LESSONS_WINDOW = 30
+SCREEN_SEED = 1; FULL_SEEDS = (1, 2, 3)  # locked — not #p6's stale 0,1,2
+
+class PatchCoder:  # copies hyp.patch; ignores traceback
+class Workspace:   # runs/<id>/workspace git repo; commit_node / checkout
+class Queue:       # push (dedupe), rerank(family_stats), pop
+def family_stats(events) -> dict   # pure over verdicts
+def rebuild(events) -> RebuildState  # pure fold: nodes / queue / incumbent
+
+class Tree:
+    def calibrate_baseline(baseline) -> SeedCache
+    def step(self) -> bool
+    def run(self) -> None
+    @staticmethod
+    def rebuild(events) -> RebuildState
+# CLI: python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml
+```
+
+Ladder per node: smoke → screen (seed **1**) → if replicating: full seeds
+**1,2,3** → `measure.verdict(rung="replicate")`. Holdout via
+`holdout_report` at first promotion and run end only. Hand hyps pass
+`attribution="clear"`.
+
+### Locked decisions (phase 6)
+
+1. **Seeds 1,2,3 everywhere** — match Phase-5 `calibrate_from_runs` /
+   SeedCache / scorecard. `#p6`'s "0,1,2" is stale; do not touch `measure.py`.
+2. **`resume` deferred** — `Tree.rebuild` + `test_rebuild_matches_live` only;
+   no resume CLI.
+3. **No `"orphaned"` class** — leave for the resume follow-up.
+4. **`attribution="clear"`** for all hand hypotheses.
+5. **App** — `incumbent_changed` sets `state.incumbent`; dashboard shows it.
+
+### Tests to pass — `tests/test_06_tree.py`
+
+`test_illegal_transition_raises`, `test_queue_order_by_score`,
+`test_rerank_after_rejection`, `test_dedupe`, `test_ladder_progression`,
+`test_seed_cache_rolls_on_promotion`, `test_holdout_twice_per_run`,
+`test_greedy_revert`, `test_fork_on_stall`, `test_max_live_branches`,
+`test_debug_depth`, `test_git_per_node`, `test_lessons_appended`,
+`test_loop_emits_only_vocab`, `test_rebuild_matches_live`.
+
+### Tests to pass — `tests/test_06_loop.py` (`slow`, ~200K)
+
+`test_incumbent_is_f_true`, `test_holdout_visits_le_two`,
+`test_run_completes_unattended`.
+
+### Gate to phase 7
+
+All tests green. Manual:
+`python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml`
+with the app open — tree grows, incumbent becomes `+f_true`. Record the run id.
+
+### Hands forward
+
+Phase 7 swaps `PatchCoder` for `LLMCoder` and fills the queue from a researcher.
+`Coder` + `Queue` are the swap points. A later PR may add `resume` on top of
+`Tree.rebuild`.

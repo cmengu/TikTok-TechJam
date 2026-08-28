@@ -35,6 +35,7 @@ IMPLEMENTED = {
     "harness.tasks.synthetic",
     "harness.runner",
     "harness.measure",
+    "harness.tree",
 }
 
 PRODUCT_STATES = {

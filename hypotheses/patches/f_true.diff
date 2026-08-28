@@ -1,0 +1,11 @@
+--- a/template.py
++++ b/template.py
+@@ -137,7 +137,7 @@
+     workspace.mkdir(parents=True, exist_ok=True)
+     os.environ["WORKSPACE"] = str(workspace)
+ 
+-    features = _parse_features(os.environ.get("FEATURES"))
++    features = _parse_features("base,f_true")
+     batch_size = int(os.environ.get("BATCH", "4096"))
+     lr = float(os.environ.get("LR", "1e-3"))
+     epochs = int(os.environ.get("EPOCHS", "1"))
