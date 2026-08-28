@@ -46,7 +46,7 @@ LESSONS_WINDOW = 30
 SCREEN_SEED = 1
 FULL_SEEDS = (1, 2, 3)
 SCREEN_SEEDS_CAL = (1, 2, 3, 4, 5)
-HOLDOUT_SEEDS = (1, 2, 3)
+HOLDOUT_RUN_SEEDS = (1, 2, 3)
 SMOKE_TIMEOUT_S = 60.0
 ATTRIBUTION_HAND = "clear"
 
@@ -490,7 +490,7 @@ class Tree:
         self.full_inc = SeedCache(full_scores)
 
         holdout_scores: dict[int, float] = {}
-        for seed in HOLDOUT_SEEDS:
+        for seed in HOLDOUT_RUN_SEEDS:
             res = self.runner.run(
                 baseline, "holdout", seed=seed, timeout_s=self.full_timeout_s
             )

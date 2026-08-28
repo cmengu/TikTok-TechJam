@@ -32,7 +32,7 @@ LADDER_ETA = 0.005
 # Redline §6 Ladder: holdout visits per run
 HOLDOUT_VISITS_MAX = 2
 # Redline §6 Ladder: candidate-side holdout seeds; incumbent from cache
-HOLDOUT_SEEDS = (1, 2, 3)
+HOLDOUT_SEEDS = 3
 # Redline §6 Ladder: third inconclusive → retired
 INCONCLUSIVE_REVISITS = 2
 # Redline §6 Ladder: multiplier applied to the hypothesis on requeue
@@ -471,7 +471,7 @@ class Measure:
         timeout_s = float(
             getattr(runner, "run_cfg", {}).get("timeout_s", self._timeout_s)
         )
-        seeds = list(HOLDOUT_SEEDS)
+        seeds = list(range(1, HOLDOUT_SEEDS + 1))
         # Count the visit before launching so a crash mid-visit still consumes budget.
         self._holdout_visits += 1
         visit = self._holdout_visits

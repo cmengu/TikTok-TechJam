@@ -572,13 +572,7 @@ class Runner:
             "FEATURES": str(self.run_cfg.get("features", "base")),
         }
         resolved = self._resolve_paths(paths)
-        if rung == "holdout":
-            candidate_paths = {
-                "TRAIN": str(resolved.train),
-                "VALID": str(resolved.holdout_validation),
-            }
-        else:
-            candidate_paths = self.task.candidate_env(resolved)
+        candidate_paths = self.task.candidate_env(resolved)
         base.update(candidate_paths)
         base.update({k: str(v) for k, v in overrides.items()})
         if max_rows is not None:
@@ -593,8 +587,7 @@ class Runner:
 
         # Capability: never pass holdout or protocol paths.
         env.pop("HOLDOUT", None)
-        if rung != "holdout":
-            assert set(candidate_paths) <= {"TRAIN", "VALID"}
+        assert set(candidate_paths) <= {"TRAIN", "VALID"}
         return env
 
     @staticmethod
