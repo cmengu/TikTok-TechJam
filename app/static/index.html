@@ -196,6 +196,9 @@
       color: var(--ink-muted);
       font-style: italic;
       font-weight: 400;
+      border: 1px dashed var(--hairline-hi);
+      border-radius: var(--r-ctl);
+      padding: 0.05rem 0.4rem;
     }
 
     #meta {
@@ -377,7 +380,7 @@
       font-size: 1.0625rem;
       font-weight: 500;
       letter-spacing: 0;
-      margin: 0 0 0.6rem;
+      margin: 0 0 var(--s4);
       color: var(--ink);
     }
     .tree-root,
@@ -387,23 +390,24 @@
       padding: 0;
     }
     .tree-children {
-      margin-left: 0.9rem;
-      padding-left: 0.75rem;
-      border-left: 1px solid var(--hairline-hi);
+      margin-left: var(--s3);
+      padding-left: var(--s4);
+      border-left: 1px solid var(--hairline);
     }
     .tree-root > li,
     .tree-children > li {
-      margin: 0.2rem 0;
+      margin: var(--s1) 0;
     }
     .tree-node {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.3rem 0.5rem;
+      gap: var(--s3);
+      padding: var(--s2) var(--s3);
       border-radius: var(--r-ctl);
       cursor: pointer;
       font-size: 0.9rem;
+      min-height: 32px;
     }
     .tree-node:hover {
       background: var(--sunken);
@@ -411,6 +415,12 @@
     .tree-node-selected {
       background: var(--sunken);
       font-weight: 600;
+      outline: 1px solid var(--hairline-hi);
+      outline-offset: -1px;
+    }
+    .tree-node:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 1px;
     }
     .tree-node-orphan {
       border: 1px dashed var(--crit);
@@ -418,16 +428,17 @@
     .tree-node-id {
       font-variant-numeric: tabular-nums;
       color: var(--ink);
+      font-weight: 500;
     }
     .tree-node-hyp,
     .tree-node-kind {
       color: var(--ink-muted);
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
     }
     .tree-node-state {
-      font-size: 0.8rem;
+      font-size: 0.6875rem;
       text-transform: uppercase;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.09em;
       color: var(--ink-muted);
     }
     .chip-incumbent {
@@ -443,31 +454,34 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0.6rem;
-      margin-bottom: 0.9rem;
+      gap: var(--s3);
+      margin-bottom: var(--s4);
+      padding-bottom: var(--s3);
+      border-bottom: 1px solid var(--hairline);
       font-size: 0.9rem;
     }
     .dossier-id {
       font-variant-numeric: tabular-nums;
       color: var(--ink);
-      font-weight: 700;
+      font-weight: 600;
+      font-size: 1rem;
     }
     .dossier-hyp,
     .dossier-kind {
       color: var(--ink-muted);
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
     }
     .dossier-state {
-      font-size: 0.8rem;
+      font-size: 0.6875rem;
       text-transform: uppercase;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.09em;
       color: var(--ink-muted);
       background: var(--sunken);
-      border-radius: var(--r-ctl);
-      padding: 0.05rem 0.5rem;
+      border-radius: 999px;
+      padding: 0.1rem 0.5rem;
     }
     .dossier-section {
-      margin: 0 0 1.1rem;
+      margin: 0 0 var(--s5);
     }
     .dossier-section:last-child {
       margin-bottom: 0;
@@ -478,7 +492,7 @@
       text-transform: uppercase;
       font-weight: 500;
       color: var(--ink-muted);
-      margin: 0 0 0.4rem;
+      margin: 0 0 var(--s2);
     }
     .dossier-history {
       margin: 0;
@@ -486,7 +500,8 @@
       font-size: 0.85rem;
     }
     .dossier-history li {
-      margin: 0.1rem 0;
+      font-size: 0.8125rem;
+      padding: var(--s1) 0;
     }
     .dossier-dim {
       color: var(--ink-muted);
@@ -498,13 +513,13 @@
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.6rem;
+      gap: var(--s3);
     }
     .dossier-verdict {
       background: var(--surface);
       border: 1px solid var(--hairline);
       border-radius: var(--r-ctl);
-      padding: 0.5rem 0.7rem;
+      padding: var(--s3);
       font-size: 0.85rem;
     }
     .dossier-verdict > div {
@@ -518,11 +533,11 @@
       margin-bottom: 0.2rem;
     }
     .dossier-verdict-state {
-      font-weight: 700;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.09em;
       color: var(--ink);
-      font-size: 0.8rem;
+      font-size: 0.6875rem;
     }
     .dossier-no-threshold {
       color: var(--ink-muted);
@@ -542,17 +557,17 @@
       border-radius: var(--r-ctl);
       color: var(--crit);
       font-weight: 700;
-      padding: 0.3rem 0.6rem;
-      margin-top: 0.35rem;
+      padding: var(--s2) var(--s3);
+      margin-top: var(--s2);
     }
     .dossier-reliability {
       list-style: none;
       margin: 0;
       padding: 0;
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
+      gap: var(--s1);
     }
 
     /* --- protocol page ---
