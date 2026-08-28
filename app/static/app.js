@@ -39,6 +39,16 @@ let heartbeatSince = 0;
 const metaEl = () => document.getElementById("meta");
 const viewEl = () => document.getElementById("view");
 
+function requireView() {
+  const el = viewEl();
+  if (!el) {
+    throw new Error(
+      'Missing #view — hard-refresh (Cmd+Shift+R). Old cached index.html has no #view.',
+    );
+  }
+  return el;
+}
+
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -128,7 +138,7 @@ function buildIncumbentHtml(state) {
 }
 
 function renderDashboard(state) {
-  viewEl().innerHTML = `
+  requireView().innerHTML = `
     <div class="dashboard-grid">
       <section>
         <h2>Run tree</h2>
@@ -387,10 +397,10 @@ function buildNotHashedTier(run) {
 function renderProtocol(state) {
   const protocol = state.run.protocol;
   if (!protocol) {
-    viewEl().innerHTML = `<p class="waiting">Waiting for run_started…</p>`;
+    requireView().innerHTML = `<p class="waiting">Waiting for run_started…</p>`;
     return;
   }
-  viewEl().innerHTML = buildHashedTier(protocol) + buildNotHashedTier(protocol.run);
+  requireView().innerHTML = buildHashedTier(protocol) + buildNotHashedTier(protocol.run);
 }
 
 // navigator.clipboard is only defined in a secure context. 127.0.0.1 counts,
@@ -420,7 +430,7 @@ function selectText(el) {
 }
 
 function initClickToCopy() {
-  viewEl().addEventListener("click", (e) => {
+  requireView().addEventListener("click", (e) => {
     const target = e.target.closest(".hash-value");
     if (!target || !target.dataset.copy) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -439,7 +449,7 @@ function initClickToCopy() {
 
 function renderStub(label) {
   return () => {
-    viewEl().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
+    requireView().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
   };
 }
 

@@ -88,18 +88,28 @@ def _load_hypotheses(path: Path) -> list[Hypothesis]:
 
 
 def _cmd_run(argv: list[str]) -> None:
-    """Phase 6: calibrate → queue hand hypotheses → Tree.run (no resume verb)."""
+    """Phase 6/7: calibrate → queue hypotheses → Tree.run (no resume verb)."""
     import copy
+    import json
 
+    from harness.agents.brief import compose
+    from harness.agents.cache import ResearchCache
+    from harness.agents.coder import LLMCoder
+    from harness.agents.llm import AnthropicLLM
+    from harness.agents.researcher import propose
     from harness.measure import Measure
     from harness.runner import Runner
     from harness.tasks.synthetic import SyntheticTask
-    from harness.tree import PatchCoder, Queue, Tree, Workspace
+    from harness.tree import PatchCoder, Queue, Tree, Workspace, family_stats
     from harness.types import Cost, Node
 
     parser = argparse.ArgumentParser(prog="python -m harness run")
     parser.add_argument("protocol", nargs="?", default="protocols/synthetic.yaml")
-    parser.add_argument("--hypotheses", default="hypotheses/hand.yaml")
+    parser.add_argument(
+        "--hypotheses",
+        default=None,
+        help="hand demo yaml; omit for LLM agent path (bank.yaml + propose)",
+    )
     parser.add_argument("--max-nodes", type=int, default=20)
     parser.add_argument("--rows", type=int, default=200_000)
     parser.add_argument("--epochs", type=int, default=12)
@@ -133,7 +143,13 @@ def _cmd_run(argv: list[str]) -> None:
         flush=True,
     )
 
-    hyps = _load_hypotheses(Path(args.hypotheses))
+    hyps_path = (
+        Path(args.hypotheses)
+        if args.hypotheses is not None
+        else Path("hypotheses/bank.yaml")
+    )
+    use_agents = args.hypotheses is None
+    hyps = _load_hypotheses(hyps_path)
     task = SyntheticTask(n_impressions=args.rows)
     paths = task.prepare(protocol, run_dir / "data")
     events = EventLog(run_dir, run_id, protocol)
@@ -144,11 +160,18 @@ def _cmd_run(argv: list[str]) -> None:
             "device": "cpu",
             "batch": 2048,
             "lr": "1e-3",
+            "emb": 16,
+            "dropout": 0.0,
             "epochs": args.epochs,
             "features": "base",
             "poll_s": 0.5,
             "timeout_s": 600.0,
             "stall_threshold_s": 300.0,
+            "brief_path": "context/Backend_plan.md",
+            "models": {
+                "researcher": "claude-sonnet-5",
+                "coder": "claude-haiku-4-5-20251001",
+            },
         }
         runner = Runner(events, task, run_cfg, heartbeat_s=30.0)
         measure = Measure(events, protocol, band=None)
@@ -157,19 +180,71 @@ def _cmd_run(argv: list[str]) -> None:
         hyp_index = {h.id: h for h in hyps}
         for h in hyps:
             queue.push(h)
-        tree = Tree(
-            events,
-            protocol,
-            task,
-            runner,
-            measure,
-            PatchCoder(),
-            queue,
-            max_nodes=args.max_nodes,
-            budget=args.budget,
-            workspace=workspace,
-            hyp_index=hyp_index,
-        )
+
+        if use_agents:
+            brief_path = Path(run_cfg["brief_path"])
+            brief = compose(brief_path, protocol)
+            llm = AnthropicLLM(models=run_cfg["models"])
+            cache = ResearchCache(protocol.protocol_hash, events=events)
+            coder = LLMCoder(llm, workspace, events=events)
+            tree_holder: dict[str, Tree] = {}
+
+            def _lessons() -> list[dict]:
+                p = run_dir / "lessons.jsonl"
+                if not p.is_file():
+                    return []
+                rows: list[dict] = []
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        rows.append(json.loads(line))
+                return rows[-30:]
+
+            def refill_queue() -> None:
+                tree = tree_holder["tree"]
+                inc = tree.incumbent
+                inc_summary = (
+                    f"node {inc.id} state={inc.state} commit={inc.commit}"
+                    if inc is not None
+                    else "no incumbent yet"
+                )
+                cache.node_id = inc.id if inc is not None else None
+                stats = family_stats(tree._read_log())  # noqa: SLF001
+                hyp = propose(llm, brief, inc_summary, stats, _lessons(), cache)
+                if hyp is None:
+                    return
+                hyp_index[hyp.id] = hyp
+                queue.push(hyp)
+                queue.rerank(family_stats(tree._read_log()))  # noqa: SLF001
+
+            tree = Tree(
+                events,
+                protocol,
+                task,
+                runner,
+                measure,
+                coder,
+                queue,
+                max_nodes=args.max_nodes,
+                budget=args.budget,
+                workspace=workspace,
+                hyp_index=hyp_index,
+                refill_queue=refill_queue,
+            )
+            tree_holder["tree"] = tree
+        else:
+            tree = Tree(
+                events,
+                protocol,
+                task,
+                runner,
+                measure,
+                PatchCoder(),
+                queue,
+                max_nodes=args.max_nodes,
+                budget=args.budget,
+                workspace=workspace,
+                hyp_index=hyp_index,
+            )
         baseline = Node(
             id=events.new_node(None),
             parent=None,
