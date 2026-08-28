@@ -718,3 +718,136 @@ Research, Hypotheses, Audit, Report, the Brief screen, and cost/spend.
 - Smoke test is a standing step, not a one-off. Batch 2 shipped three bugs
   that 27 passing tests never touched; all three surfaced within ten
   minutes of running it.
+
+---
+
+# Handoff — App batch 4 (visual design) · 28 Aug
+
+Branch `app-style-1`, cut from `app-batch-3` at `62d9744`. Visual design only.
+**No new features. No behaviour changes. No markup changes except where a task
+below says so explicitly.**
+
+## Reference
+
+The target is Harvey's product UI, established from screenshots by sampling
+pixels — not from memory. Five moves carry the look:
+
+1. **One dark rail, everything else pale.** Full-height sidebar at `#0f0e0c`.
+   It is the only large dark area and does most of the work.
+2. **Two surfaces, not five.** Warm off-white canvas `#f7f5f4`, pure white
+   panels `#ffffff`. That value step *is* the panel edge.
+3. **Near-invisible borders, and no shadows anywhere.** A panel edge in the
+   reference steps `#f7f5f4 → #f5f3f1 → #ffffff` over three pixels.
+4. **Desaturated, dark colour.** Positive green samples `#396b53`. Nothing is
+   bright. Status chips keep a neutral fill with coloured ink and a coloured dot.
+5. **Serif appears twice only** — wordmark and page title. Everything else sans.
+
+## Tokens — the complete set
+
+Light mode only. `color-scheme: light` stays. There is deliberately no
+`prefers-color-scheme` block and no `data-theme` stamping in this app.
+
+```
+--canvas:      #f7f5f4      --ink:         #1a1917
+--surface:     #ffffff      --ink-muted:   #6a6866
+--sunken:      #f1efec      --ink-faint:   #9d9a96
+--hairline:    #e8e5e1
+--hairline-hi: #d9d5d0
+--rail:        #0f0e0c      --rail-ink:    #b8b5b1
+--rail-raised: #33312d      --rail-ink-hi: #ffffff
+
+--pos:  #396b53   --pos-wash:  #eef3f0
+--warn: #8a6a2c   --warn-wash: #f6f1e6
+--crit: #96323c   --crit-wash: #f9edee
+--info: #3e4e7d   --info-wash: #eef0f6
+
+--r-panel: 10px   --r-ctl: 8px
+--s1: 4px  --s2: 8px  --s3: 12px  --s4: 16px
+--s5: 24px --s6: 32px --s7: 48px
+```
+
+## Type
+
+Self-hosted from `app/static/fonts/`, declared with `@font-face` and
+`font-display: swap`. No CDN link, no network dependency at demo time.
+
+- **Instrument Serif** — display only: app wordmark and page title. Nothing else.
+- **Instrument Sans** — everything else.
+
+Display roles carry `transform: scaleX(1.06)` with `display: inline-block` and
+`transform-origin: left center`. This is deliberate: Instrument Serif reads too
+narrow at these sizes. 1.06 is the agreed value; it is a distortion, so do not
+raise it without asking.
+
+Scale: 44 / 27 display · 17 / 15 / 13 / 11 sans. Line-height 1.55 body,
+1.15 display. Eyebrow labels are 11px, uppercase, `letter-spacing: .09em`.
+
+**Every number rendered from the stream gets `font-variant-numeric: tabular-nums`**
+so live values stop jittering as digits change.
+
+## Space, edges, motion
+
+| Rule | Value |
+|---|---|
+| Space scale | 4·8·12·16·24·32·48. Nothing off-scale. |
+| Panel padding | 24 |
+| Grid gap | 16 |
+| Content max width | 1400px, gutter 32 |
+| Rail width | 228px, nav row height 36 |
+| Radius | 10 panel / 8 control / 999 pill |
+| Border | 1px `--hairline`, one weight everywhere |
+| Shadows | **None. Anywhere.** |
+| Motion | 120ms ease-out on nav, hover, focus. 160ms fade on route change. |
+| Motion — never | No transition on any value that comes off the stream. |
+| Reduced motion | `@media (prefers-reduced-motion: reduce)` collapses all to 0ms. |
+
+The three-stop body gradient is removed. The ground is one flat `--canvas`.
+
+## Honesty rules, restated as design rules
+
+These are not stylistic. They existed before this batch and they outrank it.
+
+1. **Every state word on screen is the harness's own, verbatim.** Styling never
+   renames, recolours into a different meaning, or hides one.
+2. **A rule trip stays the loudest thing on the screen.** It is the only element
+   in the system permitted both a tinted fill (`--crit-wash`) and a 3px left
+   stripe (`--crit`). Loudness is carried by form as well as hue, so it survives
+   greyscale and a bad projector.
+3. **Every other state is a neutral panel with coloured ink and a coloured dot.**
+   Fill stays `--surface`.
+4. **A visible gap is a feature.** Spend, vs-baseline significance and
+   "no threshold available" get a shared grammar: dashed border, italic,
+   `--ink-faint`. They must read as *intentionally empty*. They may look better.
+   They may not disappear, and they may never be filled with a plausible number.
+
+## Checkpoint plan
+
+- **0 — ground.** Branch, fonts, this brief. No CSS.
+- **1 — tokens and primitives.** Add the `:root` block and `@font-face`. Replace
+  all 34 hardcoded colour literals with `var(--…)`. Apply type scale, space
+  scale, flat canvas, dark rail. Restyle the header strip. No markup changes.
+- **2 — Dashboard**, five panels.
+- **3 — Protocol**, two tiers.
+- **4 — Run**, tree plus dossier.
+- **5 — sidebar, empty states, and the gap grammar audited across all screens.**
+
+## Out of scope for batch 4
+
+- Brief, Research, Hypotheses, Audit's three children, Report — still stubs, not
+  worth styling.
+- `reducer.js`, `band.js`, `tree.js`, `dossier.js` — pure and tested. Do not touch.
+- Any harness file.
+- Framework, build step, CSS preprocessor, second stylesheet. All CSS stays in
+  the single `<style>` block in `index.html`.
+
+## Gate
+
+Every checkpoint smoke-tests in a real browser before commit, hard-reloaded with
+Cmd+Shift+R. Two terminals, each with its own `source .venv/bin/activate`:
+
+```
+python -m harness fake --speed 2
+python -m app
+```
+
+Plus `node --test "app/static/*.test.js"` and `python -m pytest` green.
