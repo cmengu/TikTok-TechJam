@@ -4,21 +4,104 @@
   <meta charset="utf-8" />
   <title>beating-nise</title>
   <style>
+    @font-face {
+      font-family: "Instrument Sans";
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url("/static/fonts/instrument-sans.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Instrument Sans";
+      font-style: italic;
+      font-weight: 400;
+      font-display: swap;
+      src: url("/static/fonts/instrument-sans-italic.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Instrument Serif";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("/static/fonts/instrument-serif.woff2") format("woff2");
+    }
+
     :root {
       color-scheme: light;
-      font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
-      line-height: 1.4;
+      font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+
+      --canvas:      #f7f5f4;
+      --ink:         #1a1917;
+      --surface:     #ffffff;
+      --ink-muted:   #6a6866;
+      --sunken:      #f1efec;
+      --ink-faint:   #9d9a96;
+      --hairline:    #e8e5e1;
+      --hairline-hi: #d9d5d0;
+      --rail:        #0f0e0c;
+      --rail-ink:    #b8b5b1;
+      --rail-raised: #33312d;
+      --rail-ink-hi: #ffffff;
+      --rail-hover:  #1e1d1a;
+      --rail-ink-dim: #73716e;
+
+      --pos:  #396b53;
+      --pos-wash:  #eef3f0;
+      --warn: #8a6a2c;
+      --warn-wash: #f6f1e6;
+      --crit: #96323c;
+      --crit-wash: #f9edee;
+      --info: #3e4e7d;
+      --info-wash: #eef0f6;
+
+      --r-panel: 10px;
+      --r-ctl: 8px;
+      --s1: 4px;
+      --s2: 8px;
+      --s3: 12px;
+      --s4: 16px;
+      --s5: 24px;
+      --s6: 32px;
+      --s7: 48px;
+    }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+    table,
+    .score-table td,
+    .kv dd,
+    .dashboard-grid li {
+      font-variant-numeric: tabular-nums;
+    }
+    #sidebar a,
+    .tree-node {
+      transition: background-color 120ms ease-out, color 120ms ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0ms !important;
+        animation-duration: 0ms !important;
+      }
     }
     body {
       margin: 0;
-      background: linear-gradient(160deg, #f3f6f4 0%, #e7eef2 55%, #f7f3ea 100%);
-      color: #1a2421;
+      background: var(--canvas);
+      color: var(--ink);
       min-height: 100vh;
     }
     h1 {
-      font-family: "IBM Plex Serif", "Source Serif 4", Georgia, serif;
-      font-weight: 600;
-      font-size: 1.25rem;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: 2.75rem;
+      line-height: 1.15;
+      display: inline-block;
+      transform: scaleX(1.06);
+      transform-origin: left center;
       margin: 0 0 0.9rem;
     }
     .app {
@@ -27,12 +110,11 @@
       min-height: 100vh;
     }
 
-    /* --- sidebar --- */
+    /* --- sidebar: the dark rail --- */
     #sidebar {
-      flex: 0 0 200px;
+      flex: 0 0 228px;
       padding: 1.25rem 1rem;
-      background: rgba(255, 255, 255, 0.35);
-      border-right: 1px solid rgba(47, 79, 69, 0.15);
+      background: var(--rail);
     }
     #sidebar ul {
       list-style: none;
@@ -45,12 +127,12 @@
     #sidebar .nav-group-label {
       display: block;
       padding: 0.35rem 0.5rem;
-      color: #2f4f45;
+      color: var(--rail-ink-dim);
       font-size: 0.9rem;
     }
     #sidebar .nav-sub {
       margin-left: 0.5rem;
-      border-left: 1px solid rgba(47, 79, 69, 0.2);
+      border-left: 1px solid var(--rail-raised);
     }
     #sidebar .nav-sub a {
       font-size: 0.85rem;
@@ -58,17 +140,18 @@
     }
     #sidebar a {
       display: block;
-      padding: 0.35rem 0.5rem;
-      border-radius: 0.35rem;
-      color: #2f4f45;
+      padding: 0.5rem 0.625rem;
+      border-radius: var(--r-ctl);
+      color: var(--rail-ink);
       text-decoration: none;
       font-size: 0.9rem;
     }
     #sidebar a:hover {
-      background: rgba(47, 79, 69, 0.08);
+      background: var(--rail-hover);
     }
     #sidebar a.active {
-      background: rgba(47, 79, 69, 0.15);
+      background: var(--rail-raised);
+      color: var(--rail-ink-hi);
       font-weight: 600;
     }
 
@@ -76,7 +159,8 @@
     .content {
       flex: 1 1 auto;
       min-width: 0;
-      padding: 1rem 1.25rem 2rem;
+      max-width: 1400px;
+      padding: var(--s5) var(--s6) var(--s7);
     }
 
     /* Header strip: run state · submission light · spend · interventions ·
@@ -88,7 +172,7 @@
       min-height: 1.5rem;
       margin-bottom: 0.75rem;
       font-size: 0.85rem;
-      color: #2f4f45;
+      color: var(--ink-muted);
     }
     .hdr-dot {
       display: inline-block;
@@ -99,21 +183,22 @@
       vertical-align: middle;
     }
     .dot-green {
-      background: #2f8a5e;
+      background: var(--pos);
     }
     .dot-amber {
-      background: #c49a3c;
+      background: var(--warn);
     }
     .dot-grey {
-      background: #9aa8a3;
+      background: var(--ink-faint);
     }
     .hdr-dim {
-      color: #9aa8a3;
+      color: var(--ink-faint);
       font-style: italic;
+      font-weight: 400;
     }
 
     #meta {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.9rem;
       margin-bottom: 1.25rem;
     }
@@ -122,15 +207,15 @@
        along / is anything wrong" at a glance --- */
     .dashboard-grid {
       display: grid;
-      gap: 1.25rem;
+      gap: var(--s4);
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     }
     .dashboard-grid section h2 {
-      font-size: 0.95rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 1.0625rem;
+      font-weight: 500;
+      letter-spacing: 0;
       margin: 0 0 0.5rem;
-      color: #2f4f45;
+      color: var(--ink);
     }
     .dashboard-grid ul {
       list-style: none;
@@ -139,16 +224,16 @@
     }
     .dashboard-grid li {
       padding: 0.2rem 0;
-      font-variant-numeric: tabular-nums;
       white-space: pre-wrap;
     }
     .panel-empty {
-      color: #4a5a55;
+      color: var(--ink-faint);
       font-style: italic;
+      font-weight: 400;
     }
     .worker-list li.worker-stale {
-      background: rgba(196, 90, 60, 0.1);
-      border-radius: 0.3rem;
+      background: var(--crit-wash);
+      border-radius: var(--r-ctl);
       padding-left: 0.35rem;
     }
     .score-table {
@@ -162,26 +247,26 @@
       padding: 0.25rem 1rem 0.25rem 0;
     }
     .score-table thead th {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-weight: 600;
       font-size: 0.8rem;
       text-transform: uppercase;
     }
     .score-value.score-above {
-      color: #2f8a5e;
+      color: var(--pos);
       font-weight: 700;
     }
     .score-value.score-below {
-      color: #a3402a;
+      color: var(--crit);
       font-weight: 700;
     }
     .score-inconclusive {
-      color: #7a8a84;
+      color: var(--ink-faint);
       font-style: italic;
       font-weight: 600;
     }
     .band-note {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.8rem;
     }
     .panel-note {
@@ -189,8 +274,8 @@
       font-size: 0.85rem;
     }
     .chip-derived {
-      background: rgba(196, 154, 60, 0.22);
-      color: #6a5220;
+      background: var(--warn-wash);
+      color: var(--warn);
     }
     .derived-note {
       margin: 0 0 0.6rem;
@@ -212,7 +297,7 @@
     .ticker li::after {
       content: "•";
       margin-left: 2.5rem;
-      color: #9aa8a3;
+      color: var(--ink-faint);
     }
     .ticker li:last-child::after {
       content: "";
@@ -221,11 +306,11 @@
     .cache-tally {
       margin: 0.5rem 0 0;
       font-size: 0.85rem;
-      color: #4a5a55;
+      color: var(--ink-muted);
     }
 
     .stub {
-      color: #4a5a55;
+      color: var(--ink-muted);
     }
 
     /* --- run tree: tree panel + the node dossier panel beside it
@@ -234,23 +319,23 @@
     .run-grid {
       display: grid;
       grid-template-columns: minmax(280px, 1.4fr) minmax(220px, 1fr);
-      gap: 1.25rem;
+      gap: var(--s4);
       align-items: start;
     }
     .run-tree-panel,
     .run-dossier-panel {
-      background: rgba(255, 255, 255, 0.4);
-      border: 1px solid rgba(47, 79, 69, 0.15);
-      border-radius: 0.5rem;
-      padding: 1rem 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-panel);
+      padding: var(--s5);
     }
     .run-tree-panel h2,
     .run-dossier-panel h2 {
-      font-size: 0.95rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 1.0625rem;
+      font-weight: 500;
+      letter-spacing: 0;
       margin: 0 0 0.6rem;
-      color: #2f4f45;
+      color: var(--ink);
     }
     .tree-root,
     .tree-children {
@@ -261,7 +346,7 @@
     .tree-children {
       margin-left: 0.9rem;
       padding-left: 0.75rem;
-      border-left: 1px solid rgba(47, 79, 69, 0.2);
+      border-left: 1px solid var(--hairline-hi);
     }
     .tree-root > li,
     .tree-children > li {
@@ -273,38 +358,38 @@
       align-items: center;
       gap: 0.5rem;
       padding: 0.3rem 0.5rem;
-      border-radius: 0.35rem;
+      border-radius: var(--r-ctl);
       cursor: pointer;
       font-size: 0.9rem;
     }
     .tree-node:hover {
-      background: rgba(47, 79, 69, 0.08);
+      background: var(--sunken);
     }
     .tree-node-selected {
-      background: rgba(47, 79, 69, 0.15);
+      background: var(--sunken);
       font-weight: 600;
     }
     .tree-node-orphan {
-      border: 1px dashed rgba(196, 90, 60, 0.45);
+      border: 1px dashed var(--crit);
     }
     .tree-node-id {
       font-variant-numeric: tabular-nums;
-      color: #16403a;
+      color: var(--ink);
     }
     .tree-node-hyp,
     .tree-node-kind {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.85rem;
     }
     .tree-node-state {
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.03em;
-      color: #2f4f45;
+      color: var(--ink-faint);
     }
     .chip-incumbent {
-      background: rgba(47, 138, 94, 0.2);
-      color: #205a3d;
+      background: var(--pos-wash);
+      color: var(--pos);
       font-weight: 600;
     }
 
@@ -321,21 +406,21 @@
     }
     .dossier-id {
       font-variant-numeric: tabular-nums;
-      color: #16403a;
+      color: var(--ink);
       font-weight: 700;
     }
     .dossier-hyp,
     .dossier-kind {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.85rem;
     }
     .dossier-state {
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.03em;
-      color: #2f4f45;
-      background: rgba(47, 79, 69, 0.1);
-      border-radius: 0.3rem;
+      color: var(--ink-muted);
+      background: var(--sunken);
+      border-radius: var(--r-ctl);
       padding: 0.05rem 0.5rem;
     }
     .dossier-section {
@@ -345,10 +430,11 @@
       margin-bottom: 0;
     }
     .dossier-section h3 {
-      font-size: 0.8rem;
-      letter-spacing: 0.03em;
+      font-size: 0.6875rem;
+      letter-spacing: 0.09em;
       text-transform: uppercase;
-      color: #4a5a55;
+      font-weight: 500;
+      color: var(--ink-faint);
       margin: 0 0 0.4rem;
     }
     .dossier-history {
@@ -360,7 +446,7 @@
       margin: 0.1rem 0;
     }
     .dossier-dim {
-      color: #9aa8a3;
+      color: var(--ink-faint);
       font-size: 0.8rem;
     }
     .dossier-verdicts {
@@ -372,9 +458,9 @@
       gap: 0.6rem;
     }
     .dossier-verdict {
-      background: rgba(255, 255, 255, 0.5);
-      border: 1px solid rgba(47, 79, 69, 0.15);
-      border-radius: 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-ctl);
       padding: 0.5rem 0.7rem;
       font-size: 0.85rem;
     }
@@ -392,21 +478,26 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.02em;
-      color: #16403a;
+      color: var(--ink);
       font-size: 0.8rem;
     }
     .dossier-no-threshold {
-      color: #6a5220;
+      color: var(--ink-faint);
       font-style: italic;
+      font-weight: 400;
+      border: 1px dashed var(--hairline-hi);
+      border-radius: var(--r-ctl);
+      padding: 0.25rem 0.5rem;
+      display: inline-block;
     }
     /* A rule trip is the most important thing a node can carry — deliberately
        the loudest element in the dossier, not just another line item. */
     .dossier-rule-trip {
-      background: rgba(163, 64, 42, 0.16);
-      border: 1px solid rgba(163, 64, 42, 0.5);
-      border-left: 4px solid #a3402a;
-      border-radius: 0.3rem;
-      color: #8a3d24;
+      background: var(--crit-wash);
+      border: 1px solid var(--crit);
+      border-left: 3px solid var(--crit);
+      border-radius: var(--r-ctl);
+      color: var(--crit);
       font-weight: 700;
       padding: 0.3rem 0.6rem;
       margin-top: 0.35rem;
@@ -428,33 +519,35 @@
     .protocol-tier {
       padding: 1rem 1.25rem;
       margin: 0 0 1.5rem;
-      border-radius: 0.5rem;
+      border-radius: var(--r-panel);
     }
     .protocol-tier.hashed {
-      background: rgba(22, 64, 58, 0.06);
-      border: 1px solid rgba(22, 64, 58, 0.25);
-      border-left: 5px solid #16403a;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-left: 3px solid var(--ink);
     }
     .protocol-tier.not-hashed {
-      background: rgba(106, 82, 32, 0.06);
-      border: 1px dashed rgba(106, 82, 32, 0.35);
-      border-left: 5px solid #6a5220;
+      background: var(--warn-wash);
+      border: 1px dashed var(--warn);
+      border-left: 3px solid var(--warn);
     }
     .protocol-tier h2 {
-      font-size: 0.85rem;
-      letter-spacing: 0.06em;
+      font-size: 0.6875rem;
+      letter-spacing: 0.09em;
       text-transform: uppercase;
+      font-weight: 500;
+      color: var(--ink-faint);
       margin: 0 0 0.25rem;
     }
     .protocol-tier.hashed h2 {
-      color: #16403a;
+      color: var(--ink);
     }
     .protocol-tier.not-hashed h2 {
-      color: #6a5220;
+      color: var(--warn);
     }
     .protocol-tier .tier-note {
       font-size: 0.8rem;
-      color: #4a5a55;
+      color: var(--ink-muted);
       margin: 0 0 0.9rem;
     }
     .protocol-block {
@@ -464,10 +557,11 @@
       margin-bottom: 0;
     }
     .protocol-block h3 {
-      font-size: 0.8rem;
-      letter-spacing: 0.03em;
+      font-size: 0.6875rem;
+      letter-spacing: 0.09em;
       text-transform: uppercase;
-      color: #4a5a55;
+      font-weight: 500;
+      color: var(--ink-faint);
       margin: 0 0 0.35rem;
     }
     .kv {
@@ -477,12 +571,11 @@
       margin: 0;
     }
     .kv dt {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.85rem;
     }
     .kv dd {
       margin: 0;
-      font-variant-numeric: tabular-nums;
     }
     table.metrics {
       border-collapse: collapse;
@@ -495,43 +588,43 @@
       padding: 0.25rem 1rem 0.25rem 0;
     }
     table.metrics thead th {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-weight: 600;
       font-size: 0.8rem;
       text-transform: uppercase;
     }
     table.metrics tr.metric-highlight td {
       font-weight: 700;
-      background: rgba(196, 154, 60, 0.22);
+      background: var(--warn-wash);
     }
     .chip {
       display: inline-block;
       padding: 0.05rem 0.55rem;
       border-radius: 999px;
       font-size: 0.8rem;
-      background: rgba(74, 90, 85, 0.12);
-      color: #4a5a55;
+      background: var(--sunken);
+      color: var(--ink-muted);
     }
     .chip-null {
-      background: rgba(196, 90, 60, 0.16);
-      color: #8a3d24;
+      background: var(--crit-wash);
+      color: var(--crit);
     }
     .hash-value {
-      font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+      font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
       font-size: 0.85rem;
       cursor: pointer;
-      border-bottom: 1px dotted #4a5a55;
+      border-bottom: 1px dotted var(--hairline-hi);
     }
     .hash-value.copied {
-      background: rgba(60, 140, 100, 0.25);
+      background: var(--pos-wash);
       border-bottom-style: solid;
     }
     .range-note {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-size: 0.85rem;
     }
     .waiting {
-      color: #4a5a55;
+      color: var(--ink-muted);
       font-style: italic;
     }
   </style>

@@ -755,6 +755,7 @@ Light mode only. `color-scheme: light` stays. There is deliberately no
 --hairline-hi: #d9d5d0
 --rail:        #0f0e0c      --rail-ink:    #b8b5b1
 --rail-raised: #33312d      --rail-ink-hi: #ffffff
+--rail-hover:  #1e1d1a      --rail-ink-dim: #73716e
 
 --pos:  #396b53   --pos-wash:  #eef3f0
 --warn: #8a6a2c   --warn-wash: #f6f1e6
@@ -851,3 +852,12 @@ python -m app
 ```
 
 Plus `node --test "app/static/*.test.js"` and `python -m pytest` green.
+
+## Known: webfont subset gaps
+
+The latin subsets of Instrument Sans and Instrument Serif do not contain
+`Δ` (U+0394) or `⚠` (U+26A0). Verified by reading the cmap of all three
+woff2 files. app.js currently renders `Δ` 3 times and `⚠` 2 times; both fall
+back to a system font, and on macOS `⚠` may render as a colour emoji.
+Deferred to a later checkpoint, where app.js is in scope. Do not fix it by
+swapping the character, adding a CDN font, or hiding the glyph.
