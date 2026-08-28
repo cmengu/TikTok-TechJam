@@ -46,7 +46,7 @@ LESSONS_WINDOW = 30
 SCREEN_SEED = 1
 FULL_SEEDS = (1, 2, 3)
 SCREEN_SEEDS_CAL = (1, 2, 3, 4, 5)
-HOLDOUT_SEEDS = (0, 1, 2)
+HOLDOUT_SEEDS = (1, 2, 3)
 SMOKE_TIMEOUT_S = 60.0
 ATTRIBUTION_HAND = "clear"
 
@@ -114,7 +114,9 @@ class Workspace:
     def head(self) -> str:
         return self._git("rev-parse", "HEAD").stdout.strip()
 
-    def commit_node(self, node_id: int, diff_path: Path) -> str:
+    def commit_node(
+        self, node_id: int, diff_path: Path, debug_k: int | None = None
+    ) -> str:
         # Patches in yaml are repo-relative; git apply runs with cwd=workspace.
         diff_path = Path(diff_path).expanduser()
         if not diff_path.is_absolute():
@@ -129,12 +131,14 @@ class Workspace:
                 raise RuntimeError(
                     f"git apply failed for node {node_id}: {applied.stderr}"
                 )
-        self._git("add", "-A")
+        self._git("add", "template.py", "report.py")
         msg = f"node {node_id:03d}"
-        # Allow empty commit when patch is a no-op (base hyp).
+        if debug_k is not None:
+            msg = f"node {node_id:03d} debug {debug_k}"
         self._git("commit", "--allow-empty", "-m", msg)
         sha = self.head()
-        patch_out = self.patches_dir / f"node-{node_id:03d}.diff"
+        suffix = f"-d{debug_k}" if debug_k is not None else ""
+        patch_out = self.patches_dir / f"node-{node_id:03d}{suffix}.diff"
         parent = self._git("rev-parse", "HEAD~1").stdout.strip()
         diff = self._git("diff", f"{parent}..HEAD")
         patch_out.write_text(diff.stdout, encoding="utf-8")
@@ -306,7 +310,8 @@ def rebuild(events: list[dict]) -> RebuildState:
                 "kind": ev.get("kind"),
                 "hypothesis_id": hid,
                 "state": "screening",
-                "commit": None,
+                "commit": ev.get("commit"),
+                "scores": {},
             }
             if hid is not None:
                 started.add(str(hid))
@@ -316,6 +321,12 @@ def rebuild(events: list[dict]) -> RebuildState:
             state = ev.get("state")
             if nid is not None and state is not None and int(nid) in nodes:
                 nodes[int(nid)]["state"] = state
+            if typ == "verdict" and nid is not None and int(nid) in nodes:
+                scores = ev.get("scores") or []
+                seeds = ev.get("seeds") or []
+                nodes[int(nid)]["scores"] = {
+                    int(s): float(v) for s, v in zip(seeds, scores, strict=False)
+                }
         elif typ == "incumbent_changed":
             nid = ev.get("node")
             if nid is not None:
@@ -384,9 +395,10 @@ class Tree:
         self._promotions = 0
         self._holdout_done_first = False
         self._best_reported = 0.0
-        self._debug_depth: dict[int, int] = {}  # node_id → depth along debug lineage
+        self._debug_depth: dict[int, int] = {}
+        self._node_attempt: dict[int, int] = {}
         self._preallocated: dict[str, int] = {}
-        self._lessons_path = Path(events._run_dir) / "lessons.jsonl"  # noqa: SLF001
+        self._lessons_path = events.run_dir / "lessons.jsonl"
         self._gpu_spent_s = 0.0
         self._ended = False
 
@@ -399,14 +411,10 @@ class Tree:
         return rebuild(events)
 
     def _read_log(self) -> list[dict]:
-        path = Path(self.events._run_dir) / "events.jsonl"  # noqa: SLF001
+        self.events.drain()
+        path = self.events.run_dir / "events.jsonl"
         if not path.is_file():
             return []
-        # Ensure writer has flushed pending lines.
-        try:
-            self.events._events_file.flush()  # noqa: SLF001
-        except Exception:
-            pass
         rows: list[dict] = []
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
@@ -494,6 +502,10 @@ class Tree:
 
         self.incumbent = baseline
         self.nodes[baseline.id] = baseline
+        self.events.emit(
+            "incumbent_changed", node=baseline.id, reason="baseline",
+            summary=f"node {baseline.id} became incumbent (baseline calibration)",
+        )
         return self.full_inc
 
     def _family_of(self, hyp: Hypothesis) -> str:
@@ -560,18 +572,22 @@ class Tree:
                 continue
             if draft.patch is None:
                 continue
-            if not self.queue.push(draft):
+
+            fork_hyp = Hypothesis(
+                id=draft.id,
+                stage=draft.stage,
+                mechanism=draft.mechanism,
+                description=draft.description,
+                citation=draft.citation,
+                expected_gain=draft.expected_gain,
+                expected_gpu_h=draft.expected_gpu_h,
+                parent_node=parent,
+                patch=draft.patch,
+            )
+            if not self.queue.push(fork_hyp):
                 continue
             nid = self.events.new_node(parent)
             self._preallocated[draft.id] = nid
-            self.events.emit(
-                "node_created",
-                id=nid,
-                parent=parent,
-                kind="draft",
-                hypothesis_id=draft.id,
-                summary=f"node {nid} forked draft in {fam}",
-            )
             self.nodes[nid] = Node(
                 id=nid,
                 parent=parent,
@@ -587,18 +603,27 @@ class Tree:
             )
             used_hyps.add(draft.id)
 
+    def _roll_holdout_cache(self, report) -> None:  # noqa: ANN001
+        rolled = dict(self.holdout_inc.as_dict())
+        for seed, score in zip(report.seeds, report.candidate_scores, strict=True):
+            rolled[int(seed)] = float(score)
+        self.holdout_inc = SeedCache(rolled)
+
     def _holdout_if_needed(self, node: Node, *, at_end: bool = False) -> None:
         if at_end:
-            if self.measure._holdout_visits >= 2:  # noqa: SLF001
+            if self.measure.holdout_visits >= 2:
                 return
-            # Second visit at run end (only if first already happened, or force end visit).
-            target = self.incumbent or node
+            if self._promotions == 0:
+                return
             report = self.measure.holdout_report(
-                target, self.runner, self.holdout_inc, self._best_reported
+                self.incumbent or node,
+                self.runner,
+                self.holdout_inc,
+                self._best_reported,
             )
             self._best_reported = report.best_reported
+            self._roll_holdout_cache(report)
             return
-        # First promotion only.
         if self._holdout_done_first:
             return
         report = self.measure.holdout_report(
@@ -606,169 +631,127 @@ class Tree:
         )
         self._best_reported = report.best_reported
         self._holdout_done_first = True
+        self._roll_holdout_cache(report)
 
     def _run_ladder(self, node: Node, hyp: Hypothesis) -> None:
         family = self._family_of(hyp)
         diff_summary = hyp.description[:80]
-
-        # smoke
-        self._set_state(node, "running", f"node {node.id} smoke")
-        smoke = self.runner.run(
-            node, "smoke", seed=SCREEN_SEED, timeout_s=self.smoke_timeout_s
-        )
-        self._gpu_spent_s += float(smoke.wall_s)
-        if not smoke.ok:
-            self._handle_failure(node, hyp, smoke)
-            return
-
-        # screen (paired seed 1)
-        screen = self.runner.run(
-            node, "screen", seed=SCREEN_SEED, timeout_s=self.screen_timeout_s
-        )
-        self._gpu_spent_s += float(screen.wall_s)
-        if not screen.ok:
-            self._handle_failure(node, hyp, screen)
-            return
-
-        v_screen = self.measure.verdict(
-            node,
-            [screen],
-            self.screen_inc,
-            "screen",
-            attribution=self.attribution,  # type: ignore[arg-type]
-        )
-        # Attach gpu_min onto a follow-up is not possible; family_stats defaults.
-
-        if v_screen.state != "replicating":
-            if node.state != v_screen.state:
-                # verdict event already set state in app; keep Node in sync
-                try:
-                    transition(node, v_screen.state)
-                except IllegalTransition:
-                    node.state = v_screen.state  # type: ignore[assignment]
-            else:
-                node.state = v_screen.state  # type: ignore[assignment]
-            if self.workspace is not None and self.incumbent and self.incumbent.commit:
-                self.workspace.checkout(self.incumbent.commit)
-            return
-
-        try:
-            transition(node, "replicating")
-        except IllegalTransition:
-            pass
-        node.state = "replicating"  # type: ignore[assignment]
-        self.events.emit(
-            "state_changed",
-            node=node.id,
-            state="replicating",
-            summary=f"node {node.id} → replicating",
-        )
-
-        results: list[RunResult] = []
-        last_delta: float | None = None
-        for seed in FULL_SEEDS:
-            if self._live_count() > MAX_LIVE_BRANCHES:
-                # Should not happen mid-ladder for a single node; belt-and-braces.
-                break
-            res = self.runner.run(
-                node, "full", seed=seed, timeout_s=self.full_timeout_s
+        while True:
+            attempt = self._node_attempt.get(node.id, 1)
+            if node.state != "running":
+                self._set_state(node, "running", f"node {node.id} smoke")
+            smoke = self.runner.run(
+                node, "smoke", seed=SCREEN_SEED,
+                timeout_s=self.smoke_timeout_s, attempt=attempt,
             )
-            self._gpu_spent_s += float(res.wall_s)
-            gpu_min = float(res.wall_s) / 60.0
-            if not res.ok:
-                self._handle_failure(node, hyp, res)
+            self._gpu_spent_s += float(smoke.wall_s)
+            if not smoke.ok:
+                if self._handle_failure(node, hyp, smoke):
+                    continue
                 return
-            results.append(res)
-            # Per-seed lesson line (spec: one line per full-rung run).
-            try:
-                d = float(res.metrics[METRIC]) - self.full_inc.get(seed)
-            except Exception:
-                d = None
-            last_delta = d
-            self._append_lesson(node, family, d, gpu_min, diff_summary)
-
-        v_rep = self.measure.verdict(
-            node,
-            results,
-            self.full_inc,
-            "replicate",
-            attribution=self.attribution,  # type: ignore[arg-type]
-        )
-        try:
-            transition(node, v_rep.state)
-        except IllegalTransition:
-            node.state = v_rep.state  # type: ignore[assignment]
-        else:
-            # verdict already emitted state; emit state_changed only if needed
-            pass
-        node.state = v_rep.state  # type: ignore[assignment]
-
-        if v_rep.state == "promoted":
-            self._promotions += 1
-            # Roll seed caches to this node's scores.
-            screen_roll = dict(self.screen_inc.as_dict())
-            screen_roll[SCREEN_SEED] = float(screen.metrics[METRIC])
-            self.screen_inc = SeedCache(screen_roll)
-            full_roll = {
-                r.seed: float(r.metrics[METRIC]) for r in results
-            }
-            self.full_inc = SeedCache(full_roll)
-            self.incumbent = node
-            self._holdout_if_needed(node, at_end=False)
-        else:
-            if self.workspace is not None and self.incumbent and self.incumbent.commit:
+            screen = self.runner.run(
+                node, "screen", seed=SCREEN_SEED,
+                timeout_s=self.screen_timeout_s, attempt=attempt,
+            )
+            self._gpu_spent_s += float(screen.wall_s)
+            if not screen.ok:
+                if self._handle_failure(node, hyp, screen):
+                    continue
+                return
+            v_screen = self.measure.verdict(
+                node, [screen], self.screen_inc, "screen",
+                attribution=self.attribution,  # type: ignore[arg-type]
+                gpu_min=float(screen.wall_s) / 60.0,
+            )
+            if v_screen.state != "replicating":
+                self._set_state(node, v_screen.state)
+                if self.workspace and self.incumbent and self.incumbent.commit:
+                    self.workspace.checkout(self.incumbent.commit)
+                return
+            self._set_state(node, "replicating")
+            results: list[RunResult] = []
+            retry = False
+            for seed in FULL_SEEDS:
+                if self._live_count() > MAX_LIVE_BRANCHES:
+                    break
+                res = self.runner.run(
+                    node, "full", seed=seed,
+                    timeout_s=self.full_timeout_s, attempt=attempt,
+                )
+                self._gpu_spent_s += float(res.wall_s)
+                gpu_min = float(res.wall_s) / 60.0
+                if not res.ok:
+                    retry = self._handle_failure(node, hyp, res)
+                    break
+                results.append(res)
+                try:
+                    d = float(res.metrics[METRIC]) - self.full_inc.get(seed)
+                except Exception:
+                    d = None
+                self._append_lesson(node, family, d, gpu_min, diff_summary)
+            if retry:
+                continue
+            if len(results) != len(FULL_SEEDS):
+                return
+            total_gpu_min = sum(float(r.wall_s) for r in results) / 60.0
+            v_rep = self.measure.verdict(
+                node, results, self.full_inc, "replicate",
+                attribution=self.attribution,  # type: ignore[arg-type]
+                gpu_min=total_gpu_min,
+            )
+            self._set_state(node, v_rep.state)
+            if v_rep.state == "promoted":
+                self._promotions += 1
+                screen_roll = dict(self.screen_inc.as_dict())
+                screen_roll[SCREEN_SEED] = float(screen.metrics[METRIC])
+                self.screen_inc = SeedCache(screen_roll)
+                self.full_inc = SeedCache({r.seed: float(r.metrics[METRIC]) for r in results})
+                self.incumbent = node
+                self._holdout_if_needed(node, at_end=False)
+            elif self.workspace and self.incumbent and self.incumbent.commit:
                 self.workspace.checkout(self.incumbent.commit)
+            self.measure.maybe_refresh()
+            return
 
-        del last_delta
-        self.measure.maybe_refresh()
+    def _checkout_for_hyp(self, hyp: Hypothesis) -> None:
+        if self.workspace is None:
+            return
+        if hyp.parent_node is not None and self.incumbent and self.incumbent.commit:
+            self.workspace.checkout(self.incumbent.commit)
+        elif self._initial_commit:
+            self.workspace.checkout(self._initial_commit)
 
-    def _handle_failure(
-        self, node: Node, hyp: Hypothesis, result: RunResult
-    ) -> None:
+    def _commit_hyp(self, node, hyp, traceback, debug_k):  # noqa: ANN001
+        if self.workspace is None:
+            return
+        self._checkout_for_hyp(hyp)
+        try:
+            diff_path = self.coder.materialise(hyp, self.incumbent or node, traceback)
+        except Exception:
+            diff_path = hyp.patch
+        if diff_path is not None:
+            node.commit = self.workspace.commit_node(node.id, Path(diff_path), debug_k=debug_k)
+
+    def _handle_failure(self, node, hyp, result) -> bool:  # noqa: ANN001
         fc = result.failure_class or "crash"
-        # Runner may already have emitted debugging; sync local state.
-        parent = node.parent
-        depth = 0
-        if parent is not None:
-            depth = self._debug_depth.get(parent, 0)
+        depth = self._debug_depth.get(node.id, 0)
         if fc in ("crash", "contract_violation") and depth < DEBUG_DEPTH:
             self._debug_depth[node.id] = depth + 1
+            debug_k = self._debug_depth[node.id]
             if node.state != "debugging":
-                try:
-                    self._set_state(node, "debugging")
-                except IllegalTransition:
-                    node.state = "debugging"  # type: ignore[assignment]
-            # Requeue a debug attempt via coder (phase 6 PatchCoder ignores traceback).
-            try:
-                self.coder.materialise(hyp, self.incumbent or node, result.stderr_tail)
-            except Exception:
-                pass
-            debug_hyp = Hypothesis(
-                id=f"{hyp.id}-debug-{node.id}",
-                stage=hyp.stage,
-                mechanism=hyp.mechanism,
-                description=hyp.description,
-                citation=hyp.citation,
-                expected_gain=hyp.expected_gain,
-                expected_gpu_h=hyp.expected_gpu_h,
-                parent_node=node.id,
-                patch=hyp.patch,
-            )
-            self.hyp_index[debug_hyp.id] = debug_hyp
-            self.queue.push(debug_hyp)
-            # Leave the crashed node in debugging; the retry is a new queue item.
-        else:
-            try:
-                if node.state == "debugging":
-                    self._set_state(node, "retired")
-                elif node.state in ("running", "replicating", "screening"):
-                    self._set_state(node, "retired")
-                else:
-                    node.state = "retired"  # type: ignore[assignment]
-            except IllegalTransition:
-                node.state = "retired"  # type: ignore[assignment]
-        if self.workspace is not None and self.incumbent and self.incumbent.commit:
+                self._set_state(node, "debugging")
+            self._commit_hyp(node, hyp, result.stderr_tail, debug_k)
+            self._node_attempt[node.id] = self._node_attempt.get(node.id, 1) + 1
+            if node.state != "running":
+                self._set_state(node, "running", f"node {node.id} debug retry {debug_k}")
+            return True
+        if node.state == "debugging":
+            self._set_state(node, "retired")
+        elif node.state in ("running", "replicating", "screening"):
+            self._set_state(node, "retired")
+        if self.workspace and self.incumbent and self.incumbent.commit:
             self.workspace.checkout(self.incumbent.commit)
+        return False
 
     def step(self) -> bool:
         if self._ended:
@@ -791,67 +774,35 @@ class Tree:
                 self._finish("empty_queue")
                 return False
         if self._live_count() >= MAX_LIVE_BRANCHES:
-            # Cannot start another; stop rather than spin.
             self._finish("max_live_branches")
             return False
-
         hyp = self.queue.pop()
         self.hyp_index.setdefault(hyp.id, hyp)
-
         parent = hyp.parent_node
         if parent is None and self.incumbent is not None:
             parent = self.incumbent.id
-
         if hyp.id in self._preallocated:
             nid = self._preallocated.pop(hyp.id)
             node = self.nodes[nid]
-            kind = "draft"
+            kind = node.kind
         else:
             nid = self.events.new_node(parent)
             kind = self._kind_for(hyp)
-            self.events.emit(
-                "node_created",
-                id=nid,
-                parent=parent,
-                kind=kind,
-                hypothesis_id=hyp.id,
-                summary=f"node {nid} created as {kind}",
-            )
             node = Node(
-                id=nid,
-                parent=parent,
-                hypothesis_id=hyp.id,
-                commit=None,
-                state="screening",
-                rung="smoke",
-                kind=kind,  # type: ignore[arg-type]
-                scores={},
-                seeds=[],
-                cost=Cost(0.0, 0, 0, "training"),
-                created_seq=nid,
+                id=nid, parent=parent, hypothesis_id=hyp.id, commit=None,
+                state="screening", rung="smoke", kind=kind,  # type: ignore[arg-type]
+                scores={}, seeds=[], cost=Cost(0.0, 0, 0, "training"), created_seq=nid,
             )
             self.nodes[nid] = node
-
-        # Materialise + commit patch into workspace (from pristine template —
-        # hand patches are absolute FEATURES line edits, not stacked diffs).
-        if self.workspace is not None:
-            if self._initial_commit:
-                self.workspace.checkout(self._initial_commit)
-            try:
-                diff_path = self.coder.materialise(
-                    hyp, self.incumbent or node, None
-                )
-            except Exception:
-                diff_path = hyp.patch
-            if diff_path is not None:
-                sha = self.workspace.commit_node(nid, Path(diff_path))
-                node.commit = sha
-
+        self._commit_hyp(node, hyp, None, None)
+        self.events.emit(
+            "node_created", id=nid, parent=parent, kind=kind,
+            hypothesis_id=hyp.id, commit=node.commit,
+            summary=f"node {nid} created as {kind}",
+        )
         self._nodes_done += 1
         self._run_ladder(node, hyp)
         self._maybe_fork(node)
-
-        # Rerank after every verdict-bearing step.
         stats = family_stats(self._read_log())
         if self.queue:
             self.queue.rerank(stats)
@@ -862,21 +813,24 @@ class Tree:
             return
         self._ended = True
         if self.incumbent is not None:
-            try:
-                self._holdout_if_needed(self.incumbent, at_end=True)
-            except Exception:
-                pass
+            if self._promotions > 0:
+                try:
+                    self._holdout_if_needed(self.incumbent, at_end=True)
+                except Exception:
+                    pass
+            elif self._best_reported > 0:
+                self.events.emit(
+                    "prediction", node=self.incumbent.id, metric=METRIC,
+                    value=self._best_reported, best_reported=self._best_reported,
+                    summary=(
+                        f"prediction {self._best_reported:.4f} "
+                        "(baseline holdout cache, no promotion)"
+                    ),
+                )
         inc_id = self.incumbent.id if self.incumbent else None
-        counts = {
-            "nodes": len(self.nodes),
-            "promotions": self._promotions,
-            "queue_left": len(self.queue),
-        }
+        counts = {"nodes": len(self.nodes), "promotions": self._promotions, "queue_left": len(self.queue)}
         self.events.emit(
-            "run_ended",
-            reason=reason,
-            incumbent=inc_id,
-            counts=counts,
+            "run_ended", reason=reason, incumbent=inc_id, counts=counts,
             summary=(
                 f"run ended ({reason}); incumbent={inc_id}; "
                 f"nodes={counts['nodes']} promotions={counts['promotions']}"
@@ -884,7 +838,9 @@ class Tree:
         )
 
     def run(self) -> None:
-        while self.step():
-            pass
-        if not self._ended:
-            self._finish("empty_queue")
+        try:
+            while self.step():
+                pass
+        finally:
+            if not self._ended:
+                self._finish("empty_queue")

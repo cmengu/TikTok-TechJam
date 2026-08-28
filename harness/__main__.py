@@ -15,6 +15,8 @@ from harness.fake_run import write as write_fake
 from harness.protocol import Protocol, load, protocol_hash
 from harness.types import Hypothesis
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -71,6 +73,13 @@ def _load_hypotheses(path: Path) -> list[Hypothesis]:
     out: list[Hypothesis] = []
     for row in raw:
         patch = row.get("patch")
+        patch_path = None
+        if patch:
+            patch_path = Path(patch).expanduser()
+            if not patch_path.is_absolute():
+                patch_path = (REPO_ROOT / patch_path).resolve()
+            else:
+                patch_path = patch_path.resolve()
         out.append(
             Hypothesis(
                 id=str(row["id"]),
@@ -81,7 +90,7 @@ def _load_hypotheses(path: Path) -> list[Hypothesis]:
                 expected_gain=float(row.get("expected_gain") or 0.0),
                 expected_gpu_h=float(row.get("expected_gpu_h") or 0.1),
                 parent_node=row.get("parent_node"),
-                patch=Path(patch) if patch else None,
+                patch=patch_path,
             )
         )
     return out

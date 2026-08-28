@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,17 @@ class EventLog:
                 **fields,
             }
             self._queue.put(("heartbeat", event))
+
+    @property
+    def run_dir(self) -> Path:
+        return self._run_dir
+
+    def drain(self) -> None:
+        """Block until queued events are written to events.jsonl."""
+        while not self._queue.empty():
+            time.sleep(0.001)
+        if not self._closed:
+            self._events_file.flush()
 
     def close(self) -> None:
         """Drain, fsync, join writer; emit after close raises."""

@@ -12,6 +12,7 @@ import pytest
 from helpers import placeholder_protocol
 from harness.events import EventLog
 from harness.measure import (
+    HOLDOUT_SEEDS,
     LEAK_RULE_FEATURE,
     LEAK_RULE_GAIN,
     PROMOTE_FLOOR,
@@ -300,10 +301,10 @@ def test_holdout_budget(tmp_path: Path):
     proto = placeholder_protocol(tmp_path)
     events = EventLog(tmp_path / "run-ho", "ho", proto)
     runner = FakeRunner(
-        scores={("holdout", s): 0.56 for s in range(3)}
+        scores={("holdout", s): 0.56 for s in HOLDOUT_SEEDS}
     )
     measure = Measure(events, proto, _band())
-    inc = SeedCache({0: 0.55, 1: 0.55, 2: 0.55})
+    inc = SeedCache({s: 0.55 for s in HOLDOUT_SEEDS})
     try:
         r1 = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
         r2 = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
@@ -327,10 +328,10 @@ def test_holdout_candidate_side_only(tmp_path: Path):
     proto = placeholder_protocol(tmp_path)
     events = EventLog(tmp_path / "run-ho2", "ho2", proto)
     runner = FakeRunner(
-        scores={("holdout", s): 0.56 + 0.001 * s for s in range(3)}
+        scores={("holdout", s): 0.56 + 0.001 * s for s in HOLDOUT_SEEDS}
     )
     measure = Measure(events, proto, _band())
-    inc = SeedCache({0: 0.55, 1: 0.55, 2: 0.55})
+    inc = SeedCache({s: 0.55 for s in HOLDOUT_SEEDS})
     try:
         report = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
     finally:

@@ -100,12 +100,16 @@ class FakeRunner:
     fail_class: str = "crash"
     calls: list[tuple[str, int]] = field(default_factory=list)
     run_cfg: dict = field(default_factory=lambda: {"timeout_s": 60.0})
+    events: EventLog | None = None
 
     def run(self, node, rung, seed, timeout_s, **kwargs):  # noqa: ANN001
-        del timeout_s, kwargs
+        del timeout_s
+        attempt = int(kwargs.get("attempt", 1))
         self.calls.append((str(rung), int(seed)))
         key = (str(rung), int(seed))
         if key in self.fail_on:
+            if self.events is not None:
+                self.events.emit("failure", node=node.id, attempt=attempt, stderr_tail="boom", returncode=1, summary=f"node {node.id} {self.fail_class}", **{"class": self.fail_class})
             return RunResult(
                 node=node.id,
                 attempt=1,
@@ -147,6 +151,10 @@ class FakeMeasure:
     _i: int = 0
     _holdout_visits: int = 0
     events: EventLog | None = None
+
+    @property
+    def holdout_visits(self) -> int:
+        return self._holdout_visits
 
     def calibrate_from_runs(self, *a, **k):  # noqa: ANN001
         del a, k
@@ -202,7 +210,7 @@ class FakeMeasure:
 
         return HoldoutReport(
             visit=self._holdout_visits,
-            seeds=[0, 1, 2],
+            seeds=[1, 2, 3],
             candidate_scores=[0.5, 0.5, 0.5],
             incumbent_scores=[0.5, 0.5, 0.5],
             delta_mean=0.0,
@@ -350,6 +358,7 @@ def _make_tree(tmp_path: Path, measure: FakeMeasure, runner: FakeRunner, hyps: l
     run_dir.mkdir()
     events = EventLog(run_dir, "t", proto)
     measure.events = events
+    runner.events = events
     ws = Workspace(run_dir, "t")
     # Ensure patches exist as empty files when missing
     for h in hyps:
@@ -400,7 +409,7 @@ def _make_tree(tmp_path: Path, measure: FakeMeasure, runner: FakeRunner, hyps: l
     tree._initial_commit = ws.head()
     tree.screen_inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50, 4: 0.50, 5: 0.50})
     tree.full_inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
-    tree.holdout_inc = SeedCache({0: 0.50, 1: 0.50, 2: 0.50})
+    tree.holdout_inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
     return tree, events, run_dir, ws
 
 
@@ -534,7 +543,7 @@ def test_greedy_revert(tmp_path: Path):
 
 def test_fork_on_stall(tmp_path: Path):
     # 4 improve nodes non-promoted → fork drafts; 3 → none.
-    def run_n(n: int, run_name: str) -> list[dict]:
+    def run_n(n: int, run_name: str) -> tuple[list[dict], Tree]:
         script = []
         for _ in range(n):
             script.append(_verdict("rejected", "screen", -0.02))
@@ -567,14 +576,14 @@ def test_fork_on_stall(tmp_path: Path):
                 tree.step()
         finally:
             events.close()
-        return _read_events(run_dir)
+        return _read_events(run_dir), tree
 
-    rows3 = run_n(3, "stall3")
-    forked3 = [e for e in rows3 if e["type"] == "node_created" and "forked" in (e.get("summary") or "")]
+    _rows3, tree3 = run_n(3, "stall3")
+    forked3 = [n for n in tree3.nodes.values() if n.kind == "draft" and str(n.hypothesis_id).startswith("extra-")]
     assert forked3 == []
 
-    rows4 = run_n(4, "stall4")
-    forked4 = [e for e in rows4 if e["type"] == "node_created" and "forked" in (e.get("summary") or "")]
+    _rows4, tree4 = run_n(4, "stall4")
+    forked4 = [n for n in tree4.nodes.values() if n.kind == "draft" and str(n.hypothesis_id).startswith("extra-")]
     assert len(forked4) == 2
 
 
@@ -605,38 +614,48 @@ def test_max_live_branches(tmp_path: Path):
 
 
 def test_debug_depth(tmp_path: Path):
-    """Three debug retries along a lineage; the fourth crash retires."""
+    """Three debug retries on the same node; the fourth crash retires."""
     measure = FakeMeasure(script=[])
-    runner = FakeRunner(
-        scores={("smoke", 1): 0.5},
-        fail_on={("smoke", 1)},
-        fail_class="crash",
-    )
-    tree, events, run_dir, _ws = _make_tree(
-        tmp_path,
-        measure,
-        runner,
-        [],  # empty queue; we push manually
-    )
+    runner = FakeRunner(scores={("smoke", 1): 0.5}, fail_on={("smoke", 1)}, fail_class="crash")
+    tree, events, run_dir, _ws = _make_tree(tmp_path, measure, runner, [_hyp("d0", patch=ROOT / "hypotheses/patches/base.diff")])
     try:
-        parent = None
-        last = None
-        for i in range(4):
-            hid = f"d{i}"
-            h = _hyp(hid, patch=ROOT / "hypotheses/patches/base.diff", parent=parent)
-            tree.hyp_index[hid] = h
-            # Clear auto-queued debug retries so we control the lineage.
-            tree.queue._items.clear()
-            tree.queue.push(h)
-            if parent is not None:
-                tree._debug_depth[parent] = i
-            tree.step()
-            last = max(tree.nodes)
-            parent = last
-        assert last is not None
-        assert tree.nodes[last].state == "retired"
-        rows = _read_events(run_dir)
-        assert all(e["type"] in EVENT_TYPES for e in rows)
+        tree.step()
+        node = max(tree.nodes.values(), key=lambda n: n.id)
+        assert node.state == "retired"
+        assert tree._debug_depth.get(node.id) == 3
+        failures = [e for e in _read_events(run_dir) if e["type"] == "failure"]
+        assert len(failures) == 4
+        queued = [e for e in _read_events(run_dir) if e["type"] == "hypothesis_queued"]
+        assert len(queued) == 1 and queued[0]["id"] == "d0"
+    finally:
+        events.close()
+
+
+def test_child_builds_on_incumbent(tmp_path: Path):
+    """Child hypotheses with parent_node checkout the incumbent commit."""
+    measure = FakeMeasure(script=[_verdict("replicating"), _verdict("promoted", "replicate"), _verdict("rejected", "screen", -0.01)])
+    runner = FakeRunner(scores={("smoke", 1): 0.5, ("screen", 1): 0.56, ("full", 1): 0.57, ("full", 2): 0.57, ("full", 3): 0.57})
+    h1 = _hyp("h1", mechanism="true", patch=ROOT / "hypotheses/patches/f_true.diff")
+    tree, events, _run_dir, ws = _make_tree(tmp_path, measure, runner, [h1])
+    checkouts: list[str] = []
+    orig = ws.checkout
+    def track(commit: str) -> None:
+        checkouts.append(commit)
+        orig(commit)
+    ws.checkout = track  # type: ignore[method-assign]
+    try:
+        assert tree.step() is True
+        inc_commit = tree.incumbent.commit
+        assert inc_commit is not None
+        child_patch = tmp_path / "child.diff"
+        child_patch.write_text("", encoding="utf-8")
+        h2 = _hyp("h2", mechanism="child", patch=child_patch, parent=tree.incumbent.id)
+        tree.hyp_index[h2.id] = h2
+        tree.queue.push(h2)
+        checkouts.clear()
+        assert tree.step() is True
+        assert inc_commit in checkouts
+        assert checkouts[0] == inc_commit
     finally:
         events.close()
 
