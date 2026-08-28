@@ -415,9 +415,12 @@
     .tree-node-selected {
       background: var(--sunken);
       font-weight: 600;
-      outline: 1px solid var(--hairline-hi);
+      outline: 1px solid var(--ink-muted);
       outline-offset: -1px;
     }
+    /* Waiting on markup: tree nodes are <div>s with no tabindex and no keydown
+       handler (app.js:640-651, :863), so this never fires today. It is here so
+       that adding tabindex is a one-line change rather than a redesign. */
     .tree-node:focus-visible {
       outline: 2px solid var(--ink);
       outline-offset: 1px;

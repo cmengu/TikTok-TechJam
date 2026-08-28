@@ -920,3 +920,23 @@ This also gives the Protocol screen's hashed/not-hashed split a second cue
 beyond hue, so it survives greyscale, a projector, and colour-vision
 deficiency. Checkpoint 3's reviewer flagged the single-cue version as
 borderline; this is the fix.
+
+The `spend` gap was brought into this grammar at checkpoint 4. Before that it
+used bare `.hdr-dim` (app.js:926) and got italic and --ink-muted but no dashed
+border, while the other two gaps did — so the rule as first written was not
+true of all three. `.hdr-dim` now carries the dashed pill and the grammar
+holds for every deliberate gap.
+
+## Keyboard access to the Run tree
+
+The Run tree is mouse-only. `renderTreeNode` (app/static/app.js:640-651)
+emits `<div class="tree-node" data-node-id=...>` with no `tabindex`, and
+`initRunTreeClicks` (app.js:862-868) registers a delegated `click` listener
+and no `keydown`. Verified: `grep -c tabindex app/static/app.js` → 0,
+`grep -c keydown app/static/app.js` → 0.
+
+Selecting a node — the primary interaction on this screen — cannot be done
+from the keyboard. `.tree-node:focus-visible` is styled and ready; making it
+live needs `tabindex="0"`, a `keydown` handler for Enter and Space, and
+probably `role="treeitem"`. That is an app.js change with its own checkpoint,
+and it is not in batch 4's scope.
