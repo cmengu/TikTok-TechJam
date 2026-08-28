@@ -237,3 +237,92 @@ buffer, cwd-relative `runs/` path, fake-run wipe guard, `lastSeq` split; plus
 the two one-liners: drop the nested lock in `events.py`, `STATES =
 get_args(State)`; nothing else) → merge `main` into whatever phase-4 follow-up
 exists. Merge, don't rebase, branches that have a PR.
+
+---
+
+## 28 Aug, session 3 — precedence, deferrals, and the 9-before-8 reorder
+
+Recorded after a two-axis review of phase 7 found drift that traced back to this
+file disagreeing with `Build_phases.html` about what lands when. Nothing here is
+new design; it resolves an ambiguity that already cost a day.
+
+### Precedence — the rule that was missing
+
+**`Build_phases.html` phase pages win on *what ships when*. This file wins on
+*how*.**
+
+- Sequencing, per-phase in-scope file lists, named tests and gates come from the
+  phase page. It is the executable document.
+- Mechanisms and cross-cutting rules come from here: §1 event seam, §2 ranking
+  arithmetic, §3 replay, §6 retry table and classifier. These hold in every phase
+  that touches them.
+- **§5 is the exception that caused the trouble.** It is the only section that
+  makes scheduling claims ("Lands with step 7", and the execution order at the
+  end). Those claims are **advisory, not binding**. §5's *mechanisms* are binding
+  when the phase page schedules them; §5's *timing* is not.
+- Consequence, stated plainly: phase 7 ships complete against `#p7` and
+  incomplete against §5. That is the intended outcome, not a gap to close.
+
+Precedence on numbers is unchanged: Audit Redline §6 > `Build_phases.html` >
+Harness Decisions.
+
+### `contract.py` — the concrete case
+
+`harness/agents/contract.py` was built in phase 7 under §5's authority, but the
+phase page puts static leak checks in phase 10 (`R5_static_split`,
+`R6_static_target`, severity **warn**, "never blocks"). It stays — deleting
+working code for document purity is waste — but it splits by severity:
+
+- **Capability path checks stay blocking.** `protocols/`, `measure.py`,
+  `rulebook`, `holdout` in a prompt or diff is a lock violation, not a heuristic.
+- **Leakage heuristics become warn-only** per phase 10 (`train_test_split(`,
+  label-column reads). They emit `rule_trip` with severity `warn` and never stop
+  a diff reaching the runner.
+- `candidate/rules.jsonl` is currently read by nothing; `contract.py` hardcodes
+  its patterns instead. Wiring the file in is deferred with the rest of §5 below.
+
+### Deferred until after the first real run
+
+These are §5/§6 items that need real failures to tune against. NOVA's and
+AgentX's numbers come from production systems with thousands of runs; we have
+seventeen, all synthetic, with effects we planted ourselves. Building them now
+means building them blind.
+
+- **K candidates per expensive run** (§5) — K=2–3 diffs at full/replicate, rank
+  and pick one.
+- **LLM review of the diff** (§5) — the second half of the verification cascade;
+  static greps ship, the review does not.
+- **Rules accumulate from confirmed errors** (§5) — copy `candidate/rules.jsonl`
+  to `runs/<id>/rules.jsonl`, append root-caused rules with `source: "node NNN"`.
+- **Structured trajectory feedback** (§5) — NOVA's weak-components / directions /
+  forbidden headings. `lessons.jsonl` keeps the flat `#p6` row for now.
+- **Falsifiable attribution** (§5 tail) — `expected_observables` on Hypothesis,
+  still phase 10 and still optional.
+
+### The one exception — degraded mode
+
+`llm_api` failure class: backoff ×4 → rotate model → fall back to the
+hand-written bank so the loop keeps running without LLMs (§6). This is demo
+insurance, not search quality, and it is cheap.
+
+It is **out of scope for the phase-7 cleanup pass** — it needs a new failure
+class in `runner.py`, which is outside `#p7`'s in-scope list, and that is exactly
+how phase 7 drifted the first time. It lands as its own small PR **between phase
+9 and phase 8**, so it is in place before iteration 0 and before the demo.
+
+`infra` as a failure class ships with it.
+
+### Execution order correction
+
+The order at the end of §5 reads `… → 7 (agents) → 8 (ingest + aliccp) → 9
+(outputs + audit) → 10`. **Phase 9 now comes before phase 8.** The full argument
+is in `context/Handoff.md`; in short, `#p9`'s audit tests run against the fake-run
+stream, its gate is the phase-6 fallback plus a synthetic run, and
+`test_convergence_rule` supplies its own ε and N — so only the submission column
+list and the real ε/`n_rounds` need the organisers, and both are config rather
+than code. Phase 8 is blocked on the organisers' webinar for seven `pending`
+values in `aliccp.yaml` and on data that is not downloaded, and building the
+audit tab first means iteration 0's GPU spend is instrumented while it runs.
+
+Phase 10 is genuinely blocked behind phase 8: `POS_TOL` can only be set from an
+observed real run.
