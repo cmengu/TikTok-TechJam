@@ -312,8 +312,14 @@ describe("reducer — Checkpoint C: state contract", () => {
     //   band=_band_payload(self.band) if self.band else None,
     // but the committed fixture's prediction event (tests/fixtures/fake-events.jsonl
     // seq 115) carries neither key — only node, metric, value, summary.
-    assert.ok(!("best_reported" in predictionEv));
-    assert.ok(!("band" in predictionEv));
+    assert.ok(
+      !("best_reported" in predictionEv),
+      "fake_run.py's prediction event omits this; if this fails, fake_run.py has been fixed and this assertion should be inverted",
+    );
+    assert.ok(
+      !("band" in predictionEv),
+      "fake_run.py's prediction event omits this; if this fails, fake_run.py has been fixed and this assertion should be inverted",
+    );
   });
 
   it("test_run_lifecycle_status", () => {
