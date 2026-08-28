@@ -115,3 +115,50 @@ export function verdictReading(verdict) {
 
   return { shape, value, valueKind, threshold, thresholdLabel, side, rung };
 }
+
+function fmtNum(n) {
+  return Number(n.toFixed(6)).toString();
+}
+
+// Handoff_app.md, "The band contract — settled, do not re-litigate", rule 2:
+//   "A missing rung is not a guess. A dict band with no `rung` means "we
+//    do not know which comparison the harness made". `threshold` stays null.
+//    Same rule as spend and vs-baseline significance: a visible gap beats a
+//    plausible number."
+// rule 3:
+//   "`legacy` and `none` never get a threshold. `lo`/`hi` are not
+//    something `screen_verdict` or `promote_bar` compared against."
+// verdictAnnotation never fabricates a comparison for the cases those rules
+// forbid one for — it names the gap instead.
+export function verdictAnnotation(verdict) {
+  const { shape, value, threshold, thresholdLabel, side, rung } = verdictReading(verdict);
+
+  if (threshold != null && value != null) {
+    const sign = value < 0 ? "-" : "+";
+    const symbol = side === "below" ? "<" : "≥";
+    return {
+      text: `Δ ${sign}${fmtNum(Math.abs(value))} ${symbol} ${thresholdLabel} ${fmtNum(threshold)}`,
+      reason: null,
+    };
+  }
+
+  if (shape === "legacy") {
+    return {
+      text: null,
+      reason:
+        "band is fake_run.py's legacy lo/hi pair — the harness reported no threshold this verdict was tested against",
+    };
+  }
+
+  if (shape === "measure") {
+    return {
+      text: null,
+      reason:
+        rung == null
+          ? "verdict carries no rung — which comparison the harness made is unknown"
+          : "the harness's threshold for this comparison is unavailable",
+    };
+  }
+
+  return { text: null, reason: "no band was reported for this verdict" };
+}

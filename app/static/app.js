@@ -1,6 +1,7 @@
 /** App shell: hash router + SSE client. Vanilla JS, no framework, no build step. */
 
 import { initial, reduce } from "./reducer.js";
+import { verdictAnnotation } from "./band.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -101,54 +102,25 @@ function latestPromoted(state, metric) {
   return null;
 }
 
-// "Inside the band" means opposite things depending on which of measure.py's
-// two verdict functions produced the number:
-//   screen_verdict(delta, band)     -> inconclusive/rejected: inside band
-//                                       means the delta has no signal — grey.
-//   replicate_verdict(deltas, band) -> replicating/promoted: inside band
-//                                       means the replicate agreed with the
-//                                       screen — that's the good outcome,
-//                                       render it normally.
-// Both functions are implemented now (harness/measure.py: screen_verdict,
-// replicate_verdict) but neither actually tests "value inside a [lo, hi]
-// band" — they compare delta / mean(deltas) against calibrated thresholds
-// (sd_delta_screen, promote_bar). This inside/outside mapping matches what
-// harness/fake_run.py's demo script still hardcodes per verdict — a plain
-// [lo, hi] two-tuple, unchanged — which is what this app reads today; it
-// will need reconciling once verdicts come from real runs instead of the
-// fake script. The "screening" branch is unreachable from the Score panel
-// today either way — renderScoreCell only ever sees verdicts from
-// latestPromoted(), which filters to state === "promoted" — it exists for
-// the node dossier (batch 3), where a node's full verdict history includes
-// its inconclusive/rejected screens too.
-function verdictBandTest(state) {
-  if (state === "inconclusive" || state === "rejected") return "screening";
-  if (state === "replicating" || state === "promoted") return "replication";
-  return null;
-}
-
 // The app reports the harness's verdict; it never computes or overrides one.
-// The number and its band are always shown — greying flags "no signal", it
-// never deletes the reading or relabels the verdict. No per-row verdict
-// badge: every row reaching this panel is "promoted" (see latestPromoted),
-// so a badge would just repeat the same constant on every line — the
-// panel's own "Incumbent" heading already says that once.
+// The number is always shown — every row reaching this panel is a replicate
+// pass (see latestPromoted, which filters to state === "promoted"), so by
+// definition it cleared the bar. Nothing here greys a promoted verdict.
+// The value shown is a SCORE (mean of verdict.scores), not delta_mean:
+// this column answers "where does the incumbent stand against the published
+// baseline", not "did this node beat the previous incumbent" — that's the
+// node dossier's question (Handoff_app.md, "Task 6"). verdictAnnotation's
+// text/reason still comes from the delta the harness actually compared.
 function renderScoreCell(verdict) {
   if (!verdict || !Array.isArray(verdict.scores) || !verdict.scores.length) {
     return chip("not yet promoted", "chip-null");
   }
   const value = mean(verdict.scores);
-  const band = Array.isArray(verdict.band) && verdict.band.length === 2 ? verdict.band : null;
-  if (!band) {
-    return `<span class="score-value">${fmtNum(value)}</span>`;
-  }
-  const [lo, hi] = band;
-  const bandText = `band ${fmtNum(lo)}–${fmtNum(hi)}`;
-  const inside = value >= lo && value <= hi;
-  const isNoSignal = inside && verdictBandTest(verdict.state) === "screening";
-  const cls = isNoSignal ? "score-inconclusive" : !inside && value > hi ? "score-above" : !inside ? "score-below" : "";
-  const noteSuffix = isNoSignal ? ", within noise band" : "";
-  return `<span class="score-value ${cls}">${fmtNum(value)}</span> <span class="band-note">(${escapeHtml(bandText)}${escapeHtml(noteSuffix)})</span>`;
+  const { text, reason } = verdictAnnotation(verdict);
+  const note = text
+    ? `<span class="band-note">(${escapeHtml(text)})</span>`
+    : `<span class="band-note" title="${escapeHtml(reason)}">(${escapeHtml(reason)})</span>`;
+  return `<span class="score-value">${fmtNum(value)}</span> ${note}`;
 }
 
 function buildScorePanel(state) {

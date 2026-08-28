@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { readBand, verdictReading, SCREEN_ADVANCE_SD, BAND_FIELDS } from "./band.js";
+import { readBand, verdictReading, verdictAnnotation, SCREEN_ADVANCE_SD, BAND_FIELDS } from "./band.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REAL_VERDICT_FIXTURE = join(
@@ -234,6 +234,82 @@ describe("band — verdictReading edge shapes", () => {
     assert.equal(reading.side, null);
     assert.equal(reading.valueKind, "delta");
     assert.equal(reading.value, 0.02); // the number is never suppressed
+  });
+});
+
+describe("band — verdictAnnotation", () => {
+  it("test_annotation_reports_the_harness_comparison", () => {
+    const verdicts = loadRealVerdicts();
+    const promoted = verdicts.find((e) => e.type === "verdict" && e.state === "promoted");
+    const reading = verdictReading(promoted);
+    const { text, reason } = verdictAnnotation(promoted);
+    assert.equal(reason, null);
+    assert.ok(text.includes(String(reading.value)), `expected text to contain the delta ${reading.value}: ${text}`);
+    assert.ok(text.includes("≥"), `expected text to contain the ≥ symbol: ${text}`);
+    assert.ok(
+      text.includes(reading.thresholdLabel),
+      `expected text to contain thresholdLabel ${reading.thresholdLabel}: ${text}`,
+    );
+    assert.ok(
+      text.includes(String(reading.threshold)),
+      `expected text to contain the threshold ${reading.threshold}: ${text}`,
+    );
+  });
+
+  it("test_annotation_on_legacy_band_gives_a_reason_not_a_threshold", () => {
+    const events = loadJsonl(FAKE_EVENTS_FIXTURE);
+    const legacyVerdict = events.find((e) => e.type === "verdict" && Array.isArray(e.band));
+    assert.ok(legacyVerdict, "expected at least one verdict with an array band in fake-events.jsonl");
+    const { text, reason } = verdictAnnotation(legacyVerdict);
+    assert.equal(text, null);
+    assert.match(reason, /lo\/hi/, `expected the reason to name the lo\\/hi pair: ${reason}`);
+    // lo/hi are never themselves called a threshold — rule 3 of the band
+    // contract (Handoff_app.md): "`lo`/`hi` are not something screen_verdict
+    // or promote_bar compared against."
+    assert.doesNotMatch(
+      reason,
+      /lo\/hi\s+threshold|threshold\s+of\s+lo\/hi|band\s+threshold/i,
+      `reason must not describe lo/hi itself as a threshold: ${reason}`,
+    );
+  });
+
+  it("test_annotation_without_rung_gives_a_reason", () => {
+    const verdict = {
+      type: "verdict",
+      state: "promoted",
+      metric: "cvr_auc",
+      delta_mean: 0.02,
+      band: {
+        sigma_screen: 0.02,
+        sigma_full: 0.012,
+        sigma_pair: 0.01,
+        ratio: 0.6,
+        rho: 0.8,
+        sd_delta_screen: 0.012649,
+        sd_delta_full: 0.007589,
+        bar: 0.01,
+        source: "fixed_pair",
+        n_replicated: 1,
+      },
+      // no "rung" key at all
+    };
+    const { text, reason } = verdictAnnotation(verdict);
+    assert.equal(text, null);
+    assert.match(reason, /rung/i, `expected the reason to name the missing rung: ${reason}`);
+  });
+
+  it("test_annotation_without_band_gives_a_reason", () => {
+    const verdict = {
+      type: "verdict",
+      state: "promoted",
+      metric: "cvr_auc",
+      delta_mean: 0.02,
+      scores: [0.53],
+      // no "band" key at all
+    };
+    const { text, reason } = verdictAnnotation(verdict);
+    assert.equal(text, null);
+    assert.match(reason, /no band/i, `expected the reason to say no band was reported: ${reason}`);
   });
 });
 
