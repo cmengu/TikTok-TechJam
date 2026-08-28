@@ -902,3 +902,21 @@ an app.js change with its own checkpoint, not a CSS revival.
 The Score panel spans two grid tracks above 1100px. That selector is coupled
 to renderDashboard's section order; if the panel order changes, the selector
 must change with it.
+
+## Dashed means provisional
+
+Dashed edges are a single grammar across the app, not a decoration:
+
+  - the three deliberate gaps — spend, vs-baseline significance,
+    "no threshold available" — dashed border, italic, --ink-muted
+  - the not-hashed protocol tier — dashed left stripe, --warn
+  - an orphan node in the Run tree — dashed border, --crit
+
+All of them mean "this is provisional, absent, or not binding". Solid edges
+mean the opposite. Anything new that is genuinely provisional should be
+dashed; nothing else should be.
+
+This also gives the Protocol screen's hashed/not-hashed split a second cue
+beyond hue, so it survives greyscale, a projector, and colour-vision
+deficiency. Checkpoint 3's reviewer flagged the single-cue version as
+borderline; this is the fix.

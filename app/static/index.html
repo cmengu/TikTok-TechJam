@@ -570,7 +570,7 @@
       border-left: 3px solid var(--ink);
     }
     .protocol-tier.not-hashed {
-      border-left: 3px solid var(--warn);
+      border-left: 3px dashed var(--warn);
     }
     .protocol-tier h2 {
       font-size: 1.0625rem;
@@ -607,13 +607,14 @@
     .kv {
       display: grid;
       grid-template-columns: minmax(140px, max-content) 1fr;
-      gap: 0 var(--s5);
+      column-gap: 0;
       margin: 0;
     }
     .kv dt {
       color: var(--ink-muted);
       font-size: 0.8125rem;
       padding: var(--s2) 0;
+      padding-right: var(--s5);
       border-top: 1px solid var(--hairline);
     }
     .kv dd {
