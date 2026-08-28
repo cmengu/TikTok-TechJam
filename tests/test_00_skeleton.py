@@ -43,6 +43,7 @@ IMPLEMENTED = {
     "harness.agents.coder",
     "harness.agents.tuner",
     "harness.agents.contract",
+    "harness.agents._util",
 }
 
 PRODUCT_STATES = {
