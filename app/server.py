@@ -150,7 +150,10 @@ async def api_get_heartbeat(
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

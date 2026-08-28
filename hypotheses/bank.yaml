@@ -1,0 +1,82 @@
+# Phase 7 seeded hypothesis bank (feature-side first). Priors from Backend_plan §3.
+# Patches are produced by LLMCoder at run time — entries here are proposals only.
+
+- id: bank-target-encoding
+  stage: features
+  mechanism: target-encoding
+  description: out-of-fold target encoding for sparse categoricals
+  citation: no prior
+  expected_gain: 0.02
+  expected_gpu_h: 0.15
+
+- id: bank-cross-stats
+  stage: features
+  mechanism: cross-stats
+  description: user-item cross statistics from history aggregates
+  citation: no prior
+  expected_gain: 0.018
+  expected_gpu_h: 0.12
+
+- id: bank-hist-cat
+  stage: features
+  mechanism: hist-cat
+  description: weighted category history sequence features
+  citation: no prior
+  expected_gain: 0.022
+  expected_gpu_h: 0.18
+
+- id: bank-hist-shop
+  stage: features
+  mechanism: hist-shop
+  description: shop-id history sequence with decay weights
+  citation: no prior
+  expected_gain: 0.02
+  expected_gpu_h: 0.18
+
+- id: bank-freq-bucket
+  stage: features
+  mechanism: freq-bucket
+  description: frequency bucket side features for rare ids
+  citation: no prior
+  expected_gain: 0.015
+  expected_gpu_h: 0.1
+
+- id: bank-item-cat-cross
+  stage: features
+  mechanism: item-cat-cross
+  description: item x category cross embedding interaction
+  citation: no prior
+  expected_gain: 0.017
+  expected_gpu_h: 0.14
+
+- id: bank-brand-side
+  stage: features
+  mechanism: brand-side
+  description: brand preference side features from history
+  citation: no prior
+  expected_gain: 0.016
+  expected_gpu_h: 0.12
+
+- id: bank-position-bias
+  stage: features
+  mechanism: position-bias
+  description: debias position via learned position embedding
+  citation: no prior
+  expected_gain: 0.012
+  expected_gpu_h: 0.1
+
+- id: bank-lr-warmup
+  stage: training
+  mechanism: lr-warmup
+  description: linear LR warmup for first 10% of steps
+  citation: no prior
+  expected_gain: 0.01
+  expected_gpu_h: 0.08
+
+- id: bank-emb-dim-12
+  stage: training
+  mechanism: emb-dim-12
+  description: increase embedding dimension toward prior sweet spot 8-16
+  citation: no prior
+  expected_gain: 0.011
+  expected_gpu_h: 0.09

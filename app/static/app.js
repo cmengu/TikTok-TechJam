@@ -40,6 +40,16 @@ let heartbeatSince = 0;
 const metaEl = () => document.getElementById("meta");
 const viewEl = () => document.getElementById("view");
 
+function requireView() {
+  const el = viewEl();
+  if (!el) {
+    throw new Error(
+      'Missing #view — hard-refresh (Cmd+Shift+R). Old cached index.html has no #view.',
+    );
+  }
+  return el;
+}
+
 function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
@@ -244,6 +254,15 @@ function buildPaperTickerPanel(state) {
     ${list}
     <p class="cache-tally">cache hits: ${research.hits} · misses: ${research.misses}</p>
   `;
+}
+
+function buildIncumbentHtml(state) {
+  const id = state.incumbent;
+  if (id == null) return `<li>${escapeHtml("— none yet")}</li>`;
+  const node = state.nodes[id];
+  const hyp = node?.hypothesisId != null ? String(node.hypothesisId) : "?";
+  const st = node?.state != null ? String(node.state) : "?";
+  return `<li>${escapeHtml(`#${id} ${hyp} [${st}]`)}</li>`;
 }
 
 function renderDashboard(state) {
@@ -507,10 +526,10 @@ function buildNotHashedTier(run) {
 function renderProtocol(state) {
   const protocol = state.run.protocol;
   if (!protocol) {
-    viewEl().innerHTML = `<p class="waiting">Waiting for run_started…</p>`;
+    requireView().innerHTML = `<p class="waiting">Waiting for run_started…</p>`;
     return;
   }
-  viewEl().innerHTML = buildHashedTier(protocol) + buildNotHashedTier(protocol.run);
+  requireView().innerHTML = buildHashedTier(protocol) + buildNotHashedTier(protocol.run);
 }
 
 // navigator.clipboard is only defined in a secure context. 127.0.0.1 counts,
@@ -540,7 +559,7 @@ function selectText(el) {
 }
 
 function initClickToCopy() {
-  viewEl().addEventListener("click", (e) => {
+  requireView().addEventListener("click", (e) => {
     const target = e.target.closest(".hash-value");
     if (!target || !target.dataset.copy) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -647,7 +666,7 @@ function renderHeader(state) {
 
 function renderStub(label) {
   return () => {
-    viewEl().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
+    requireView().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
   };
 }
 

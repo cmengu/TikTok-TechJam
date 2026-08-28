@@ -115,6 +115,9 @@ export const initial = () => ({
   submissions: [],
   interventions: [],
 
+  /** Current incumbent node id (null until first promotion / incumbent_changed). */
+  incumbent: null,
+
   log: [],
   feed: [],
   unknown: {},
@@ -396,6 +399,9 @@ export function reduce(state, ev) {
         endReason: ev.reason,
         status: "ended",
       };
+      if (ev.incumbent != null) {
+        next.incumbent = ev.incumbent;
+      }
       break;
     }
 
@@ -411,7 +417,7 @@ export function reduce(state, ev) {
     // verdict/submission_written/intervention below) — no field invented.
     case "incumbent_changed": {
       next.incumbentChanges = [...state.incumbentChanges, ev];
-      next.incumbent = ev.node;
+      next.incumbent = ev.node ?? state.incumbent;
       break;
     }
 

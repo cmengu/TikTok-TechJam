@@ -1,180 +1,184 @@
-# Handoff — Phase 5 (measurement) · 27 Aug
+# Handoff — Phase 7 (agents) · 28 Aug
 
-You are picking up after Phase 4. Planning is frozen; do not re-open it.
-Decisions that are still open go in the Phase-5 PR description, not in a new
-plan doc. **Read this page first. Do not execute code until you have confirmed
-the ladder-scope lock with the human (see §Conflicts below) — Plan_delta §4
-“minimal-first” vs Build_phases Redline ladder.**
+You are picking up after Phase 6. Planning is frozen; do not re-open it.
+Decisions that are still open go in the Phase-7 PR description, not in a new
+plan doc. **Read this page first.**
 
 ## Read these, in this order
 
 1. This file.
-2. `context/Plan_delta.md` — §1 schema growth; §4 minimal-first ladder note
-   (may conflict with Build_phases — confirm before coding); §2 ranking is
-   out of scope until phase 6.
-3. `context/Backend_plan.md` §6 — measurement / noise / ladder intent (older;
-   where it fights the Redline, the Redline wins once locked).
-4. `context/Build_phases.html` §Phase 5 (`#p5`) — **interfaces, constants,
-   named tests, gate.** This is the detailed build page until you write the
-   Phase-5 page into `Build_steps.md`.
-5. `context/Build_steps.md` — Phase 1 is the page format. Write the **Phase 5**
-   page in that format in the same PR; never write Phase 6+ ahead.
+2. `context/Plan_delta.md` — §2 ranking arithmetic (queue score from verdict
+   events; LLM never writes priority); §3 crash recovery = replay (`Tree.rebuild`
+   shipped in phase 6; `resume` CLI still deferred).
+3. `context/Backend_plan.md` §5 (Optuna) and §8 (agents / brief / cache).
+4. `context/Build_phases.html` §Phase 7 (`#p7`) — **interfaces, named tests,
+   gate.** Detailed build page until you write the Phase-7 page into
+   `Build_steps.md`.
+5. `context/Build_steps.md` — Phase 6 page is done. Write the **Phase 7** page
+   in that format in the same PR; never write Phase 8+ ahead.
+6. Skim `harness/tree.py` + `harness/__main__.py` — Phase 7 **swaps** the coder
+   and queue source; it does not rewrite the ladder or measure.
 
-## Current state (merged to main)
+## Current state
 
 Confirm with `git log origin/main --oneline -8`. As of this handoff:
 
-- **Phases 0–4 on main**, including:
-  - Phase-3 review fix (`fix/phase-3-review` / PR #8): four planted effects,
-    capability-safe `candidate/` at repo root, mid-training fails.
-  - Phase 4 runner + `run-one` CLI + app event-log / follow-newest-run.
-- **Open / not required for Phase 5:** `fix/phase-2-review` (SSE partial-line,
-  runs-path, fake-wipe, lastSeq) — independent; do not block on it.
+- **Phases 0–5 on main** (measure, runner, synthetic, events, app shell).
+- **Phase 6 on branch `phase-6-tree` / PR #12** — merge (or rebase onto updated
+  `main`) before starting phase 7. Includes:
+  - `harness/tree.py` — `TRANSITIONS`, `Workspace`, `Queue`, `family_stats`,
+    `Tree.step` / `run`, `rebuild()` fold.
+  - `harness/__main__.py` — `python -m harness run …` (no `resume` verb).
+  - `hypotheses/hand.yaml` + `hypotheses/patches/*.diff` (five FEATURES patches).
+  - `tests/test_06_tree.py` (15 unit) + `tests/test_06_loop.py` (`slow`).
+  - App: `incumbent_changed` → `state.incumbent`; Incumbent panel on dashboard.
+  - `IMPLEMENTED` includes `"harness.tree"`.
+- **Uncommitted fixes on `phase-6-tree` (commit before merge or fold into PR
+  #12):**
+  - `Workspace.commit_node` resolves repo-relative patch paths before `git apply`
+    (hand.yaml paths like `hypotheses/patches/base.diff` — apply cwd is
+    `runs/<id>/workspace`, not repo root).
+  - `app/server.py` — `Cache-Control: no-store` on `/` (stale cached
+    `index.html` without `#view` caused `Cannot set properties of null`).
+  - `app/static/app.js` — `requireView()` guard with a clear error message.
 
 ### What you inherit
 
 | Area | Location | Notes |
 |---|---|---|
-| Synthetic task | `harness/tasks/synthetic.py` | Four planted cols: `f_true`≈0.65, `f_marginal`≈0.56, `f_zero`, `f_leak` (1M, clicked CVR AUC). `harness_only/` for holdout + digests. `score()` is the only numeric authority; rejects duplicate `sample_id`. |
-| Candidate | `candidate/template.py`, `candidate/report.py`, `candidate/rules.jsonl` | Outside harness package. `import report`; `report.result({}, preds_path=…)`; checkpoints = bytes. Runner **copies** both into workspace and runs `[python, "template.py"]`. |
-| Runner | `harness/runner.py` | `LocalBackend`, classify/recover/stall, `Runner.run` → `RunResult` with `task.score` metrics. |
-| Events | `harness/events.py` | Emit `measurement` / `verdict` / `rule_trip`; no invented states. |
-| Stub | `harness/measure.py` | **Outdated stub** (old `Band` shape). Replace to match Build_phases `#p5`, do not implement the stub’s fields as-is. |
-| Tests | `pytest` from repo root (`.venv`) | Default: `addopts = -m 'not slow'`. Scorecard is `@pytest.mark.slow`. |
+| Tree loop | `harness/tree.py` | Greedy + fork-on-stall, lessons file, `Coder` seam. **Do not rewrite** except passing `LLMCoder` and a queue-refill hook. Seeds locked **1,2,3** (`SCREEN_SEED=1`, `FULL_SEEDS=(1,2,3)`). |
+| Measure | `harness/measure.py` | Still owns verdicts. Phase 7 **adjudicates** `attribution=` (hand loop used `"clear"`). |
+| Runner | `harness/runner.py` | `run_cfg["candidate_src"]` points at git workspace after phase 6. |
+| Hand demo | `hypotheses/hand.yaml` | Fallback demo; keep working. Phase 7 adds LLM path alongside. |
+| Agent stubs | `harness/agents/*.py` | `LLM`, `FakeLLM`, `LLMCoder`, `propose`, `tune`, `brief`, `cache` — all raise. |
+| CLI | `harness/__main__.py` | `run` wires hand.yaml today; phase 7 adds researcher + real coder path. |
+| Tests | `pytest` from repo root (`.venv`) | `harness.agents` in skeleton `IMPLEMENTED` set already; extend per module as you ship. |
 
-App watch: `python -m app.server` / `python -m harness.fake_run` / `python -m harness run-one …`.
+App watch:
 
-## What to build now — Phase 5 only
+```bash
+python -m app.server
+python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml
+# open: http://127.0.0.1:8000/?run=<run_id>#/dashboard
+```
+
+**Hard-refresh** (Cmd+Shift+R) if the UI is blank — old cached HTML has no `#view`.
+
+## What to build now — Phase 7 only
 
 | File | Role |
 |---|---|
-| `harness/measure.py` | Constants, pure fns, `Band`, `Measure` (calibrate / verdict / holdout_report / maybe_refresh) |
-| `tests/test_05_measure_pure.py` | Named pure tests from Build_phases `#p5` |
-| `tests/test_05_scorecard.py` | `@pytest.mark.slow` — real runner, ~200K synthetic |
-| `context/Build_steps.md` | Phase-5 page (Phase-1 format) |
+| `harness/agents/llm.py` | `LLM` protocol, `FakeLLM`, adapters, `log_usage` |
+| `harness/agents/researcher.py` | `propose()` — schema-validated `Hypothesis`, bank + lessons |
+| `harness/agents/coder.py` | `LLMCoder` — unified diff, apply retry, capability-safe prompt |
+| `harness/agents/tuner.py` | Optuna screen-rung tuner → shortlist of knob hyps |
+| `harness/agents/brief.py` | `compose()` — deterministic brief from organisers text |
+| `harness/agents/cache.py` | Query cache keyed by normalised query + protocol_hash |
+| `hypotheses/bank.yaml` | Seeded bank (feature-side first, expected gains) |
+| `tests/test_07_agents.py` | Named tests — **FakeLLM only**, no network |
+| `tests/test_07_tuner.py` | Named tuner tests — fake runner |
+| `context/Build_steps.md` | Phase-7 page (Phase-1 format) |
 
-Extend `IMPLEMENTED` with `"harness.measure"` in this PR.
+Wire into `harness run` (or a thin flag): swap `PatchCoder` → `LLMCoder`, fill
+queue from `propose()` instead of (or after) `hand.yaml`. **Minimal `tree.py`
+changes** — coder injection + queue-refill hook only.
 
-**Out of scope:** choosing the next node / queue / git workspace (phase 6);
-attribution *adjudication* logic that invents labels (phase 7 hands
-`attribution=` in — measure only gates on it); phase-10 post-check rulebook;
-BH / bootstrap / Student-t / DiD (removed 27 Aug — do not reintroduce);
-Ali-CCP / ingest (phase 8); rewriting runner or planted-effect *bars*
-(if scorecard fails, retune phase-3 **weights**, never loosen constants).
+Extend `IMPLEMENTED` with `harness.agents` (and submodules as they land) in this PR.
 
-### Interfaces (from Build_phases `#p5` — implement these)
+**Out of scope:** network calls in tests; tuning on any rung but screen; more
+than six knobs; Optuna dashboard / Terminator / multi-objective; Ali-CCP ingest
+(phase 8); `harness resume` (still deferred — `Tree.rebuild` exists); MCTS /
+bandit; loosening Redline constants; large `tree.py` refactors.
+
+### Interfaces (from Build_phases `#p7` — implement these)
 
 ```python
-# constants — each with a "# Redline §6 Ladder: …" comment
-SIGMA_UNSTABLE, SCREEN_REJECT_DELTA, SCREEN_ADVANCE_SD, PROMOTE_FLOOR,
-PROMOTE_Z_OVER_SQRT_K, REPLICATE_K, LEAK_TRIGGER_BANDS, LEAK_SINGLE_FEATURE_AUC,
-LADDER_ETA, HOLDOUT_VISITS_MAX, HOLDOUT_SEEDS, INCONCLUSIVE_REVISITS,
-INCONCLUSIVE_PRIORITY, RHO_REFRESH_AFTER, STALL_SD_MULT
+# llm.py
+class LLM(Protocol):
+    def complete(self, role: str, prompt: str, schema: dict | None) -> tuple[Any, Usage]
+class FakeLLM:  # scripted per role; raises if exhausted
+def log_usage(events, node, slice, usage) -> None
 
-@dataclass
-class Band:
-    sigma_screen, sigma_full, sigma_fix, ratio, rho
-    sd_delta_screen, sd_delta_full, bar
-    source: Literal["fixed_pair","refreshed"]; n_replicated: int
+HYPOTHESIS_SCHEMA = {stage ∈ Stage, mechanism: slug, description,
+                     citation | "no prior", expected_gain, expected_gpu_h}
 
-def calibrate(screen_per_seed, full_per_seed, fixed_seed_pair) -> Band
-def refresh_rho(band, per_seed_deltas) -> Band
-def screen_verdict(delta, band) -> Literal["rejected","replicating","inconclusive"]
-def promote_bar(band) -> float
-def replicate_verdict(deltas, band) -> Literal["pass","fail_sign","fail_mean"]
-def leak_audit(mean_delta, band, single_feature_aucs) -> list[str]
-def ladder_accepts(best_reported, new_holdout, eta=LADDER_ETA) -> bool
-def inconclusive_next(prior_inconclusives) -> Literal["requeue","retire"]
-def combine_inconclusive(a, b) -> Literal["re_measure"]  # never "pass"
+# researcher.py
+def propose(llm, brief, incumbent_summary, family_stats, lessons, cache) -> Hypothesis | None
 
-class Measure:
-    def calibrate_from_runs(self, runner, baseline_node, ...) -> Band
-    def verdict(self, node, results, incumbent, rung, attribution=None) -> Verdict
-    def holdout_report(self, node, runner, incumbent, best_reported) -> HoldoutReport
-    def maybe_refresh(self) -> Band | None
+# coder.py
+class LLMCoder(Coder):
+    def materialise(self, hyp, incumbent, traceback) -> Path
+    # prompt: hyp + template source + traceback only — no holdout/protocol paths
+    # git apply fail → one retry with apply error as traceback
+
+# tuner.py  (optuna==4.9.*)
+def tune(node, knob_space, runner, events, budget, screen_seed) -> list[Hypothesis]
+    # trial nodes kind="trial"; screen rung only; top-3 shortlist, never promoted
 ```
-
-Ladder in one line: **smoke** (contract only) → **screen** (one paired seed) →
-**replicate** (k=3 full, all Δ>0 and mean ≥ bar, attribution clear). **Holdout
-is not a rung** — run-level, ≤2 visits, candidate-side only; decides the
-*reported* number, never the incumbent.
 
 ### Named tests
 
-**Pure — `tests/test_05_measure_pure.py`** (σ_screen=0.015, σ_full=0.012 unless stated):
-`test_calibrate_columns`, `test_calibrate_unstable_raises`, `test_screen_table`,
-`test_promote_bar`, `test_replicate_k3`, `test_replicate_refuses_screen_rung`,
-`test_leak_trigger`, `test_attribution_gate`, `test_ladder_eta`,
-`test_holdout_budget`, `test_holdout_candidate_side_only`,
-`test_inconclusive_revisits`, `test_inconclusive_never_stacks`,
-`test_verdict_pairs_by_seed`, `test_rho_refresh`, `test_verdict_emits_event`.
+**`tests/test_07_agents.py` (FakeLLM):**  
+`test_valid_proposal_becomes_hypothesis`, `test_missing_expected_gain_rejected`,
+`test_bad_stage_rejected`, `test_bank_seeds_first_proposals`,
+`test_research_events_emitted`, `test_coder_applies_diff`,
+`test_coder_retries_on_apply_failure`, `test_coder_prompt_capability`,
+`test_cache_hit_same_hash_miss_other_hash`, `test_brief_deterministic`.
 
-**Slow scorecard — `tests/test_05_scorecard.py`** (real runner, ~200K synthetic):
-`test_baseline_calibrates`, `test_zero_feature_not_promoted`,
-`test_true_feature_promoted` (`FEATURES=base,f_true`, attribution clear),
-`test_marginal_feature_not_rejected` (`base,f_marginal` → promoted|inconclusive, never rejected),
-`test_leak_feature_trips`, `test_holdout_never_in_ladder` (scorecard path emits
-zero holdout measurements), `test_scorecard_printed`
-(`FP=0 FN=0 marginal=<…> leak=caught`).
+**`tests/test_07_tuner.py` (fake runner):**  
+`test_converges`, `test_trial_events`, `test_incumbent_first`,
+`test_shortlist_not_promoted`, `test_failed_trial_marked`,
+`test_small_budget_no_study`.
 
 ### Gate
 
-Pure tests green; slow scorecard prints `FP=0 FN=0 … leak=caught`. Calibration
-`Band` visible as a `measurement` event in the app. Record nominal false-promotion
-rate (~3%) in README as the gate page asks. If scorecard fails: fix planted
-size in phase 3 or arithmetic here — **never loosen a Redline constant**.
+All tests green. Manual: one real LLM smoke call per role (not in tests), then
+loop on synthetic with real researcher for ~three nodes; Research events with
+token costs visible in the app.
 
-## Conflicts to resolve with the human BEFORE coding
+## Carried locks (do not re-open)
 
-| Topic | Plan_delta §4 | Build_phases `#p5` (Redline 27 Aug) |
-|---|---|---|
-| Scope | “rung-0 band, reject-only screen, k=3 → promising”; defer holdout/DiD confirm, BH, … | Full Redline: screen + replicate + leak + attribution gate + `holdout_report` (≤2) + ρ refresh |
-| Stub `Band` | n/a | New fields (`sigma_screen`/`sigma_full`/…); **delete** old stub shape |
-| Holdout | Deferred as confirm *rung* | Not a rung; run-level budgeted visit — still in Phase 5 API |
+| Topic | Decision |
+|---|---|
+| Seeds | **1,2,3** everywhere (screen paired seed **1**). `#p6`'s `0,1,2` is stale. |
+| `resume` CLI | **Still deferred.** `Tree.rebuild(events)` exists; no `orphaned` class yet. |
+| Queue priority | `family_stats` arithmetic only; LLM never writes priority. |
+| Attribution | Phase 7 owns adjudication; pass real `attribution=` into `Measure.verdict`. |
+| Capability | Coder/researcher prompts never see holdout, `protocols/`, `measure.py`, rulebook. |
+| Patch paths | Diffs may be repo-relative in yaml; `Workspace.commit_node` must resolve to `REPO_ROOT` before `git apply`. |
 
-**Recommended default to propose:** implement the **Redline / Build_phases `#p5`**
-surface (pure tests + scorecard). Treat Plan_delta §4 as “no BH / no DiD /
-no bootstrap” (already absent from `#p5`), not as permission to drop
-`holdout_report` or leak/attribution. Do not invent a third ladder.
+## Operational notes (from phase-6 demo runs)
 
-Also honour locks from prior phases:
-
-- Metrics only from `task.score` / `RunResult.metrics` — never child self-report.
-- Capability: never put holdout / `harness_only` / `protocols/` on the child env;
-  candidate scripts stay under repo `candidate/` and are copied into workspace.
-- Failure class names stay stub vocabulary (`cuda_oom`, …, `stall`) — measure
-  does not reclassify runner failures.
-- Planted bands are locked: if `f_true` fails promote or `f_marginal` is
-  rejected, retune weights in synthetic generate — **never** widen test bands
-  or lower `PROMOTE_FLOOR`.
+1. **CLI:** one line — `--hypotheses` must be on the same line as its value:
+   ```bash
+   python -m harness run protocols/synthetic.yaml --hypotheses hypotheses/hand.yaml
+   ```
+2. **Calibrate is slow** (~minutes on 200K CPU) before the tree dequeues nodes;
+   events stall after `node_created` baseline + `hypothesis_queued` lines — normal.
+3. **Frontend blank / `innerHTML` null:** browser cached pre-shell `index.html`
+   (no `#view`). Hard-refresh; ensure server serves current `app/static/index.html`.
+4. **`git apply` patch not found:** fixed by resolving paths in `commit_node`; ensure
+   that fix is merged before relying on hand patches in a fresh run.
+5. **Record a green demo run id** after slow loop passes — judges' fallback.
 
 ## Working rules
 
-- Branch `phase-5-measure` off **updated main** (with PR #8 already merged),
-  green → PR. Never stack on an unmerged fix branch.
-- Event log is the only seam; `verdict` / `measurement` / `rule_trip` /
-  `incumbent_changed` as specified; no node state `"failed"`.
-- Pure functions first; `Measure` only wraps them + emits. Fake runner for
-  holdout budget / seed-pairing tests; real runner only in `@pytest.mark.slow`
-  scorecard.
-- CPU only; synthetic task only. Extend `fake_run.py` only if new event fields
-  must show in the app before a real calibrate.
-- `pytest` skips `slow` by default; run scorecard explicitly:
-  `pytest tests/test_05_scorecard.py -m slow`.
+- Branch `phase-7-agents` off **updated main** (with phase 6 merged), green → PR.
+- All agent tests use `FakeLLM` / fake runner — no network in pytest.
+- Real LLM adapters are thin; smoke manually once per role before demo.
+- Event log is the only seam; additive types OK (Plan_delta §1).
+- Do not change `tree.py` beyond coder swap + queue-refill hook.
 
 ## What NOT to do
 
-- Do not start Phase-6 Build_steps / `tree.py`.
-- Do not reintroduce BH, bootstrap CIs, Student-t tables, or DiD.
-- Do not loosen Redline constants or planted-effect AUC bands to green the
-  scorecard.
-- Do not put holdout paths in `candidate_env` or teach the child to score.
-- Do not “helpfully” rename failure classes or implement phase-7 attribution
-  LLM — accept `attribution=` as an argument.
+- Do not implement `harness resume` or `"orphaned"` in this PR.
+- Do not retune Redline measure constants or planted AUC bands.
+- Do not put holdout in child env or teach the candidate to score.
+- Do not implement MCTS, UCT, bandit, or ensembling.
+- Do not have the LLM write queue priorities that bypass `family_stats`.
+- Do not start phase 8 Ali-CCP ingest.
 
-## Hands forward after Phase 5
+## Hands forward after Phase 7
 
-Phase 6 calls `Measure.verdict` after every screen/replicate batch and
-`holdout_report` at most twice per run. The state a node moves to is decided
-here and only here. Phase 7 later supplies real attribution labels; phase 10
-adds post-check rules beyond leak_audit.
+Phase 8 swaps the **task** (`AliCCPTask`) under an unchanged loop. Phase 9 adds
+convergence ε/N stop. A later PR may add `resume` on top of `Tree.rebuild`.

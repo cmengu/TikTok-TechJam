@@ -37,10 +37,10 @@ EVENT_TYPES = (
     "submission_written",
     "intervention",
     "run_ended",
-    # Phase 5 (Plan_delta §1: additive types, no schema bump)
     "incumbent_changed",
     "prediction",
 )
+# Phase 5 added incumbent_changed + prediction (Plan_delta §1; no schema bump).
 STATES = (
     "screening",
     "running",
