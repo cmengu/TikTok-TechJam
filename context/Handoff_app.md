@@ -958,33 +958,38 @@ Ordinary empty states — `.panel-empty`, `.waiting`, `.stub` — are italic and
 from "deliberately withheld". Diluting dashed across both would cost the
 honesty rule its only visual signal.
 
-Tinted backgrounds have exactly two sanctioned uses: `.dossier-rule-trip`
-(--crit-wash) and `tr.metric-highlight` (--warn-wash). Nothing else in the
-app may take a tint. The rule trip's fill plus stripe is what keeps it the
-loudest element on any screen.
+Tinted backgrounds have exactly three sanctioned uses: `.dossier-rule-trip`
+(--crit-wash), `tr.metric-highlight` (--warn-wash), and `.worker-list
+li.worker-stale` (--crit-wash, a stale worker on the Dashboard). Nothing else
+in the app may take a tint. The rule trip's fill plus stripe is what keeps it
+the loudest element on any screen; the stale worker never contests that,
+because it renders on the Dashboard, which never shows a rule trip — the two
+never compete for "loudest element".
+
+Tint means persistent state, not transient feedback. A condition that stays
+true until something changes it earns a fill. Feedback that fades on its own
+— a click flash, a copy confirmation — gets border and colour only, never
+fill.
 
 Anything added later that is genuinely provisional should be dashed and added
-to the table above. Anything else should not be.
+to the table above. Anything that is persistent, harness-reported state
+should be tinted and added to the list above. Anything else should not be.
 
-**Checkpoint 5 audit exception — the tint rule is currently violated.** Two
-more selectors carry a wash background beyond the two sanctioned ones, both
-confirmed live (not just read from CSS):
-`.worker-list li.worker-stale` (--crit-wash, index.html:276) — caught live by
-polling the Dashboard during an active fake run until a real >5s heartbeat gap
-occurred; and `.hash-value.copied` (--pos-wash, index.html:738) — confirmed by
-a real click on a Protocol hash chip. Their triggers are ordinary app state
-(app.js:80-95 staleness check; app.js:560-561 the 800ms copy flash), not dead
-code. Per checkpoint 5's instructions these were named rather than fixed — CSS
-tint removal is a design call for a later checkpoint, not this one.
+**Checkpoint 5's audit findings are closed, not just recorded.** All three
+were resolved at batch 5 checkpoint 1:
 
-A third candidate, `.chip-incumbent` (--pos-wash, index.html:465), turned out
-**not** to be live — this is why the check has to run against the DOM and not
-just the stylesheet. `.chip` is declared later in the file (index.html:697)
-with `background: var(--sunken)` and equal selector specificity, so on any
-element carrying both classes the later rule wins the cascade and silently
-overrides the incumbent's intended green wash back to a neutral sunken chip.
-Confirmed on a live incumbent badge: computed `background-color` is
-`--sunken`, not `--pos-wash`. This is a separate, pre-existing bug (a dead
-rule masquerading as live, the mirror image of checkpoint 4a's dead
-`:focus-visible` rule) and is left unfixed for the same reason — not this
-checkpoint's scope.
+- `.worker-list li.worker-stale` — blessed as the third sanctioned tint,
+  above. No CSS change; it was already correct.
+- `.hash-value.copied` (index.html:738-741) — its `background: var(--pos-wash)`
+  declaration is removed. It is an 800ms feedback flash (app.js:560-561), not
+  a state, so it now reads `border-color: var(--pos); color: var(--pos);`
+  instead of filling.
+- `.chip-incumbent` (index.html:465-468) — its dead `background: var(--pos-wash)`
+  declaration is deleted outright rather than fixed to actually render. `.chip`
+  (index.html:697-698) declares `background: var(--sunken)` with equal
+  specificity and was always winning the cascade on any element carrying both
+  classes, so the wash never rendered. The decision is to keep the incumbent
+  badge a neutral pill on purpose: it sits on the Run screen beside the rule
+  trip, and a second tinted element there would cost the rule trip its status
+  as the loudest thing on the screen. `color: var(--pos)` and `font-weight: 600`
+  remain — the badge still reads as the incumbent, just without a fill.
