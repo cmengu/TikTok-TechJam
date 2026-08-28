@@ -209,13 +209,19 @@
     .dashboard-grid {
       display: grid;
       gap: var(--s4);
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    .dashboard-grid > section {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-panel);
+      padding: var(--s5);
     }
     .dashboard-grid section h2 {
       font-size: 1.0625rem;
       font-weight: 500;
       letter-spacing: 0;
-      margin: 0 0 0.5rem;
+      margin: 0 0 var(--s4);
       color: var(--ink);
     }
     .dashboard-grid ul {
@@ -232,10 +238,26 @@
       font-style: italic;
       font-weight: 400;
     }
+    .worker-list li {
+      padding: var(--s2) 0;
+    }
     .worker-list li.worker-stale {
       background: var(--crit-wash);
       border-radius: var(--r-ctl);
-      padding-left: 0.35rem;
+      padding: var(--s2) var(--s3);
+    }
+    .event-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .event-list li {
+      padding: var(--s2) 0;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 0.85rem;
+    }
+    .event-list li:last-child {
+      border-bottom: 0;
     }
     .score-table {
       border-collapse: collapse;
@@ -248,38 +270,59 @@
       padding: 0.25rem 1rem 0.25rem 0;
     }
     .score-table thead th {
-      color: var(--ink-muted);
-      font-weight: 600;
-      font-size: 0.8rem;
+      font-size: 0.6875rem;
       text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-weight: 500;
+      color: var(--ink-muted);
+      padding-bottom: var(--s2);
+      border-bottom: 1px solid var(--hairline);
+    }
+    .score-table td {
+      padding: var(--s2) var(--s3) var(--s2) 0;
+      border-bottom: 1px solid var(--hairline);
+      vertical-align: baseline;
+    }
+    .score-table tr:last-child td {
+      border-bottom: 0;
+    }
+    .score-value {
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
     }
     .score-value.score-above {
       color: var(--pos);
-      font-weight: 700;
+      font-weight: 500;
     }
     .score-value.score-below {
       color: var(--crit);
-      font-weight: 700;
+      font-weight: 500;
     }
     .score-inconclusive {
       color: var(--ink-muted);
       font-style: italic;
       font-weight: 600;
     }
-    .band-note {
+    .panel-note,
+    .band-note,
+    .cache-tally,
+    .derived-note {
+      margin-top: var(--s3);
+      font-size: 0.8125rem;
       color: var(--ink-muted);
-      font-size: 0.8rem;
     }
-    .panel-note {
-      margin: 0.5rem 0 0;
-      font-size: 0.85rem;
+    .hdr-dim.panel-note {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--ink-muted);
+      border: 1px dashed var(--hairline-hi);
+      border-radius: var(--r-ctl);
+      padding: 0.25rem 0.5rem;
+      display: inline-block;
     }
     .chip-derived {
-      background: var(--warn-wash);
+      background: var(--sunken);
       color: var(--warn);
-    }
-    .derived-note {
-      margin: 0 0 0.6rem;
     }
     .ticker {
       list-style: none;
@@ -287,29 +330,24 @@
       padding: 0;
       display: flex;
       flex-wrap: wrap;
-      row-gap: 0.3rem;
+      row-gap: var(--s2);
     }
     .ticker li {
       display: inline-block;
-      margin-right: 2.5rem;
+      margin-right: var(--s5);
+      font-size: 0.85rem;
       white-space: normal;
       overflow-wrap: break-word;
     }
     .ticker li::after {
       content: "•";
-      margin-left: 2.5rem;
+      margin-left: var(--s5);
       color: var(--ink-faint);
     }
     .ticker li:last-child::after {
       content: "";
       margin-left: 0;
     }
-    .cache-tally {
-      margin: 0.5rem 0 0;
-      font-size: 0.85rem;
-      color: var(--ink-muted);
-    }
-
     .stub {
       color: var(--ink-muted);
     }
@@ -599,15 +637,26 @@
       background: var(--warn-wash);
     }
     .chip {
-      display: inline-block;
-      padding: 0.05rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.8rem;
       background: var(--sunken);
       color: var(--ink-muted);
+      border-radius: 999px;
+      padding: 0.1rem 0.6rem;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.4rem;
+    }
+    .chip::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: 0 0 6px;
+      transform: translateY(-1px);
     }
     .chip-null {
-      background: var(--crit-wash);
+      background: var(--sunken);
       color: var(--crit);
     }
     .hash-value {
