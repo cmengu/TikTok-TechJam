@@ -2,6 +2,7 @@
 
 import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
+import { buildTree } from "./tree.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -38,10 +39,9 @@ let eventsSince = 0;
 let heartbeatSince = 0;
 
 const metaEl = () => document.getElementById("meta");
-const viewEl = () => document.getElementById("view");
 
 function requireView() {
-  const el = viewEl();
+  const el = document.getElementById("view");
   if (!el) {
     throw new Error(
       'Missing #view — hard-refresh (Cmd+Shift+R). Old cached index.html has no #view.',
@@ -256,18 +256,9 @@ function buildPaperTickerPanel(state) {
   `;
 }
 
-function buildIncumbentHtml(state) {
-  const id = state.incumbent;
-  if (id == null) return `<li>${escapeHtml("— none yet")}</li>`;
-  const node = state.nodes[id];
-  const hyp = node?.hypothesisId != null ? String(node.hypothesisId) : "?";
-  const st = node?.state != null ? String(node.state) : "?";
-  return `<li>${escapeHtml(`#${id} ${hyp} [${st}]`)}</li>`;
-}
-
 function renderDashboard(state) {
   const nowMs = Date.now();
-  viewEl().innerHTML = `
+  requireView().innerHTML = `
     <div class="dashboard-grid">
       <section>
         <h2>Now running</h2>
@@ -576,6 +567,107 @@ function initClickToCopy() {
   });
 }
 
+// --- Run tree: recursive render over buildTree(state) (tree.js — pure, no
+// DOM). Handoff_app.md, "Task 7". The dossier beside the tree is a
+// placeholder; building it is Task 8, explicitly out of scope here. ---
+
+// "#/run/<id>" -> "<id>" (as a string; node ids from node_created come over
+// the wire as numbers, but plain-object property access coerces either way,
+// so state.nodes[selectedId] and String(node.id) === selectedId both work
+// without parsing). "#/run" alone -> null (nothing selected yet).
+function selectedRunNodeId(path) {
+  const m = /^run\/(.+)$/.exec(path);
+  return m ? m[1] : null;
+}
+
+// Render key for the "run" route: only the things this screen actually
+// displays (which nodes exist, each one's verbatim state, the incumbent,
+// and which node is selected) should force a rebuild. Everything else that
+// flows through the store — heartbeats, measurement ticks, cache lookups —
+// must not re-render the tree. Same pattern as Protocol's key
+// (Handoff_app.md, batch 1), just keyed on Run's own slice of state plus
+// the selected id, since selection lives in the URL, not in state.
+function runRouteKey(state, path) {
+  const nodeSig = state.nodeOrder
+    .map((id) => `${id}:${state.nodes[id] ? state.nodes[id].state : "?"}`)
+    .join(",");
+  return `${path}|${nodeSig}|${state.incumbent}`;
+}
+
+function renderTreeNode(entry, state, selectedId) {
+  const { node, children, orphan } = entry;
+  const isIncumbent = state.incumbent != null && String(state.incumbent) === String(node.id);
+  const isSelected = selectedId != null && String(selectedId) === String(node.id);
+  const classes = ["tree-node"];
+  if (isSelected) classes.push("tree-node-selected");
+  if (orphan) classes.push("tree-node-orphan");
+  const hypHtml =
+    node.hypothesisId != null
+      ? escapeHtml(String(node.hypothesisId))
+      : chip("no hypothesis id", "chip-null");
+  const badges = [];
+  if (isIncumbent) badges.push(chip("incumbent", "chip-incumbent"));
+  if (orphan) badges.push(chip("orphan", "chip-null"));
+  const childrenHtml = children.length
+    ? `<ul class="tree-children">${children.map((c) => renderTreeNode(c, state, selectedId)).join("")}</ul>`
+    : "";
+  return `
+    <li>
+      <div class="${classes.join(" ")}" data-node-id="${escapeAttr(String(node.id))}">
+        <span class="tree-node-id">#${escapeHtml(String(node.id))}</span>
+        <span class="tree-node-hyp">hyp ${hypHtml}</span>
+        <span class="tree-node-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
+        <span class="tree-node-state">${escapeHtml(String(node.state ?? "?"))}</span>
+        ${badges.join(" ")}
+      </div>
+      ${childrenHtml}
+    </li>
+  `;
+}
+
+function renderRun(state, path) {
+  const selectedId = selectedRunNodeId(path);
+  const roots = buildTree(state);
+  const treeHtml = roots.length
+    ? `<ul class="tree-root">${roots.map((r) => renderTreeNode(r, state, selectedId)).join("")}</ul>`
+    : `<p class="panel-empty">no nodes yet</p>`;
+
+  // An unknown node id must render "no such node" inside the Run screen —
+  // never a blank page, never a fall-through to Dashboard.
+  let dossierHtml;
+  if (selectedId == null) {
+    dossierHtml = `<p class="panel-empty">select a node</p>`;
+  } else if (!Object.prototype.hasOwnProperty.call(state.nodes, selectedId)) {
+    dossierHtml = `<p class="panel-empty">no such node</p>`;
+  } else {
+    dossierHtml = `<p class="panel-empty">dossier — Task 8</p>`;
+  }
+
+  requireView().innerHTML = `
+    <div class="run-grid">
+      <section class="run-tree-panel">
+        <h2>Run tree</h2>
+        ${treeHtml}
+      </section>
+      <section class="run-dossier-panel">
+        <h2>Node dossier</h2>
+        ${dossierHtml}
+      </section>
+    </div>
+  `;
+}
+
+// Delegated on #view (a stable element across renders — only its innerHTML
+// changes), same pattern as initClickToCopy, so this is wired once in
+// main() rather than re-attached on every render.
+function initRunTreeClicks() {
+  requireView().addEventListener("click", (e) => {
+    const target = e.target.closest(".tree-node[data-node-id]");
+    if (!target) return;
+    location.hash = `#/run/${encodeURIComponent(target.dataset.nodeId)}`;
+  });
+}
+
 // --- header strip: visible on every route. Reads only from reduced state,
 // plus wall-clock time for the elapsed figure — the reducer stays pure (no
 // Date.now()), so the view owns the one clock that needs it. Handoff_app.md,
@@ -684,7 +776,19 @@ const ROUTES = [
   { hash: "brief", render: renderStub("Brief") },
   { hash: "research", render: renderStub("Research") },
   { hash: "hypotheses", render: renderStub("Hypotheses") },
-  { hash: "run", render: renderStub("Run") },
+  // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
+  // hash strings exactly, so "#/run/3" matched nothing and fell through to
+  // the DEFAULT_ROUTE (Dashboard). match() below is what fixes that; hash
+  // stays "run" for both so the sidebar highlight and key still work as a
+  // single route. key includes the selected id (from path, not state) so
+  // clicking a different node still forces a render despite the hash
+  // staying "run".
+  {
+    hash: "run",
+    match: (path) => path === "run" || path.startsWith("run/"),
+    render: renderRun,
+    key: runRouteKey,
+  },
   { hash: "audit/replication", render: renderStub("Audit — Replication") },
   { hash: "audit/cost", render: renderStub("Audit — Cost") },
   { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
@@ -717,16 +821,18 @@ function renderRoute() {
     location.hash = `#/${redirect}`; // hashchange re-invokes renderRoute with the resolved path
     return;
   }
-  const route = ROUTES.find((r) => r.hash === path) || ROUTES.find((r) => r.hash === DEFAULT_ROUTE);
+  const route =
+    ROUTES.find((r) => (r.match ? r.match(path) : r.hash === path)) ||
+    ROUTES.find((r) => r.hash === DEFAULT_ROUTE);
   highlightSidebar(route.hash);
   const state = store.getState();
   if (route.key) {
-    const key = route.key(state);
+    const key = route.key(state, path);
     if (lastRenderedHash === route.hash && key === lastRenderedKey) return;
     lastRenderedKey = key;
   }
   lastRenderedHash = route.hash;
-  route.render(state);
+  route.render(state, path);
 }
 
 function updateMeta(state) {
@@ -856,6 +962,7 @@ function startApp(source) {
 async function main() {
   try {
     initClickToCopy();
+    initRunTreeClicks();
     if (!location.hash) location.hash = `#/${DEFAULT_ROUTE}`;
     runId = await resolveRunId();
     renderApp(store.getState()); // initial paint: meta + route before first event

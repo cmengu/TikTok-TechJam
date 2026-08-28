@@ -228,6 +228,85 @@
       color: #4a5a55;
     }
 
+    /* --- run tree: tree panel + a placeholder dossier panel beside it
+       (Task 8 builds the dossier itself). --- */
+    .run-grid {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.4fr) minmax(220px, 1fr);
+      gap: 1.25rem;
+      align-items: start;
+    }
+    .run-tree-panel,
+    .run-dossier-panel {
+      background: rgba(255, 255, 255, 0.4);
+      border: 1px solid rgba(47, 79, 69, 0.15);
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+    }
+    .run-tree-panel h2,
+    .run-dossier-panel h2 {
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 0 0 0.6rem;
+      color: #2f4f45;
+    }
+    .tree-root,
+    .tree-children {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .tree-children {
+      margin-left: 0.9rem;
+      padding-left: 0.75rem;
+      border-left: 1px solid rgba(47, 79, 69, 0.2);
+    }
+    .tree-root > li,
+    .tree-children > li {
+      margin: 0.2rem 0;
+    }
+    .tree-node {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.3rem 0.5rem;
+      border-radius: 0.35rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .tree-node:hover {
+      background: rgba(47, 79, 69, 0.08);
+    }
+    .tree-node-selected {
+      background: rgba(47, 79, 69, 0.15);
+      font-weight: 600;
+    }
+    .tree-node-orphan {
+      border: 1px dashed rgba(196, 90, 60, 0.45);
+    }
+    .tree-node-id {
+      font-variant-numeric: tabular-nums;
+      color: #16403a;
+    }
+    .tree-node-hyp,
+    .tree-node-kind {
+      color: #4a5a55;
+      font-size: 0.85rem;
+    }
+    .tree-node-state {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #2f4f45;
+    }
+    .chip-incumbent {
+      background: rgba(47, 138, 94, 0.2);
+      color: #205a3d;
+      font-weight: 600;
+    }
+
     /* --- protocol page ---
        Two tiers, visually distinct on purpose: a reader must see at a glance
        which fields define comparability (hashed) and which merely bound this
