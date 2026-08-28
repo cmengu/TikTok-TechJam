@@ -36,6 +36,13 @@ IMPLEMENTED = {
     "harness.runner",
     "harness.measure",
     "harness.tree",
+    "harness.agents.llm",
+    "harness.agents.cache",
+    "harness.agents.brief",
+    "harness.agents.researcher",
+    "harness.agents.coder",
+    "harness.agents.tuner",
+    "harness.agents.contract",
 }
 
 PRODUCT_STATES = {

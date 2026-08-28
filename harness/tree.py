@@ -9,6 +9,7 @@ import statistics
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from harness.events import EventLog
@@ -114,9 +115,16 @@ class Workspace:
         return self._git("rev-parse", "HEAD").stdout.strip()
 
     def commit_node(self, node_id: int, diff_path: Path) -> str:
-        diff_path = Path(diff_path)
+        # Patches in yaml are repo-relative; git apply runs with cwd=workspace.
+        diff_path = Path(diff_path).expanduser()
+        if not diff_path.is_absolute():
+            diff_path = (REPO_ROOT / diff_path).resolve()
+        else:
+            diff_path = diff_path.resolve()
         if diff_path.is_file() and diff_path.stat().st_size > 0:
-            applied = self._git("apply", "--whitespace=nowarn", str(diff_path), check=False)
+            applied = self._git(
+                "apply", "--whitespace=nowarn", str(diff_path), check=False
+            )
             if applied.returncode != 0:
                 raise RuntimeError(
                     f"git apply failed for node {node_id}: {applied.stderr}"
@@ -346,6 +354,7 @@ class Tree:
         full_timeout_s: float = 600.0,
         smoke_timeout_s: float = SMOKE_TIMEOUT_S,
         attribution: str = ATTRIBUTION_HAND,
+        refill_queue: Callable[[], None] | None = None,
     ) -> None:
         self.events = events
         self.protocol = protocol
@@ -362,6 +371,7 @@ class Tree:
         self.full_timeout_s = float(full_timeout_s)
         self.smoke_timeout_s = float(smoke_timeout_s)
         self.attribution = attribution
+        self.refill_queue = refill_queue
         self._initial_commit = workspace.head() if workspace is not None else None
 
         self.nodes: dict[int, Node] = {}
@@ -775,8 +785,11 @@ class Tree:
                 self._finish("budget")
                 return False
         if len(self.queue) == 0:
-            self._finish("empty_queue")
-            return False
+            if self.refill_queue is not None:
+                self.refill_queue()
+            if len(self.queue) == 0:
+                self._finish("empty_queue")
+                return False
         if self._live_count() >= MAX_LIVE_BRANCHES:
             # Cannot start another; stop rather than spin.
             self._finish("max_live_branches")
