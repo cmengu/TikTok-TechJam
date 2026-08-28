@@ -889,3 +889,16 @@ group labels only), --rail-ink-hi 19.29:1.
 
 The near-invisible hairline (--hairline at 1.16:1 on canvas) is intended.
 Panel separation comes from the surface value step, not the border.
+
+## Dead selectors removed
+
+`.score-above`, `.score-below` and `.score-inconclusive` were removed at
+checkpoint 2a. They styled nothing: `renderScoreCell` (app/static/app.js:126)
+emits only `score-value` and `band-note`, and by design the Score panel never
+greys a promoted verdict — every row reaching it has already cleared the bar
+(app.js:116-119). If per-verdict greying is ever wanted in this panel it is
+an app.js change with its own checkpoint, not a CSS revival.
+
+The Score panel spans two grid tracks above 1100px. That selector is coupled
+to renderDashboard's section order; if the panel order changes, the selector
+must change with it.

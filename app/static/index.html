@@ -217,6 +217,13 @@
       border-radius: var(--r-panel);
       padding: var(--s5);
     }
+    @media (min-width: 1100px) {
+      /* Coupled to renderDashboard's fixed section order in app.js.
+         Section 2 is "Score against baseline". */
+      .dashboard-grid > section:nth-child(2) {
+        grid-column: span 2;
+      }
+    }
     .dashboard-grid section h2 {
       font-size: 1.0625rem;
       font-weight: 500;
@@ -263,11 +270,17 @@
       border-collapse: collapse;
       font-size: 0.9rem;
       width: 100%;
+      table-layout: fixed;
     }
     .score-table th,
     .score-table td {
       text-align: left;
       padding: 0.25rem 1rem 0.25rem 0;
+      overflow-wrap: anywhere;
+    }
+    .score-table th:first-child,
+    .score-table td:first-child {
+      width: 22%;
     }
     .score-table thead th {
       font-size: 0.6875rem;
@@ -286,22 +299,12 @@
     .score-table tr:last-child td {
       border-bottom: 0;
     }
+    .score-table td .chip {
+      margin-top: 0.15rem;
+    }
     .score-value {
       font-variant-numeric: tabular-nums;
       font-weight: 500;
-    }
-    .score-value.score-above {
-      color: var(--pos);
-      font-weight: 500;
-    }
-    .score-value.score-below {
-      color: var(--crit);
-      font-weight: 500;
-    }
-    .score-inconclusive {
-      color: var(--ink-muted);
-      font-style: italic;
-      font-weight: 600;
     }
     .panel-note,
     .band-note,
@@ -331,17 +334,18 @@
       display: flex;
       flex-wrap: wrap;
       row-gap: var(--s2);
+      column-gap: 0;
     }
     .ticker li {
       display: inline-block;
-      margin-right: var(--s5);
+      margin-right: var(--s4);
       font-size: 0.85rem;
       white-space: normal;
       overflow-wrap: break-word;
     }
     .ticker li::after {
       content: "•";
-      margin-left: var(--s5);
+      margin-left: var(--s4);
       color: var(--ink-faint);
     }
     .ticker li:last-child::after {
