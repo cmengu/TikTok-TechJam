@@ -17,7 +17,7 @@ from harness.tasks.synthetic import SyntheticTask
 from helpers import placeholder_protocol, run_candidate, stage_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "candidate" / "template.py"
+TEMPLATE = ROOT / "candidate" / "synthetic" / "template.py"
 REPORT = ROOT / "candidate" / "report.py"
 
 

@@ -16,7 +16,8 @@ from harness.tasks.base import TaskPaths
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "protocols" / "synthetic.yaml"
-CANDIDATE_DIR = ROOT / "candidate"
+CANDIDATE_DIR = ROOT / "candidate" / "synthetic"
+REPORT_PATH = ROOT / "candidate" / "report.py"
 
 
 def placeholder_protocol(tmp_path: Path):
@@ -33,8 +34,8 @@ def placeholder_protocol(tmp_path: Path):
 
 def stage_candidate(workspace: Path) -> Path:
     workspace.mkdir(parents=True, exist_ok=True)
-    for name in ("template.py", "report.py"):
-        shutil.copy2(CANDIDATE_DIR / name, workspace / name)
+    shutil.copy2(CANDIDATE_DIR / "template.py", workspace / "template.py")
+    shutil.copy2(REPORT_PATH, workspace / "report.py")
     return workspace / "template.py"
 
 
@@ -48,8 +49,15 @@ def run_candidate(
     epochs: int = 1,
     batch: int = 1024,
     timeout: float | None = None,
+    candidate_dir: Path | None = None,
 ) -> subprocess.CompletedProcess:
-    stage_candidate(ws)
+    if candidate_dir is not None:
+        workspace = ws
+        workspace.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(candidate_dir / "template.py", workspace / "template.py")
+        shutil.copy2(REPORT_PATH, workspace / "report.py")
+    else:
+        stage_candidate(ws)
     env = {
         **os.environ,
         "TRAIN": str(paths.train),

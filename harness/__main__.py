@@ -184,7 +184,7 @@ def _cmd_run(argv: list[str]) -> None:
         }
         runner = Runner(events, task, run_cfg, heartbeat_s=30.0)
         measure = Measure(events, protocol, band=None, metric=task.metric)
-        workspace = Workspace(run_dir, run_id)
+        workspace = Workspace(run_dir, run_id, candidate_dir=task.candidate_dir)
         queue = Queue(events)
         hyp_index = {h.id: h for h in hyps}
         for h in hyps:

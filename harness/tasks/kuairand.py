@@ -29,6 +29,7 @@ def _score_script_sha() -> str:
 class KuaiRandTask:
     name = "kuairand"
     metric = "primary"
+    candidate_dir = REPO_ROOT / "candidate" / "kuairand"
 
     def __init__(self) -> None:
         self._paths: TaskPaths | None = None
