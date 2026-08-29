@@ -528,10 +528,13 @@ along, is anything wrong.** Five panels:
    the replicate agreed — render it normally. The verdict badge is always
    `ev.state` verbatim; the app reports the harness's verdict, it never
    invents one.
-3. **Last five events** — from `state.feed`, newest first. `inconclusive` must
-   appear as its own event kind, never folded into `rejected`. Collapse
-   consecutive same-type rows (the six startup `hypothesis_queued` events
-   should be one row saying so, not six).
+3. **Events** — from `state.feed`, newest first, as a scrollable list (all of
+   `state.feed`, not just the last five — the panel is capped to ~5 rows of
+   height via `.event-scroll`'s `max-height`, so scrolling reveals older
+   events without growing the dashboard grid row). `inconclusive` must appear
+   as its own event kind, never folded into `rejected`. Collapse consecutive
+   same-type rows (the six startup `hypothesis_queued` events should be one
+   row saying so, not six).
 4. **Progress toward stopping** — `protocol.ruler.convergence` (`epsilon`,
    `n_rounds`) plus verdicts since the last `promoted` verdict. **Label this
    "derived in the app" explicitly**: the harness is specified to emit a
@@ -592,7 +595,7 @@ the batch-2 band model:
   (`:428-442`). `rung` was parked by agreement in batch 1; the harness has
   unparked it.
 - Two additive event types exist: `incumbent_changed` and `prediction`
-  (`harness/types.py:41-42`). The reducer handles both.
+  (`harness/types.py:40-41`). The reducer handles both.
 - `harness/fake_run.py` still emits the old `[lo, hi]` pair and no `rung`.
   It is the teammate's file. He has been asked to update it. The app must
   work correctly either way, and must not be edited to assume he has.
@@ -718,3 +721,327 @@ Research, Hypotheses, Audit, Report, the Brief screen, and cost/spend.
 - Smoke test is a standing step, not a one-off. Batch 2 shipped three bugs
   that 27 passing tests never touched; all three surfaced within ten
   minutes of running it.
+
+---
+
+# Handoff — App batch 4 (visual design) · 28 Aug
+
+Branch `app-style-1`, cut from `app-batch-3` at `62d9744`. Visual design only.
+**No new features. No behaviour changes. No markup changes except where a task
+below says so explicitly.**
+
+## Reference
+
+The target is Harvey's product UI, established from screenshots by sampling
+pixels — not from memory. Five moves carry the look:
+
+1. **One dark rail, everything else pale.** Full-height sidebar at `#0f0e0c`.
+   It is the only large dark area and does most of the work.
+2. **Two surfaces, not five.** Warm off-white canvas `#f7f5f4`, pure white
+   panels `#ffffff`. That value step *is* the panel edge.
+3. **Near-invisible borders, and no shadows anywhere.** A panel edge in the
+   reference steps `#f7f5f4 → #f5f3f1 → #ffffff` over three pixels.
+4. **Desaturated, dark colour.** Positive green samples `#396b53`. Nothing is
+   bright. Status chips keep a neutral fill with coloured ink and a coloured dot.
+5. **Serif appears twice only** — wordmark and page title. Everything else sans.
+
+## Tokens — the complete set
+
+Light mode only. `color-scheme: light` stays. There is deliberately no
+`prefers-color-scheme` block and no `data-theme` stamping in this app.
+
+```
+--canvas:      #f7f5f4      --ink:         #1a1917
+--surface:     #ffffff      --ink-muted:   #6a6866
+--sunken:      #f1efec      --ink-faint:   #9d9a96
+--hairline:    #e8e5e1
+--hairline-hi: #d9d5d0
+--rail:        #0f0e0c      --rail-ink:    #b8b5b1
+--rail-raised: #33312d      --rail-ink-hi: #ffffff
+--rail-hover:  #1e1d1a      --rail-ink-dim: #73716e
+
+--pos:  #396b53   --pos-wash:  #eef3f0
+--warn: #8a6a2c   --warn-wash: #f6f1e6
+--crit: #96323c   --crit-wash: #f9edee
+--info: #3e4e7d   --info-wash: #eef0f6
+
+--r-panel: 10px   --r-ctl: 8px
+--s1: 4px  --s2: 8px  --s3: 12px  --s4: 16px
+--s5: 24px --s6: 32px --s7: 48px
+```
+
+## Type
+
+Self-hosted from `app/static/fonts/`, declared with `@font-face` and
+`font-display: swap`. No CDN link, no network dependency at demo time.
+
+- **Instrument Serif** — display only: app wordmark and page title. Nothing else.
+- **Instrument Sans** — everything else.
+
+Display roles carry `transform: scaleX(1.06)` with `display: inline-block` and
+`transform-origin: left center`. This is deliberate: Instrument Serif reads too
+narrow at these sizes. 1.06 is the agreed value; it is a distortion, so do not
+raise it without asking.
+
+Scale: 44 / 27 display · 17 / 15 / 13 / 11 sans. Line-height 1.55 body,
+1.15 display. Eyebrow labels are 11px, uppercase, `letter-spacing: .09em`.
+
+The 2.75rem display size in the type scale has no element in the app. `h1`
+is the sidebar wordmark at 1.5rem. If a page title is ever added it is a
+markup change and needs its own checkpoint.
+
+**Every number rendered from the stream gets `font-variant-numeric: tabular-nums`**
+so live values stop jittering as digits change.
+
+## Space, edges, motion
+
+| Rule | Value |
+|---|---|
+| Space scale | 4·8·12·16·24·32·48. Nothing off-scale. |
+| Panel padding | 24 |
+| Grid gap | 16 |
+| Content max width | 1400px, gutter 32 |
+| Rail width | 228px, nav row height 36 |
+| Radius | 10 panel / 8 control / 999 pill |
+| Border | 1px `--hairline`, one weight everywhere |
+| Shadows | **None. Anywhere.** |
+| Motion | 120ms ease-out on nav, hover, focus. 160ms fade on route change. |
+| Motion — never | No transition on any value that comes off the stream. |
+| Reduced motion | `@media (prefers-reduced-motion: reduce)` collapses all to 0ms. |
+
+The three-stop body gradient is removed. The ground is one flat `--canvas`.
+
+## Honesty rules, restated as design rules
+
+These are not stylistic. They existed before this batch and they outrank it.
+
+1. **Every state word on screen is the harness's own, verbatim.** Styling never
+   renames, recolours into a different meaning, or hides one.
+2. **A rule trip stays the loudest thing on the screen.** It is the only element
+   in the system permitted both a tinted fill (`--crit-wash`) and a 3px left
+   stripe (`--crit`). Loudness is carried by form as well as hue, so it survives
+   greyscale and a bad projector.
+3. **Every other state is a neutral panel with coloured ink and a coloured dot.**
+   Fill stays `--surface`.
+4. **A visible gap is a feature.** Spend, vs-baseline significance and
+   "no threshold available" get a shared grammar: dashed border, italic,
+   `--ink-faint`. They must read as *intentionally empty*. They may look better.
+   They may not disappear, and they may never be filled with a plausible number.
+
+## Checkpoint plan
+
+- **0 — ground.** Branch, fonts, this brief. No CSS.
+- **1 — tokens and primitives.** Add the `:root` block and `@font-face`. Replace
+  all 34 hardcoded colour literals with `var(--…)`. Apply type scale, space
+  scale, flat canvas, dark rail. Restyle the header strip. No markup changes.
+- **2 — Dashboard**, five panels.
+- **3 — Protocol**, two tiers.
+- **4 — Run**, tree plus dossier.
+- **5 — sidebar, empty states, and the gap grammar audited across all screens.**
+
+## Out of scope for batch 4
+
+- Brief, Research, Hypotheses, Audit's three children, Report — still stubs, not
+  worth styling.
+- `reducer.js`, `band.js`, `tree.js`, `dossier.js` — pure and tested. Do not touch.
+- Any harness file.
+- Framework, build step, CSS preprocessor, second stylesheet. All CSS stays in
+  the single `<style>` block in `index.html`.
+
+## Gate
+
+Every checkpoint smoke-tests in a real browser before commit, hard-reloaded with
+Cmd+Shift+R. Two terminals, each with its own `source .venv/bin/activate`:
+
+```
+python -m harness fake --speed 2
+python -m app
+```
+
+Plus `node --test "app/static/*.test.js"` and `python -m pytest` green.
+
+## Known: webfont subset gaps
+
+The latin subsets of Instrument Sans and Instrument Serif do not contain
+`Δ` (U+0394) or `⚠` (U+26A0). Verified by reading the cmap of all three
+woff2 files. app.js currently renders `Δ` 3 times and `⚠` 2 times; both fall
+back to a system font, and on macOS `⚠` may render as a colour emoji.
+Deferred to a later checkpoint, where app.js is in scope. Do not fix it by
+swapping the character, adding a CDN font, or hiding the glyph.
+
+## Contrast floor
+
+Measured on the real palette, not estimated.
+
+`--ink-faint` (#9d9a96) is 2.58:1 on `--canvas` and 2.80:1 on `--surface`.
+It is a decorative mark colour only — separators and rules. It must never
+carry text.
+
+Any text that carries meaning uses `--ink-muted` (5.11:1) or darker. This
+binds especially on:
+  - the three deliberate gaps — spend, vs-baseline significance,
+    "no threshold available". A gap that is technically present but sits
+    below 3:1 has half-disappeared, which is the thing the honesty rule
+    exists to prevent.
+  - any harness state word rendered verbatim.
+
+Reference values on `--canvas`: --ink 16.16:1, --ink-muted 5.11:1,
+--pos 5.68:1. On their washes: --crit 6.52:1, --warn 4.46:1.
+On `--rail`: --rail-ink 9.45:1, --rail-ink-dim 3.97:1 (non-interactive
+group labels only), --rail-ink-hi 19.29:1.
+
+The near-invisible hairline (--hairline at 1.16:1 on canvas) is intended.
+Panel separation comes from the surface value step, not the border.
+
+## Dead selectors removed
+
+`.score-above`, `.score-below` and `.score-inconclusive` were removed at
+checkpoint 2a. They styled nothing: `renderScoreCell` (app/static/app.js:125)
+emits only `score-value` and `band-note`, and by design the Score panel never
+greys a promoted verdict — every row reaching it has already cleared the bar
+(app.js:116-119). If per-verdict greying is ever wanted in this panel it is
+an app.js change with its own checkpoint, not a CSS revival.
+
+The Score panel spans two grid tracks above 1100px. That selector is coupled
+to renderDashboard's section order; if the panel order changes, the selector
+must change with it.
+
+## Dashed means provisional
+
+Dashed edges are a single grammar across the app, not a decoration:
+
+  - the three deliberate gaps — spend, vs-baseline significance,
+    "no threshold available" — dashed border, italic, --ink-muted
+  - the not-hashed protocol tier — dashed left stripe, --warn
+  - an orphan node in the Run tree — dashed border, --crit
+
+All of them mean "this is provisional, absent, or not binding". Solid edges
+mean the opposite. Anything new that is genuinely provisional should be
+dashed; nothing else should be.
+
+This also gives the Protocol screen's hashed/not-hashed split a second cue
+beyond hue, so it survives greyscale, a projector, and colour-vision
+deficiency. Checkpoint 3's reviewer flagged the single-cue version as
+borderline; this is the fix.
+
+The `spend` gap was brought into this grammar at checkpoint 4. Before that it
+used bare `.hdr-dim` (app.js:926) and got italic and --ink-muted but no dashed
+border, while the other two gaps did — so the rule as first written was not
+true of all three. `.hdr-dim` now carries the dashed pill and the grammar
+holds for every deliberate gap.
+
+## Keyboard access to the Run tree
+
+The Run tree is mouse-only. `renderTreeNode` (app/static/app.js:640-651)
+emits `<div class="tree-node" data-node-id=...>` with no `tabindex`, and
+`initRunTreeClicks` (app.js:862-868) registers a delegated `click` listener
+and no `keydown`. Verified: `grep -c tabindex app/static/app.js` → 0,
+`grep -c keydown app/static/app.js` → 0.
+
+Selecting a node — the primary interaction on this screen — cannot be done
+from the keyboard. `.tree-node:focus-visible` is styled and ready; making it
+live needs `tabindex="0"`, a `keydown` handler for Enter and Space, and
+probably `role="treeitem"`. That is an app.js change with its own checkpoint,
+and it is not in batch 4's scope.
+
+## The stale-worker threshold is a display choice
+
+`WORKER_STALE_MS = 5000` (app.js:66-69) is what decides when a worker in the
+"Now running" panel gets marked stale. Its own comment says the value "isn't
+specified anywhere" — nothing in the event stream defines when a worker
+should be considered stale; 5 seconds is a judgment call the app made,
+picked only because it comfortably exceeds normal inter-heartbeat gaps at
+the fake run's default 20x speed. It is a display heuristic, not a
+harness-specified number, and should be revisited if a real worker's
+heartbeat cadence turns out to differ from the fake run's.
+
+## Gap grammar — the closed list
+
+Dashed edges have exactly five sanctioned uses, audited at checkpoint 5:
+
+| Element | Selector | Means |
+|---|---|---|
+| Spend slot | `.hdr-dim` | no cost field in the stream |
+| Vs-baseline significance | `.hdr-dim.panel-note` | nothing compares Band to baseline.published |
+| No threshold available | `.dossier-no-threshold` | verdict carries no usable threshold |
+| Not-hashed protocol tier | `.protocol-tier.not-hashed` | bounds this run only, not comparability |
+| Orphan tree node | `.tree-node-orphan` | parent missing from the tree |
+
+Ordinary empty states — `.panel-empty`, `.waiting`, `.stub` — are italic and
+--ink-muted but NOT dashed. They mean "nothing here yet", which is different
+from "deliberately withheld". Diluting dashed across both would cost the
+honesty rule its only visual signal.
+
+Tinted backgrounds have exactly three sanctioned uses: `.dossier-rule-trip`
+(--crit-wash), `tr.metric-highlight` (--warn-wash), and `.worker-list
+li.worker-stale` (--crit-wash, a stale worker on the Dashboard). Nothing else
+in the app may take a tint. The rule trip's fill plus stripe is what keeps it
+the loudest element on any screen; the stale worker never contests that,
+because it renders on the Dashboard, which never shows a rule trip — the two
+never compete for "loudest element".
+
+Tint means persistent state, not transient feedback. A condition that stays
+true until something changes it earns a fill. Feedback that fades on its own
+— a click flash, a copy confirmation — gets border and colour only, never
+fill.
+
+Anything added later that is genuinely provisional should be dashed and added
+to the table above. Anything that is persistent, harness-reported state
+should be tinted and added to the list above. Anything else should not be.
+
+**Checkpoint 5's audit findings are closed, not just recorded.** All three
+were resolved at batch 5 checkpoint 1:
+
+- `.worker-list li.worker-stale` — blessed as the third sanctioned tint,
+  above. No CSS change; it was already correct.
+- `.hash-value.copied` (index.html:737-740) — its `background: var(--pos-wash)`
+  declaration is removed. It is an 800ms feedback flash (app.js:560-561), not
+  a state, so it now reads `border-color: var(--pos); color: var(--pos);`
+  instead of filling.
+- `.chip-incumbent` (index.html:465-468) — its dead `background: var(--pos-wash)`
+  declaration is deleted outright rather than fixed to actually render. `.chip`
+  (index.html:696-697) declares `background: var(--sunken)` with equal
+  specificity and was always winning the cascade on any element carrying both
+  classes, so the wash never rendered. The decision is to keep the incumbent
+  badge a neutral pill on purpose: it sits on the Run screen beside the rule
+  trip, and a second tinted element there would cost the rule trip its status
+  as the loudest thing on the screen. `color: var(--pos)` and `font-weight: 600`
+  remain — the badge still reads as the incumbent, just without a fill.
+
+## The app is closed here
+
+This is the last app checkpoint. The UI is being closed out, not paused.
+What follows is a plain account of what's built and what isn't — none of it
+is a "future enhancement."
+
+**Three screens are built: Dashboard, Protocol, Run.** Everything else in
+`ROUTES` (app.js:965-995) renders `renderStub`: Brief, Research, Hypotheses,
+Audit → Replication, Audit → Cost, Audit → Reliability, Report — seven routes,
+all seven named on batch 1's "Explicitly parked" list. Only two are actually
+blocked on missing data: no event in the stream carries a `cost` field, so
+spend stays a dashed gap everywhere, including Audit → Cost. The other five —
+Brief, Research, Hypotheses, Audit → Reliability, Report — are not
+data-blocked; the reducer already holds what they'd need. Nobody scoped a
+screen for them. One correction to the parked list's own reasoning while
+we're being plain about gaps: it still says Audit → Replication is parked
+because verdicts carry no `rung`. That stopped being true in batch 3 —
+verdicts have carried `rung` since PR #10 landed (`harness/measure.py:433`),
+and the node dossier displays it verbatim (app.js:720, :738). Audit →
+Replication is a stub for the same reason as the other four now: nobody
+built it, not because the data is missing.
+
+**Keyboard selection of tree nodes is unbuilt, and it is the largest known
+gap.** The primary interaction on the Run screen — selecting a node — has no
+keyboard path. `.tree-node:focus-visible` is styled and ready; nothing makes
+it live (`grep -c tabindex app/static/app.js` → 0, `grep -c keydown
+app/static/app.js` → 0). It needs `tabindex="0"`, a `keydown` handler for
+Enter and Space, and probably `role="treeitem"`. Anyone picking this app back
+up should start there.
+
+**`Δ` (U+0394) and `⚠` (U+26A0) are missing from the latin subset** of both
+self-hosted fonts and fall back to a system font (see "Known: webfont subset
+gaps" above). Unfixed, by design, until app.js is back in scope.
+
+**Both grammars are closed and audited.** Dashed has exactly five sanctioned
+uses; tint has exactly three. See "Gap grammar — the closed list" above for
+the tables — they are not restated here.

@@ -189,9 +189,9 @@ function collapseFeed(feed) {
 
 function buildEventsPanel(state) {
   const groups = collapseFeed(state.feed);
-  const lastFive = groups.slice(-5).reverse();
-  if (!lastFive.length) return `<p class="panel-empty">no events yet</p>`;
-  const rows = lastFive
+  const all = groups.slice().reverse();
+  if (!all.length) return `<p class="panel-empty">no events yet</p>`;
+  const rows = all
     .map((g) => {
       const label = feedLabel(g.kind);
       if (g.count === 1) {
@@ -207,7 +207,7 @@ function buildEventsPanel(state) {
       return `<li>${escapeHtml(text)}</li>`;
     })
     .join("");
-  return `<ul class="event-list">${rows}</ul>`;
+  return `<div class="event-scroll"><ul class="event-list">${rows}</ul></div>`;
 }
 
 // Counts verdicts after the most recent "promoted" one (all of them, if
@@ -259,6 +259,14 @@ function buildPaperTickerPanel(state) {
 
 function renderDashboard(state) {
   const nowMs = Date.now();
+  // buildEventsPanel's list is newest-first and can run to hundreds of rows
+  // (FEED_CAP=1000); renderDashboard replaces #view's innerHTML on every
+  // event, which would otherwise reset .event-scroll to the top on each
+  // tick. Preserve it — but only when the reader has actually scrolled down
+  // (scrollTop > 0): at 0 they're watching the live edge, and pinning them
+  // there keeps new events visible instead of freezing the view.
+  const prevScrollEl = requireView().querySelector(".event-scroll");
+  const prevScrollTop = prevScrollEl ? prevScrollEl.scrollTop : 0;
   requireView().innerHTML = `
     <div class="dashboard-grid">
       <section>
@@ -270,7 +278,7 @@ function renderDashboard(state) {
         ${buildScorePanel(state)}
       </section>
       <section>
-        <h2>Last five events</h2>
+        <h2>Events</h2>
         ${buildEventsPanel(state)}
       </section>
       <section>
@@ -283,6 +291,10 @@ function renderDashboard(state) {
       </section>
     </div>
   `;
+  if (prevScrollTop > 0) {
+    const nextScrollEl = requireView().querySelector(".event-scroll");
+    if (nextScrollEl) nextScrollEl.scrollTop = prevScrollTop;
+  }
 }
 
 // --- Protocol: read-only, all data from state.run.protocol. Two visually

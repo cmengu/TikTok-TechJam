@@ -21,6 +21,10 @@ data/cache/
 *.parquet
 *.csv
 
+# KuaiRand-Pure dataset (downloaded, never committed)
+starter_kit/KuaiRand-Pure/
+starter_kit/*.tar.gz
+
 # OS / editor
 .DS_Store
 .idea/
