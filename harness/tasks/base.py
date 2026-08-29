@@ -23,7 +23,7 @@ class Task(Protocol):
     def prepare(self, protocol: HarnessProtocol, root: Path) -> TaskPaths:
         ...
 
-    def candidate_env(self, paths: TaskPaths) -> dict:
+    def candidate_env(self, paths: TaskPaths, *, rung: str = "screen") -> dict:
         ...
 
     def score(

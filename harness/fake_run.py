@@ -325,6 +325,8 @@ def _build_script() -> list[dict]:
             "scores": [0.529, 0.530, 0.528],
             "seeds": [1, 2, 3],
             "band": [0.52, 0.54],
+            "delta_mean": 0.031,
+            "oracle_delta": 0.004,
             "gpu_min": 4.5,
             "summary": _s("node 3 promoted: replicate held within band"),
         }

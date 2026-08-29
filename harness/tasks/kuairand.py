@@ -115,11 +115,14 @@ class KuaiRandTask:
         )
         return self._paths
 
-    def candidate_env(self, paths: TaskPaths) -> dict[str, str]:
-        return {
+    def candidate_env(self, paths: TaskPaths, *, rung: str = "screen") -> dict[str, str]:
+        env = {
             "TRAIN": str(paths.train),
             "VALID": str(paths.search_validation),
         }
+        if rung == "holdout":
+            env["ORACLE"] = str(paths.holdout_validation)
+        return env
 
     def _labels_for(self, split: Literal["search", "holdout"]) -> list[dict[str, str]]:
         if split not in self._labels:

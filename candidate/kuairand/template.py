@@ -134,7 +134,7 @@ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> 
 
 def main() -> None:
     train_path = Path(os.environ["TRAIN"])
-    valid_path = Path(os.environ["VALID"])
+    valid_path = Path(os.environ.get("ORACLE") or os.environ["VALID"])
     seed = _env_int("SEED", 0)
     epochs = _env_int("EPOCHS", DEFAULT_EPOCHS)
     batch = _env_int("BATCH", 8192)
