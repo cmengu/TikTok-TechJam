@@ -1,0 +1,915 @@
+<title>beating-nise File Ecosystem</title>
+<style>
+/* ============================================================
+   code-atlas — shared design system for map pages and file-map pages.
+   Paste this whole file inside a single <style> block at the top of the
+   artifact HTML. Do NOT restyle: the palette and spacing are the series
+   identity — every page in a series must look like the last one.
+   ============================================================ */
+
+:root {
+  --space: #0b0e1a;
+  --panel: rgba(148, 156, 190, 0.055);
+  --line: rgba(170, 178, 210, 0.14);
+  --ink: #dcdfea;
+  --dim: #8e93a8;
+  --faint: #5c6178;
+  --teal: #4f9b95;
+  --teal-ink: #8fc8c3;
+  --purple: #7b6cd0;
+  --purple-ink: #ac9fe8;
+  --rose: #bd6f8b;
+  --rose-ink: #d69cb1;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+}
+
+html { background: var(--space); }
+body {
+  margin: 0; background: var(--space); color: var(--ink); font-family: var(--sans);
+  font-size: 15.5px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+}
+
+#stars { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.wrap { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 56px 24px 88px; }
+
+/* ---------- header ---------- */
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 22px;
+}
+.eyebrow a { color: var(--dim); text-decoration: none; border-bottom: 1px solid rgba(170,178,210,.25); }
+.eyebrow a:hover, .eyebrow a:focus-visible { color: var(--ink); border-bottom-color: var(--dim); }
+.eyebrow .grill { color: var(--purple-ink); }
+
+h1 {
+  font-size: clamp(1.85rem, 4.5vw, 2.55rem); line-height: 1.14; font-weight: 700;
+  letter-spacing: -0.015em; margin: 0 0 14px; text-wrap: balance;
+}
+h1 .q { color: var(--dim); font-weight: 400; }
+
+.lede { max-width: 62ch; color: var(--dim); margin: 0 0 26px; }
+.lede strong { color: var(--ink); font-weight: 600; }
+.lede a { color: var(--dim); }
+.lede code { font-family: var(--mono); font-size: 0.88em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+.statusline { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 46px; }
+.chip {
+  font-family: var(--mono); font-size: 11.5px; padding: 4px 11px; border: 1px solid var(--line);
+  border-radius: 999px; color: var(--dim); background: rgba(11, 14, 26, 0.5);
+}
+.chip b { color: var(--ink); font-weight: 600; }
+.chip.res { border-color: rgba(79, 155, 149, 0.55); color: var(--teal-ink); }
+.chip.res b { color: var(--teal-ink); }
+
+.seclabel {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); margin: 0 0 16px; display: flex; align-items: center; gap: 12px;
+}
+.seclabel::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+.gloss { color: var(--dim); font-size: 0.9rem; max-width: 66ch; margin: 0 0 20px; }
+.gloss b { color: var(--ink); }
+.gloss code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- step / phase strip (optional, series pages) ---------- */
+.steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.step {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; color: var(--faint);
+  background: rgba(11, 14, 26, 0.5); white-space: nowrap;
+}
+.step.now { border-color: rgba(79, 155, 149, 0.6); color: var(--teal-ink); box-shadow: 0 0 8px rgba(79,155,149,0.14); }
+
+/* ---------- the constellation / DAG diagram ---------- */
+.schemebox, .pipebox {
+  border: 1px solid var(--line); border-radius: 12px; background: rgba(8, 10, 19, 0.72);
+  padding: 12px 10px 6px; margin-bottom: 12px; overflow-x: auto;
+}
+.schemebox svg { display: block; width: 100%; min-width: 860px; height: auto; }
+.pipebox svg { display: block; width: 100%; min-width: 820px; height: auto; }
+.schemebox text, .pipebox text { font-family: var(--mono); }
+
+.n-label { font-size: 11px; fill: var(--dim); }
+.pipebox .n-label { font-size: 11.5px; fill: var(--ink); }
+.n-label.ghosted { fill: var(--faint); }
+.n-sub { font-size: 10px; fill: var(--faint); }
+.s-tag { font-size: 10px; letter-spacing: 0.1em; fill: var(--faint); }
+.s-tag.now { fill: var(--teal-ink); }
+.flow-label { font-size: 10.5px; fill: var(--teal-ink); }
+.flow-note { font-size: 10px; fill: var(--faint); }
+
+.edge-lit { stroke: rgba(170, 178, 210, 0.38); stroke-width: 1; fill: none; }
+.edge-ghost, .edge-dash { stroke: rgba(92, 97, 120, 0.45); stroke-width: 1; stroke-dasharray: 3 4; fill: none; }
+.dot-lit { fill: #8e93a8; }
+.dot-ghost { fill: #5c6178; }
+
+.node-glow { fill: rgba(79, 155, 149, 0.13); }
+.node-lit { fill: url(#gTeal); }
+.node-ghost { fill: rgba(92, 97, 120, 0.08); stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; }
+.ring-lit { fill: none; stroke: rgba(143, 200, 195, 0.8); stroke-width: 1; }
+.ring-ghost { fill: none; stroke: rgba(92, 97, 120, 0.55); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.halo { fill: none; stroke: rgba(143, 200, 195, 0.5); stroke-width: 1; opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .halo { animation: breathe 3.2s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { opacity: 0; } 50% { opacity: 0.55; } }
+}
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono); font-size: 11px;
+  color: var(--faint); margin: 0 4px 48px; align-items: center;
+}
+.legend .g { color: var(--teal-ink); }
+.legend .k { display: inline-flex; align-items: center; gap: 7px; }
+.legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.legend .sw.lit { background: radial-gradient(circle at 38% 32%, #c8ece8, var(--teal) 58%, #2c5f5b); box-shadow: 0 0 6px rgba(79,155,149,0.5); }
+.legend .sw.gh { border: 1px dashed var(--faint); background: rgba(92,97,120,0.08); }
+.legend .sw.rg { border: 1px solid rgba(143,200,195,0.8); background: transparent; }
+
+/* ---------- manifest / invariants (✓ ✗ rows) ---------- */
+.evidence {
+  border: 1px solid var(--line); border-radius: 12px; background: rgba(8, 10, 19, 0.72);
+  padding: 20px 22px; margin-bottom: 54px; overflow-x: auto;
+}
+.evidence .probe {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.7; display: grid;
+  grid-template-columns: 14px 1fr; gap: 12px; color: var(--dim); white-space: nowrap; padding: 5px 0;
+}
+.evidence .probe + .probe { border-top: 1px dashed rgba(170, 178, 210, 0.1); }
+.evidence .probe .g { color: var(--teal-ink); }
+.evidence .probe .r { color: var(--rose-ink); }
+.evidence .probe b { color: var(--ink); font-weight: 600; }
+.evidence .src { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 12px; white-space: nowrap; }
+.evidence .src a { color: var(--dim); }
+.evidence code { font-family: var(--mono); font-size: 0.9em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- frozen-contract code panel ---------- */
+.codebox {
+  border: 1px solid var(--line); border-radius: 12px; background: rgba(8, 10, 19, 0.72);
+  padding: 4px 22px 6px; margin-bottom: 14px; overflow-x: auto;
+}
+.codebox pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.75; color: var(--ink); margin: 14px 0; }
+.codebox .c { color: var(--faint); }   /* comment */
+.codebox .kw { color: var(--purple-ink); }  /* keyword */
+.codebox .ty { color: var(--teal-ink); }    /* type name */
+.codebox .st { color: var(--rose-ink); }    /* string literal */
+.codenote { color: var(--dim); font-size: 0.9rem; max-width: 66ch; margin: 0 0 54px; }
+.codenote b { color: var(--ink); }
+
+/* ---------- decisions: what / why / rejected / without it / insight ---------- */
+.decs { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
+.dec { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 18px 20px 16px; }
+.dhead {
+  display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px;
+  font-weight: 700; font-size: 1.02rem; letter-spacing: -0.01em; color: var(--ink);
+}
+.dnum {
+  font-family: var(--mono); font-size: 11px; color: var(--faint);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; flex: none; font-weight: 400;
+}
+.dwhat { margin: 0 0 12px; color: var(--ink); font-size: 0.95rem; max-width: 68ch; }
+.drow { display: grid; grid-template-columns: 88px 1fr; gap: 12px; margin: 7px 0 0; font-size: 0.9rem; color: var(--dim); }
+@media (max-width: 560px) { .drow { grid-template-columns: 1fr; gap: 2px; } }
+/* DIRECT CHILD. `.drow b` also caught bold inside the prose column, rendering an
+   emphasised phrase as a 10px uppercase label indistinguishable from "WHY". */
+.drow > b { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; padding-top: 3px; }
+.drow > b.lw { color: var(--dim); }        /* why */
+.drow > b.lp { color: var(--purple-ink); } /* rejected */
+.drow > b.lr { color: var(--rose-ink); }   /* without it */
+.drow > b.lt { color: var(--teal-ink); }   /* insight */
+.drow span { max-width: 66ch; }
+.drow span b { color: var(--ink); font-weight: 600; }
+.dec code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- file cards (the file-map page) ---------- */
+.card {
+  border: 1px solid var(--line); border-radius: 12px; background: rgba(8, 10, 19, 0.66);
+  padding: 0 0 18px; margin-bottom: 18px; overflow: hidden;
+}
+.cardhead {
+  display: flex; align-items: baseline; gap: 8px 14px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 12.5px; color: var(--teal-ink);
+  background: rgba(11, 14, 26, 0.75); border-bottom: 1px solid var(--line);
+  padding: 12px 22px 11px;
+}
+.cardhead .role { color: var(--faint); font-size: 11px; letter-spacing: 0.05em; }
+.cardhead .ring { color: var(--teal-ink); font-size: 11px; border: 1px solid rgba(79,155,149,.5); border-radius: 999px; padding: 1px 9px; }
+.cardhead .quiet { color: var(--faint); font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; }
+
+.job { margin: 16px 22px 0; color: var(--ink); font-size: 0.95rem; max-width: 68ch; }
+.job b { color: var(--teal-ink); font-weight: 600; }
+
+.talks {
+  margin: 12px 22px 0; font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.talks span b { color: var(--dim); font-weight: 400; }
+.talks .up::before { content: "\2191 needs   "; color: var(--faint); }
+.talks .down::before { content: "\2193 used by "; color: var(--faint); }
+
+.fns { margin: 16px 22px 0; display: flex; flex-direction: column; gap: 0; }
+.fn { padding: 13px 0 12px; border-top: 1px dashed rgba(170, 178, 210, 0.12); }
+.fn:first-child { border-top: none; padding-top: 4px; }
+.sig {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink); line-height: 1.6;
+  margin: 0 0 8px; word-break: break-word;
+}
+.sig .kw { color: var(--purple-ink); }  /* export / function / const / def / async */
+.sig .nm { color: var(--teal-ink); }    /* the function's own name */
+.sig .ar { color: var(--faint); }       /* arrows, inline comments */
+.sig .ty { color: var(--dim); }         /* types and literals */
+
+.io { display: grid; grid-template-columns: 62px 1fr; gap: 4px 14px; font-size: 0.88rem; color: var(--dim); }
+@media (max-width: 560px) { .io { grid-template-columns: 1fr; gap: 1px; } }
+/* DIRECT CHILD, same reason as `.drow > b` above: the in/out/does labels and the
+   prose beside them share a container, so a descendant selector styles both. */
+.io > b {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 700; padding-top: 3px;
+}
+.io > b.in { color: var(--purple-ink); }
+.io > b.out { color: var(--teal-ink); }
+.io > b.does { color: var(--dim); }
+.io span { max-width: 66ch; }
+.io span b { color: var(--ink); font-weight: 600; }
+.io code, .job code, .talks code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- data shapes (types with no functions) ---------- */
+.shapes { margin: 16px 22px 0; display: flex; flex-direction: column; gap: 9px; }
+.shape { display: grid; grid-template-columns: 150px 1fr; gap: 14px; font-size: 0.88rem; color: var(--dim); }
+@media (max-width: 560px) { .shape { grid-template-columns: 1fr; gap: 1px; } }
+.shape .nm { font-family: var(--mono); font-size: 11.5px; color: var(--teal-ink); padding-top: 3px; }
+.shape span:last-child { max-width: 66ch; }
+.shape b { color: var(--ink); font-weight: 600; }
+.shape code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- numbered walkthrough ---------- */
+.frame { list-style: none; counter-reset: f; padding: 0; margin: 0 0 50px; display: flex; flex-direction: column; gap: 10px; }
+.frame li { counter-increment: f; display: grid; grid-template-columns: 26px 1fr; gap: 14px; font-size: 0.93rem; color: var(--dim); }
+.frame li::before {
+  content: counter(f); font-family: var(--mono); font-size: 11px; color: var(--faint);
+  border: 1px solid var(--line); border-radius: 999px; text-align: center; height: 20px; line-height: 19px;
+}
+.frame li span { max-width: 68ch; }
+.frame b { color: var(--ink); font-weight: 600; }
+.frame code { font-family: var(--mono); font-size: 0.86em; color: var(--teal-ink); background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- rules / downstream cards (2-up grid) ---------- */
+.rules, .downstream { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 50px; }
+@media (max-width: 640px) { .rules, .downstream { grid-template-columns: 1fr; } }
+.rule, .downstream .d {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  padding: 15px 17px; font-size: 0.9rem; color: var(--dim);
+}
+/* FIRST child, not every one: a card's prose is bare text, so a bold inside it is
+   a direct child too, and `display: block` on it broke the line mid-sentence.
+   `.downstream` has no template — its markup is assumed to mirror `.rule`. */
+.rule b, .downstream .d b { color: var(--ink); }
+.rule > b:first-child, .downstream .d > b:first-child { display: block; margin-bottom: 4px; font-size: 0.88rem; }
+.rule code, .downstream .d code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- footer ---------- */
+.answer {
+  border-top: 1px solid var(--line); padding-top: 26px; display: flex; flex-wrap: wrap;
+  align-items: baseline; gap: 12px 18px; color: var(--dim); font-size: 0.95rem;
+}
+.answer .word {
+  font-family: var(--mono); font-size: 0.9rem; border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 15px; color: var(--ink); white-space: nowrap;
+}
+.answer .word.t { border-color: rgba(79, 155, 149, 0.55); color: var(--teal-ink); }
+.answer a { color: var(--dim); }
+.answer code { font-family: var(--mono); font-size: 0.86em; background: rgba(170,178,210,0.09); border-radius: 4px; padding: 1px 5px; }
+
+a:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
+
+/* page-local additions — edge types and folder panels; the atlas palette is untouched */
+.wrap { max-width: 1400px; }
+.edge-lit { stroke: rgba(170,178,210,0.22); }
+.panel { fill: rgba(148,156,190,0.035); stroke: rgba(170,178,210,0.16); stroke-width: 1; }
+.edge-data { stroke: rgba(143,200,195,0.42); stroke-width: 1; fill: none; }
+.dot-data { fill: #8fc8c3; }
+.edge-wall { stroke: rgba(214,156,177,0.75); stroke-width: 1.4; stroke-dasharray: 5 4; fill: none; }
+.dot-wall { fill: #d69cb1; }
+.wall-label { fill: var(--rose-ink); }
+.schemebox svg { min-width: 1240px; }
+.decs, .rules { max-width: 980px; }
+.frame { max-width: 980px; }
+.legend .sw.dt { background: transparent; border: 1px solid rgba(143,200,195,0.8); border-radius: 0; height: 1px; width: 18px; }
+.legend .sw.wl { background: transparent; border-top: 1.5px dashed var(--rose-ink); border-radius: 0; height: 0; width: 18px; }
+.legend .sw.im { background: transparent; border-top: 1px solid rgba(170,178,210,0.5); border-radius: 0; height: 0; width: 18px; }
+.evidence .probe { white-space: normal; }
+.evidence .ln { color: var(--faint); font-size: 11px; }
+.evidence .probe .r { color: var(--faint); }
+.counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-bottom: 44px; }
+.count { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.count b { display: block; font-size: 1.5rem; color: var(--ink); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.count.t b { color: var(--teal-ink); }
+.count.p b { color: var(--purple-ink); }
+.count.r b { color: var(--rose-ink); }
+</style>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">
+      <span>beating-nise</span>
+      <span><a href="https://claude.ai/code/artifact/b3b6980a-651f-47c1-a801-d9f9386814a7">L4-v runbook</a></span>
+      <span><a href="https://claude.ai/code/artifact/72948306-c2e9-4be4-9859-e2ca78a06673">starter-kit teardown</a></span>
+      <span class="grill">companion · the whole ecosystem, by folder · 30 Aug 2026</span>
+    </p>
+    <h1><span class="q">Every file,</span> by folder — and three answers</h1>
+    <p class="lede">The runbook's first diagram draws the twenty files that touch one KuaiRand rung. The repository has <strong>95 tracked or generated files plus the eight in the starter kit</strong>, and the runbook's diagram leaves out the whole LLM side (<code>harness/agents/</code>), the live view (<code>app/</code>), the nineteen test files, the hypothesis bank and its patches, the tuner, the fake-run stream, three dead Ali-CCP tracks and three dead phase-6 scripts. This page draws all of it, split by folder, with what is on disk lit and what the fourteen steps still owe ghosted. Read the three answers first — they are what you asked.</p>
+    <div class="statusline">
+      <span class="chip res">on disk · <b>95 files, 10,470 lines of py/yaml/jsonl</b></span>
+      <span class="chip">runbook-future: <b>9 ghost files</b></span>
+      <span class="chip">dead tracks: <b>Ali-CCP ×5 · phase-6 scripts ×3 · orphan pkg ×1</b></span>
+      <span class="chip">candidate today: <b>synthetic, not KuaiRand</b></span>
+    </div>
+  </header>
+
+  <section>
+    <p class="seclabel">three answers — oracle · template · runner</p>
+    <div class="decs">
+      <div class="dec">
+        <p class="dhead"><span class="dnum">1</span>The oracle is inside the task's terms — under the organisers' own name, not ours</p>
+        <p class="dwhat">"Oracle" is our word; the organisers never use it for this. But their kit README lists seven untried directions, and <b>direction 7 is the random-exposure log itself</b>: <code>log_random_4_22_to_5_08_pure.csv</code> "can serve as an additional unbiased validation set, to check whether the model only overfits biased traffic." That is precisely the job the runbook gives it — a second validation signal that gates promotions inside the loop while the scored submission stays the validation-best checkpoint the rules demand.</p>
+        <p class="drow"><b class="lw">evidence</b><span>Kit README §从哪里开始改, item 7. The one hard rule is <b>no external training data</b> — the random log is inside KuaiRand-Pure and is never trained on, only predicted on. Hidden-test rule — its labels sit under <code>harness_only/</code> and only the scorer reads them.</span></p>
+        <p class="drow"><b class="lr">catch</b><span>Two. (a) The kit uses <b>"oracle" for something else</b>: the perfect-ranking ceiling, primary 0.8645 on test ("评估进展请以 oracle 为分母"). In the write-up call ours the <b>random-exposure gate</b> or <b>unbiased validation</b>, or a judge reads "oracle" as "they used the labels". (b) The random log spans 22 Apr – 8 May and the hidden test is 29 Apr – 8 May. Runbook step 2 writes the whole file "file order kept", yet its own verify line says no candidate-visible file may hold test-dated rows — the two contradict. Pick one: filter the oracle to 22–28 Apr (matches valid, loses roughly 40% of rows, keeps the claim "no test-era information touched development" clean) or keep it whole and delete the verify line. My pick is filter.</span></p>
+        <p class="drow"><b class="lt">today</b><span>Nothing on disk can hand the candidate an oracle: <code>runner._build_env</code> ends with <code>assert set(candidate_env) &lt;= {"TRAIN","VALID"}</code> (runner.py:550). Step 4 widens that wall; until then the oracle is a plan, not a path.</span></p>
+      </div>
+
+      <div class="dec">
+        <p class="dhead"><span class="dnum">2</span>template.py is hard-coded to the synthetic spec, not KuaiRand — and that spec is copied by hand in three places</p>
+        <p class="dwhat">What is on disk is the <b>synthetic-task candidate</b>: a torch MLP, parquet in and out, rows keyed by <code>sample_id</code>, five fixed columns (<code>user_id item_id cat_a cat_b cat_c</code>), two heads <code>p_click</code> and <code>p_conversion_given_click</code>, and a <code>SYNTHETIC_FAIL</code> switch so the failure tests can make it crash, hang, or OOM on cue. The runbook table's row — "reads $TRAIN $VALID [$ORACLE] $SEED, numpy + csv, writes preds.csv" — describes the file <em>after step 6</em>, not today.</p>
+        <p class="drow"><b class="lw">evidence</b><span><code>template.py:20</code> BASE_FEATURES; <code>:215</code> writes <code>sample_id, p_click, p_conversion_given_click</code>; <code>protocols/synthetic.yaml</code> <code>metrics.cvr_auc.output: p_conversion_given_click</code>; <code>rules.jsonl</code> C3 requires that literal by regex.</span></p>
+        <p class="drow"><b class="lp">so is it "defined by the spec"?</b><span>Only by hand. The yaml <b>declares</b> the output name, C3 <b>demands</b> it, the template <b>writes</b> it — three copies, nothing derives one from another, and only the tests notice drift. KuaiRand means rewriting all three in lockstep: yaml in step 3.1, template in step 6, rules in step 13. What is <em>not</em> hard-coded is the knobs: <code>FEATURES BATCH LR EPOCHS DEVICE SEED</code> arrive as environment variables that <code>runner._build_env</code> assembles from <code>run_cfg</code>, and the tuner overrides them per trial.</span></p>
+        <p class="drow"><b class="lt">insight</b><span>A hand hypothesis is one knob frozen into the file: <code>f_true.diff</code> replaces <code>os.environ.get("FEATURES")</code> with the literal <code>"base,f_true"</code>. The bank hypotheses have no diff at all — the LLM coder writes one at run time.</span></p>
+      </div>
+
+      <div class="dec">
+        <p class="dhead"><span class="dnum">3</span>The runner does not "do" the hypothesis — a hypothesis is a diff, and the runner only launches what the diff produced</p>
+        <p class="dwhat">The path, file by file: <code>hand.yaml</code> or <code>bank.yaml</code> → a <code>Hypothesis</code> (types.py) → <code>Queue</code> (tree.py:147, ordered by p_win and family stats) → <code>Tree.step</code> pops one → <code>coder.materialise</code>: <code>PatchCoder</code> (tree.py:72) just returns the yaml's patch path, <code>LLMCoder</code> (agents/coder.py) asks the model for a diff and checks it against contract.py → <code>Workspace.commit_node</code> (tree.py:117) git-applies the diff inside <code>runs/&lt;id&gt;/workspace</code> and copies it to <code>patches/node-NNN.diff</code> → <b>only now the runner</b>: <code>_stage_candidate</code> (runner.py:475) copies template.py + report.py out of that git tree into <code>workspace/node-N/attempt-M/</code>, <code>_build_env</code> (:496) builds the wall, <code>LocalBackend.run</code> Popens it (:188) and watches progress.jsonl → <code>task.score(preds)</code> → <code>measure</code> verdict → <code>events.jsonl</code>.</p>
+        <p class="drow"><b class="lw">what the runner does own</b><span>Staging, the capability wall, the process, the stall watchdog and hard timeout, and failure classification (crash / oom_cuda / oom_host / hang / nan / bad_schema) with a halved-batch retry. That is real logic — it is just never "what to try next".</span></p>
+        <p class="drow"><b class="lr">catch</b><span>The same <code>Hypothesis</code> object arrives by two routes that meet in the same workspace: <code>--hypotheses hand.yaml</code> (patch on disk, no LLM) or the default (bank.yaml + <code>propose</code>, LLM writes the patch). The dashed rose line on the map is the one process boundary in the system; everything left of it is harness, everything the candidate can read crosses it as an environment variable.</span></p>
+        <p class="drow"><b class="lt">insight</b><span>Ask "who edits the file?" (tree + coder) separately from "who runs the file?" (runner). The runbook's fourteen steps touch the first for KuaiRand only in step 6 and 13; steps 3–5 are all on the runner/measure side.</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="seclabel">the whole ecosystem — 13 folders, every file, imports and data flow</p>
+    <div class="schemebox">
+      <svg viewBox="0 0 1424 1192" role="img" aria-label="Every file in beating-nise and the starter kit, grouped by folder, with imports, data flow, the Popen wall, and the runbook-future files ghosted" style="min-width:1240px">
+<defs><radialGradient id="gTeal" cx="38%" cy="32%" r="75%"><stop offset="0%" stop-color="#c8ece8"/><stop offset="58%" stop-color="#4f9b95"/><stop offset="100%" stop-color="#2c5f5b"/></radialGradient></defs>
+<rect class="panel" x="16" y="18" width="336" height="372" rx="10"/>
+<text class="s-tag" x="30" y="38">STARTER KIT · outside the repo (~/Downloads)</text>
+<rect class="panel" x="368" y="18" width="336" height="372" rx="10"/>
+<text class="s-tag" x="382" y="38">data/</text>
+<rect class="panel" x="720" y="18" width="336" height="372" rx="10"/>
+<text class="s-tag" x="734" y="38">protocols/ · reference/</text>
+<rect class="panel" x="1072" y="18" width="336" height="372" rx="10"/>
+<text class="s-tag" x="1086" y="38">hypotheses/</text>
+<rect class="panel" x="16" y="410" width="336" height="372" rx="10"/>
+<text class="s-tag" x="30" y="430">harness/tasks/</text>
+<rect class="panel" x="368" y="410" width="336" height="372" rx="10"/>
+<text class="s-tag" x="382" y="430">harness/ · the core</text>
+<rect class="panel" x="720" y="410" width="336" height="372" rx="10"/>
+<text class="s-tag" x="734" y="430">harness/agents/ · the LLM side</text>
+<rect class="panel" x="1072" y="410" width="336" height="372" rx="10"/>
+<text class="s-tag" x="1086" y="430">candidate/ · above the wall</text>
+<rect class="panel" x="16" y="802" width="336" height="372" rx="10"/>
+<text class="s-tag" x="30" y="822">runs/&lt;run_id&gt;/ · written at run time</text>
+<rect class="panel" x="368" y="802" width="336" height="372" rx="10"/>
+<text class="s-tag" x="382" y="822">app/ · the live view</text>
+<rect class="panel" x="720" y="802" width="336" height="372" rx="10"/>
+<text class="s-tag" x="734" y="822">tests/</text>
+<rect class="panel" x="1072" y="802" width="336" height="372" rx="10"/>
+<text class="s-tag" x="1086" y="822">scripts/ · context/ · root</text>
+<path class="edge-lit" d="M 414 615 C 537 615 630 537 753 537"/><circle class="dot-lit" cx="742" cy="539" r="2"/>
+<path class="edge-lit" d="M 414 614 C 537 614 630 510 753 510"/><circle class="dot-lit" cx="743" cy="513" r="2"/>
+<path class="edge-lit" d="M 414 616 C 537 616 629 590 752 590"/><circle class="dot-lit" cx="741" cy="590" r="2"/>
+<path class="edge-lit" d="M 413 613 C 537 613 629 458 752 458"/><circle class="dot-lit" cx="742" cy="462" r="2"/>
+<path class="edge-lit" d="M 414 615 C 537 615 629 563 752 563"/><circle class="dot-lit" cx="741" cy="565" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 378 576 408 545"/><circle class="dot-lit" cx="408" cy="556" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 381 589 408 572"/><circle class="dot-lit" cx="408" cy="583" r="2"/>
+<path class="edge-lit" d="M 402 614 C 279 614 189 485 65 485"/><circle class="dot-lit" cx="76" cy="489" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 391 602 408 599"/><circle class="dot-lit" cx="408" cy="610" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 378 535 408 466"/><circle class="dot-lit" cx="408" cy="477" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 378 562 408 519"/><circle class="dot-lit" cx="408" cy="530" r="2"/>
+<path class="edge-lit" d="M 408 622 Q 391 630 408 635"/><circle class="dot-lit" cx="408" cy="624" r="2"/>
+<path class="edge-lit" d="M 408 610 Q 378 548 408 492"/><circle class="dot-lit" cx="408" cy="503" r="2"/>
+<path class="edge-lit" d="M 408 502 Q 391 494 408 492"/><circle class="dot-lit" cx="408" cy="503" r="2"/>
+<path class="edge-lit" d="M 408 502 Q 381 481 408 466"/><circle class="dot-lit" cx="408" cy="477" r="2"/>
+<path class="edge-lit" d="M 408 637 Q 378 576 408 519"/><circle class="dot-lit" cx="408" cy="530" r="2"/>
+<path class="edge-lit" d="M 408 637 Q 378 562 408 492"/><circle class="dot-lit" cx="408" cy="503" r="2"/>
+<path class="edge-lit" d="M 408 529 Q 391 522 408 519"/><circle class="dot-lit" cx="408" cy="530" r="2"/>
+<path class="edge-lit" d="M 408 529 Q 381 508 408 492"/><circle class="dot-lit" cx="408" cy="503" r="2"/>
+<path class="edge-lit" d="M 408 529 Q 378 494 408 466"/><circle class="dot-lit" cx="408" cy="477" r="2"/>
+<path class="edge-lit" d="M 408 556 Q 381 535 408 519"/><circle class="dot-lit" cx="408" cy="530" r="2"/>
+<path class="edge-lit" d="M 402 560 C 279 560 189 457 66 457"/><circle class="dot-lit" cx="76" cy="460" r="2"/>
+<path class="edge-lit" d="M 408 556 Q 378 508 408 466"/><circle class="dot-lit" cx="408" cy="477" r="2"/>
+<path class="edge-lit" d="M 408 583 Q 378 548 408 519"/><circle class="dot-lit" cx="408" cy="530" r="2"/>
+<path class="edge-lit" d="M 408 583 Q 381 562 408 545"/><circle class="dot-lit" cx="408" cy="556" r="2"/>
+<path class="edge-lit" d="M 408 583 Q 378 522 408 466"/><circle class="dot-lit" cx="408" cy="477" r="2"/>
+<path class="edge-lit" d="M 62 508 C 185 508 274 482 397 482"/><circle class="dot-lit" cx="386" cy="483" r="2"/>
+<path class="edge-lit" d="M 56 502 Q 29 481 56 464"/><circle class="dot-lit" cx="56" cy="475" r="2"/>
+<path class="edge-lit" d="M 62 454 C 185 454 274 480 397 480"/><circle class="dot-lit" cx="386" cy="479" r="2"/>
+<path class="edge-lit" d="M 62 481 C 185 481 274 481 397 481"/><circle class="dot-lit" cx="386" cy="481" r="2"/>
+<path class="edge-lit" d="M 56 475 Q 39 468 56 464"/><circle class="dot-lit" cx="56" cy="475" r="2"/>
+<path class="edge-lit" d="M 754 481 C 631 481 543 455 420 455"/><circle class="dot-lit" cx="431" cy="456" r="2"/>
+<path class="edge-lit" d="M 760 595 Q 743 602 760 609"/><circle class="dot-lit" cx="760" cy="598" r="2"/>
+<path class="edge-lit" d="M 760 583 Q 730 522 760 463"/><circle class="dot-lit" cx="760" cy="474" r="2"/>
+<path class="edge-lit" d="M 754 589 C 631 589 541 589 418 589"/><circle class="dot-lit" cx="429" cy="589" r="2"/>
+<path class="edge-lit" d="M 754 587 C 631 587 542 458 419 458"/><circle class="dot-lit" cx="429" cy="462" r="2"/>
+<path class="edge-lit" d="M 760 460 Q 743 468 760 473"/><circle class="dot-lit" cx="760" cy="462" r="2"/>
+<path class="edge-lit" d="M 754 454 C 631 454 543 454 420 454"/><circle class="dot-lit" cx="431" cy="454" r="2"/>
+<path class="edge-lit" d="M 760 556 Q 730 522 760 489"/><circle class="dot-lit" cx="760" cy="500" r="2"/>
+<path class="edge-lit" d="M 760 556 Q 733 535 760 515"/><circle class="dot-lit" cx="760" cy="526" r="2"/>
+<path class="edge-lit" d="M 754 560 C 631 560 543 458 419 458"/><circle class="dot-lit" cx="430" cy="461" r="2"/>
+<path class="edge-lit" d="M 760 637 Q 730 562 760 489"/><circle class="dot-lit" cx="760" cy="500" r="2"/>
+<path class="edge-lit" d="M 755 640 C 632 640 542 460 419 460"/><circle class="dot-lit" cx="428" cy="465" r="2"/>
+<path class="edge-lit" d="M 408 852 Q 391 860 408 864"/><circle class="dot-lit" cx="408" cy="853" r="2"/>
+<path class="edge-lit" d="M 1112 460 Q 1095 468 1112 473"/><circle class="dot-lit" cx="1112" cy="462" r="2"/>
+<path class="edge-lit" d="M 408 933 Q 391 940 408 946"/><circle class="dot-lit" cx="408" cy="935" r="2"/>
+<path class="edge-data" d="M 756 67 C 633 67 538 473 415 473"/><circle class="dot-data" cx="422" cy="464" r="2"/>
+<path class="edge-data" d="M 1107 66 C 861 66 661 610 415 610"/><circle class="dot-data" cx="424" cy="604" r="2"/>
+<path class="edge-data" d="M 1108 94 C 985 94 888 556 765 556"/><circle class="dot-data" cx="771" cy="547" r="2"/>
+<path class="edge-data" d="M 1107 146 C 861 146 663 584 416 584"/><circle class="dot-data" cx="426" cy="578" r="2"/>
+<path class="edge-data" d="M 1112 68 Q 1082 102 1112 136"/><circle class="dot-data" cx="1112" cy="125" r="2"/>
+<path class="edge-data" d="M 760 541 Q 743 548 760 554"/><circle class="dot-data" cx="760" cy="543" r="2"/>
+<path class="edge-data" d="M 1108 923 C 985 923 888 540 765 540"/><circle class="dot-data" cx="772" cy="548" r="2"/>
+<path class="edge-data" d="M 404 593 C 280 593 185 921 62 921"/><circle class="dot-data" cx="70" cy="914" r="2"/>
+<path class="edge-data" d="M 404 593 C 281 593 184 949 61 949"/><circle class="dot-data" cx="68" cy="941" r="2"/>
+<path class="edge-data" d="M 404 594 C 281 594 184 1003 61 1003"/><circle class="dot-data" cx="68" cy="994" r="2"/>
+<path class="edge-data" d="M 61 1005 C 307 1005 507 566 753 566"/><circle class="dot-data" cx="744" cy="572" r="2"/>
+<path class="edge-data" d="M 1106 455 C 860 455 664 560 418 560"/><circle class="dot-data" cx="429" cy="559" r="2"/>
+<path class="edge-data" d="M 1106 482 C 860 482 664 561 418 561"/><circle class="dot-data" cx="429" cy="560" r="2"/>
+<path class="edge-data" d="M 404 567 C 281 567 185 974 62 974"/><circle class="dot-data" cx="69" cy="966" r="2"/>
+<path class="edge-data" d="M 56 975 C 56 975 56 491 56 491"/><circle class="dot-data" cx="56" cy="502" r="2"/>
+<path class="edge-data" d="M 56 487 C 56 487 56 892 56 892"/><circle class="dot-data" cx="56" cy="881" r="2"/>
+<path class="edge-data" d="M 56 906 Q 26 940 56 972"/><circle class="dot-data" cx="56" cy="961" r="2"/>
+<path class="edge-data" d="M 404 512 C 280 512 186 839 63 839"/><circle class="dot-data" cx="71" cy="831" r="2"/>
+<path class="edge-data" d="M 404 512 C 281 512 184 868 61 868"/><circle class="dot-data" cx="68" cy="860" r="2"/>
+<path class="edge-data" d="M 62 846 C 185 846 276 872 399 872"/><circle class="dot-data" cx="388" cy="871" r="2"/>
+<path class="edge-data" d="M 408 879 Q 381 900 408 919"/><circle class="dot-data" cx="408" cy="908" r="2"/>
+<path class="edge-data" d="M 754 642 C 631 642 541 564 418 564"/><circle class="dot-data" cx="428" cy="567" r="2"/>
+<path class="edge-data" d="M 1108 513 C 985 513 887 991 764 991"/><circle class="dot-data" cx="770" cy="982" r="2"/>
+<path class="edge-ghost" d="M 62 223 C 308 223 505 117 751 117"/><circle class="dot-ghost" cx="740" cy="119" r="2"/>
+<path class="edge-ghost" d="M 62 90 C 185 90 276 168 399 168"/><circle class="dot-ghost" cx="389" cy="166" r="2"/>
+<path class="edge-ghost" d="M 62 250 C 185 250 276 172 399 172"/><circle class="dot-ghost" cx="389" cy="174" r="2"/>
+<path class="edge-ghost" d="M 408 176 Q 391 184 408 189"/><circle class="dot-ghost" cx="408" cy="178" r="2"/>
+<path class="edge-ghost" d="M 408 176 Q 381 197 408 216"/><circle class="dot-ghost" cx="408" cy="205" r="2"/>
+<path class="edge-ghost" d="M 414 169 C 537 169 628 117 751 117"/><circle class="dot-ghost" cx="740" cy="119" r="2"/>
+<path class="edge-ghost" d="M 756 120 C 633 120 539 473 416 473"/><circle class="dot-ghost" cx="423" cy="465" r="2"/>
+<path class="edge-ghost" d="M 56 529 Q 26 494 56 464"/><circle class="dot-ghost" cx="56" cy="475" r="2"/>
+<path class="edge-ghost" d="M 56 529 C 56 529 56 125 56 125"/><circle class="dot-ghost" cx="56" cy="136" r="2"/>
+<path class="edge-ghost" d="M 60 531 C 184 531 279 229 402 229"/><circle class="dot-ghost" cx="394" cy="237" r="2"/>
+<path class="edge-ghost" d="M 406 202 C 282 202 183 973 60 973"/><circle class="dot-ghost" cx="64" cy="963" r="2"/>
+<path class="edge-ghost" d="M 56 529 C 56 529 56 150 56 150"/><circle class="dot-ghost" cx="56" cy="161" r="2"/>
+<path class="edge-ghost" d="M 1106 510 C 860 510 662 748 416 748"/><circle class="dot-ghost" cx="426" cy="745" r="2"/>
+<path class="edge-ghost" d="M 408 745 Q 378 670 408 599"/><circle class="dot-ghost" cx="408" cy="610" r="2"/>
+<path class="edge-ghost" d="M 404 674 C 281 674 184 1030 61 1030"/><circle class="dot-ghost" cx="68" cy="1022" r="2"/>
+<path class="edge-ghost" d="M 56 1029 C 56 1029 56 150 56 150"/><circle class="dot-ghost" cx="56" cy="161" r="2"/>
+<path class="edge-ghost" d="M 402 615 C 279 615 189 537 66 537"/><circle class="dot-ghost" cx="76" cy="540" r="2"/>
+<path class="edge-ghost" d="M 410 203 C 533 203 634 1155 758 1155"/><circle class="dot-ghost" cx="754" cy="1144" r="2"/>
+<path class="edge-wall" d="M 404 567 C 281 567 185 974 62 974"/><circle class="dot-wall" cx="69" cy="966" r="2"/>
+<text class="flow-label wall-label" x="162" y="776">Popen · env wall: TRAIN VALID SEED DEVICE + knobs</text>
+<circle class="node-glow" cx="56.0" cy="62" r="10"/>
+<circle class="node-lit" cx="56.0" cy="62" r="5"/>
+<text class="n-label" x="68.0" y="66">README.md</text>
+<circle class="node-glow" cx="56.0" cy="89" r="12"/>
+<circle class="node-lit" cx="56.0" cy="89" r="7"/>
+<text class="n-label" x="70.0" y="93">data.py</text>
+<circle class="node-glow" cx="56.0" cy="116" r="12"/>
+<circle class="node-lit" cx="56.0" cy="116" r="7"/>
+<text class="n-label" x="70.0" y="120">evaluate.py</text>
+<circle class="node-glow" cx="56.0" cy="143" r="10"/>
+<circle class="node-lit" cx="56.0" cy="143" r="5"/>
+<text class="n-label" x="68.0" y="147">submit.py</text>
+<circle class="node-glow" cx="56.0" cy="170" r="10"/>
+<circle class="node-lit" cx="56.0" cy="170" r="5"/>
+<text class="n-label" x="68.0" y="174">baseline.py</text>
+<circle class="node-glow" cx="56.0" cy="197" r="10"/>
+<circle class="node-lit" cx="56.0" cy="197" r="5"/>
+<text class="n-label" x="68.0" y="201">ablation_features.py</text>
+<circle class="node-glow" cx="56.0" cy="224" r="10"/>
+<circle class="node-lit" cx="56.0" cy="224" r="5"/>
+<text class="n-label" x="68.0" y="228">baseline_scores.json</text>
+<circle class="node-glow" cx="56.0" cy="251" r="12"/>
+<circle class="node-lit" cx="56.0" cy="251" r="7"/>
+<text class="n-label" x="70.0" y="255">KuaiRand-Pure/data/*.csv</text><text class="n-sub" x="237" y="255">· not extracted here</text>
+<circle class="node-glow" cx="408.0" cy="62" r="10"/>
+<circle class="node-lit" cx="408.0" cy="62" r="5"/>
+<text class="n-label" x="420.0" y="66">__init__.py</text>
+<circle class="node-glow" cx="408.0" cy="89" r="10"/>
+<circle class="node-lit" cx="408.0" cy="89" r="5"/>
+<text class="n-label" x="420.0" y="93">ingest.py</text><text class="n-sub" x="486" y="93">· Ali-CCP stub · dead track</text>
+<circle class="node-glow" cx="408.0" cy="116" r="10"/>
+<circle class="node-lit" cx="408.0" cy="116" r="5"/>
+<text class="n-label" x="420.0" y="120">schema.py</text><text class="n-sub" x="486" y="120">· Ali-CCP stub · dead track</text>
+<circle class="node-glow" cx="408.0" cy="143" r="10"/>
+<circle class="node-lit" cx="408.0" cy="143" r="5"/>
+<text class="n-label" x="420.0" y="147">subsample.py</text><text class="n-sub" x="506" y="147">· Ali-CCP stub · dead track</text>
+<circle class="node-ghost" cx="408.0" cy="170" r="7"/>
+<circle class="halo" cx="408.0" cy="170" r="12"/>
+<text class="n-label ghosted" x="422.0" y="174">kuairand.py</text>
+<circle class="node-ghost" cx="408.0" cy="197" r="6"/>
+<text class="n-label ghosted" x="421.0" y="201">kuairand/*.csv  (3, candidate-visible)</text>
+<circle class="node-ghost" cx="408.0" cy="224" r="6"/>
+<text class="n-label ghosted" x="421.0" y="228">kuairand/harness_only/</text>
+<circle class="node-glow" cx="760.0" cy="62" r="12"/>
+<circle class="node-lit" cx="760.0" cy="62" r="7"/>
+<ellipse class="ring-lit" cx="760.0" cy="62" rx="12" ry="3.1" transform="rotate(-22 760.0 62)"/>
+<text class="n-label" x="774.0" y="66">synthetic.yaml</text>
+<circle class="node-glow" cx="760.0" cy="89" r="10"/>
+<circle class="node-lit" cx="760.0" cy="89" r="5"/>
+<text class="n-label" x="772.0" y="93">aliccp.yaml</text><text class="n-sub" x="852" y="93">· dead track</text>
+<circle class="node-ghost" cx="760.0" cy="116" r="7"/>
+<circle class="halo" cx="760.0" cy="116" r="12"/>
+<text class="n-label ghosted" x="774.0" y="120">kuairand.yaml</text>
+<circle class="node-glow" cx="760.0" cy="143" r="10"/>
+<circle class="node-lit" cx="760.0" cy="143" r="5"/>
+<text class="n-label" x="772.0" y="147">reference/published_costs.yaml</text><text class="n-sub" x="979" y="147">· empty list</text>
+<circle class="node-glow" cx="1112.0" cy="62" r="11"/>
+<circle class="node-lit" cx="1112.0" cy="62" r="6"/>
+<text class="n-label" x="1125.0" y="66">hand.yaml</text>
+<circle class="node-glow" cx="1112.0" cy="89" r="11"/>
+<circle class="node-lit" cx="1112.0" cy="89" r="6"/>
+<ellipse class="ring-lit" cx="1112.0" cy="89" rx="11" ry="3.0" transform="rotate(-22 1112.0 89)"/>
+<text class="n-label" x="1125.0" y="93">bank.yaml</text>
+<circle class="node-glow" cx="1112.0" cy="116" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="116" r="5"/>
+<text class="n-label" x="1124.0" y="120">patches/base.diff</text>
+<circle class="node-glow" cx="1112.0" cy="143" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="143" r="5"/>
+<text class="n-label" x="1124.0" y="147">patches/f_true.diff</text>
+<circle class="node-glow" cx="1112.0" cy="170" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="170" r="5"/>
+<text class="n-label" x="1124.0" y="174">patches/f_marginal.diff</text>
+<circle class="node-glow" cx="1112.0" cy="197" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="197" r="5"/>
+<text class="n-label" x="1124.0" y="201">patches/f_zero.diff</text>
+<circle class="node-glow" cx="1112.0" cy="224" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="224" r="5"/>
+<text class="n-label" x="1124.0" y="228">patches/f_leak.diff</text>
+<circle class="node-glow" cx="56.0" cy="454" r="13"/>
+<circle class="node-lit" cx="56.0" cy="454" r="8"/>
+<ellipse class="ring-lit" cx="56.0" cy="454" rx="13" ry="3.6" transform="rotate(-22 56.0 454)"/>
+<text class="n-label" x="71.0" y="458">base.py</text>
+<circle class="node-glow" cx="56.0" cy="481" r="13"/>
+<circle class="halo" cx="56.0" cy="481" r="14"/>
+<circle class="node-lit" cx="56.0" cy="481" r="8"/>
+<ellipse class="ring-lit" cx="56.0" cy="481" rx="13" ry="3.6" transform="rotate(-22 56.0 481)"/>
+<text class="n-label" x="71.0" y="485">synthetic.py</text>
+<circle class="node-glow" cx="56.0" cy="508" r="10"/>
+<circle class="node-lit" cx="56.0" cy="508" r="5"/>
+<text class="n-label" x="68.0" y="512">aliccp.py</text><text class="n-sub" x="134" y="512">· stub · dead track</text>
+<circle class="node-ghost" cx="56.0" cy="535" r="8"/>
+<circle class="halo" cx="56.0" cy="535" r="13"/>
+<text class="n-label ghosted" x="71.0" y="539">kuairand.py</text>
+<circle class="node-glow" cx="408.0" cy="454" r="15"/>
+<circle class="node-lit" cx="408.0" cy="454" r="10"/>
+<ellipse class="ring-lit" cx="408.0" cy="454" rx="15" ry="4.5" transform="rotate(-22 408.0 454)"/>
+<text class="n-label" x="425.0" y="458">types.py</text>
+<circle class="node-glow" cx="408.0" cy="481" r="14"/>
+<circle class="node-lit" cx="408.0" cy="481" r="9"/>
+<ellipse class="ring-lit" cx="408.0" cy="481" rx="14" ry="4.0" transform="rotate(-22 408.0 481)"/>
+<text class="n-label" x="424.0" y="485">protocol.py</text>
+<circle class="node-glow" cx="408.0" cy="508" r="14"/>
+<circle class="node-lit" cx="408.0" cy="508" r="9"/>
+<ellipse class="ring-lit" cx="408.0" cy="508" rx="14" ry="4.0" transform="rotate(-22 408.0 508)"/>
+<text class="n-label" x="424.0" y="512">events.py</text>
+<circle class="node-glow" cx="408.0" cy="535" r="13"/>
+<circle class="halo" cx="408.0" cy="535" r="14"/>
+<circle class="node-lit" cx="408.0" cy="535" r="8"/>
+<ellipse class="ring-lit" cx="408.0" cy="535" rx="13" ry="3.6" transform="rotate(-22 408.0 535)"/>
+<text class="n-label" x="423.0" y="539">measure.py</text>
+<circle class="node-glow" cx="408.0" cy="562" r="13"/>
+<circle class="halo" cx="408.0" cy="562" r="14"/>
+<circle class="node-lit" cx="408.0" cy="562" r="8"/>
+<ellipse class="ring-lit" cx="408.0" cy="562" rx="13" ry="3.6" transform="rotate(-22 408.0 562)"/>
+<text class="n-label" x="423.0" y="566">runner.py</text>
+<circle class="node-glow" cx="408.0" cy="589" r="13"/>
+<circle class="halo" cx="408.0" cy="589" r="14"/>
+<circle class="node-lit" cx="408.0" cy="589" r="8"/>
+<ellipse class="ring-lit" cx="408.0" cy="589" rx="13" ry="3.6" transform="rotate(-22 408.0 589)"/>
+<text class="n-label" x="423.0" y="593">tree.py</text>
+<circle class="node-glow" cx="408.0" cy="616" r="12"/>
+<circle class="halo" cx="408.0" cy="616" r="13"/>
+<circle class="node-lit" cx="408.0" cy="616" r="7"/>
+<ellipse class="ring-lit" cx="408.0" cy="616" rx="12" ry="3.1" transform="rotate(-22 408.0 616)"/>
+<text class="n-label" x="422.0" y="620">__main__.py</text>
+<circle class="node-glow" cx="408.0" cy="643" r="11"/>
+<circle class="node-lit" cx="408.0" cy="643" r="6"/>
+<ellipse class="ring-lit" cx="408.0" cy="643" rx="11" ry="3.0" transform="rotate(-22 408.0 643)"/>
+<text class="n-label" x="421.0" y="647">fake_run.py</text>
+<circle class="node-glow" cx="408.0" cy="670" r="10"/>
+<circle class="halo" cx="408.0" cy="670" r="11"/>
+<circle class="node-lit" cx="408.0" cy="670" r="5"/>
+<text class="n-label" x="420.0" y="674">outputs.py</text><text class="n-sub" x="493" y="674">· stub · #16</text>
+<circle class="node-glow" cx="408.0" cy="697" r="10"/>
+<circle class="node-lit" cx="408.0" cy="697" r="5"/>
+<text class="n-label" x="420.0" y="701">audit.py</text><text class="n-sub" x="480" y="701">· stub</text>
+<circle class="node-glow" cx="408.0" cy="724" r="10"/>
+<circle class="node-lit" cx="408.0" cy="724" r="5"/>
+<text class="n-label" x="420.0" y="728">candidate/__init__.py</text><text class="n-sub" x="567" y="728">· orphan package</text>
+<circle class="node-ghost" cx="408.0" cy="751" r="6"/>
+<circle class="halo" cx="408.0" cy="751" r="11"/>
+<text class="n-label ghosted" x="421.0" y="755">verify.py</text>
+<circle class="node-glow" cx="760.0" cy="454" r="12"/>
+<circle class="node-lit" cx="760.0" cy="454" r="7"/>
+<ellipse class="ring-lit" cx="760.0" cy="454" rx="12" ry="3.1" transform="rotate(-22 760.0 454)"/>
+<text class="n-label" x="774.0" y="458">llm.py</text>
+<circle class="node-glow" cx="760.0" cy="481" r="11"/>
+<circle class="node-lit" cx="760.0" cy="481" r="6"/>
+<text class="n-label" x="773.0" y="485">_util.py</text>
+<circle class="node-glow" cx="760.0" cy="508" r="10"/>
+<circle class="node-lit" cx="760.0" cy="508" r="5"/>
+<ellipse class="ring-lit" cx="760.0" cy="508" rx="10" ry="3.0" transform="rotate(-22 760.0 508)"/>
+<text class="n-label" x="772.0" y="512">cache.py</text>
+<circle class="node-glow" cx="760.0" cy="535" r="10"/>
+<circle class="node-lit" cx="760.0" cy="535" r="5"/>
+<ellipse class="ring-lit" cx="760.0" cy="535" rx="10" ry="3.0" transform="rotate(-22 760.0 535)"/>
+<text class="n-label" x="772.0" y="539">brief.py</text>
+<circle class="node-glow" cx="760.0" cy="562" r="11"/>
+<circle class="halo" cx="760.0" cy="562" r="12"/>
+<circle class="node-lit" cx="760.0" cy="562" r="6"/>
+<ellipse class="ring-lit" cx="760.0" cy="562" rx="11" ry="3.0" transform="rotate(-22 760.0 562)"/>
+<text class="n-label" x="773.0" y="566">researcher.py</text>
+<circle class="node-glow" cx="760.0" cy="589" r="11"/>
+<circle class="node-lit" cx="760.0" cy="589" r="6"/>
+<ellipse class="ring-lit" cx="760.0" cy="589" rx="11" ry="3.0" transform="rotate(-22 760.0 589)"/>
+<text class="n-label" x="773.0" y="593">coder.py</text>
+<circle class="node-glow" cx="760.0" cy="616" r="10"/>
+<circle class="halo" cx="760.0" cy="616" r="11"/>
+<circle class="node-lit" cx="760.0" cy="616" r="5"/>
+<text class="n-label" x="772.0" y="620">contract.py</text>
+<circle class="node-glow" cx="760.0" cy="643" r="11"/>
+<circle class="node-lit" cx="760.0" cy="643" r="6"/>
+<ellipse class="ring-lit" cx="760.0" cy="643" rx="11" ry="3.0" transform="rotate(-22 760.0 643)"/>
+<text class="n-label" x="773.0" y="647">tuner.py</text>
+<circle class="node-glow" cx="1112.0" cy="454" r="13"/>
+<circle class="halo" cx="1112.0" cy="454" r="14"/>
+<circle class="node-lit" cx="1112.0" cy="454" r="8"/>
+<ellipse class="ring-lit" cx="1112.0" cy="454" rx="13" ry="3.6" transform="rotate(-22 1112.0 454)"/>
+<text class="n-label" x="1127.0" y="458">template.py</text>
+<circle class="node-glow" cx="1112.0" cy="481" r="11"/>
+<circle class="node-lit" cx="1112.0" cy="481" r="6"/>
+<text class="n-label" x="1125.0" y="485">report.py</text>
+<circle class="node-glow" cx="1112.0" cy="508" r="10"/>
+<circle class="halo" cx="1112.0" cy="508" r="11"/>
+<circle class="node-lit" cx="1112.0" cy="508" r="5"/>
+<text class="n-label" x="1124.0" y="512">rules.jsonl</text>
+<circle class="node-glow" cx="56.0" cy="846" r="13"/>
+<circle class="node-lit" cx="56.0" cy="846" r="8"/>
+<text class="n-label" x="71.0" y="850">events.jsonl</text>
+<circle class="node-glow" cx="56.0" cy="873" r="10"/>
+<circle class="node-lit" cx="56.0" cy="873" r="5"/>
+<text class="n-label" x="68.0" y="877">heartbeat.jsonl</text>
+<circle class="node-glow" cx="56.0" cy="900" r="11"/>
+<circle class="node-lit" cx="56.0" cy="900" r="6"/>
+<text class="n-label" x="69.0" y="904">data/  4 parquet + digests.json</text>
+<circle class="node-glow" cx="56.0" cy="927" r="11"/>
+<circle class="node-lit" cx="56.0" cy="927" r="6"/>
+<text class="n-label" x="69.0" y="931">workspace/  (a git repo)</text>
+<circle class="node-glow" cx="56.0" cy="954" r="10"/>
+<circle class="node-lit" cx="56.0" cy="954" r="5"/>
+<text class="n-label" x="68.0" y="958">patches/node-NNN.diff</text>
+<circle class="node-glow" cx="56.0" cy="981" r="12"/>
+<circle class="node-lit" cx="56.0" cy="981" r="7"/>
+<text class="n-label" x="70.0" y="985">workspace/node-N/attempt-M/</text>
+<circle class="node-glow" cx="56.0" cy="1008" r="10"/>
+<circle class="node-lit" cx="56.0" cy="1008" r="5"/>
+<text class="n-label" x="68.0" y="1012">lessons.jsonl</text>
+<circle class="node-ghost" cx="56.0" cy="1035" r="5"/>
+<text class="n-label ghosted" x="68.0" y="1039">submission.csv</text>
+<circle class="node-glow" cx="408.0" cy="846" r="10"/>
+<circle class="node-lit" cx="408.0" cy="846" r="5"/>
+<text class="n-label" x="420.0" y="850">__main__.py</text>
+<circle class="node-glow" cx="408.0" cy="873" r="12"/>
+<circle class="node-lit" cx="408.0" cy="873" r="7"/>
+<ellipse class="ring-lit" cx="408.0" cy="873" rx="12" ry="3.1" transform="rotate(-22 408.0 873)"/>
+<text class="n-label" x="422.0" y="877">server.py</text>
+<circle class="node-glow" cx="408.0" cy="900" r="10"/>
+<circle class="node-lit" cx="408.0" cy="900" r="5"/>
+<text class="n-label" x="420.0" y="904">static/index.html</text>
+<circle class="node-glow" cx="408.0" cy="927" r="11"/>
+<circle class="node-lit" cx="408.0" cy="927" r="6"/>
+<text class="n-label" x="421.0" y="931">static/app.js</text>
+<circle class="node-glow" cx="408.0" cy="954" r="11"/>
+<circle class="node-lit" cx="408.0" cy="954" r="6"/>
+<text class="n-label" x="421.0" y="958">static/reducer.js</text>
+<circle class="node-glow" cx="408.0" cy="981" r="10"/>
+<circle class="node-lit" cx="408.0" cy="981" r="5"/>
+<text class="n-label" x="420.0" y="985">static/reducer.test.js</text>
+<circle class="node-glow" cx="760.0" cy="846.0" r="9"/>
+<circle class="node-lit" cx="760.0" cy="846.0" r="4"/>
+<text class="n-label" x="771.0" y="850.0">conftest.py</text>
+<circle class="node-glow" cx="760.0" cy="862.6" r="9"/>
+<circle class="node-lit" cx="760.0" cy="862.6" r="4"/>
+<text class="n-label" x="771.0" y="866.6">helpers.py</text>
+<circle class="node-glow" cx="760.0" cy="879.2" r="9"/>
+<circle class="node-lit" cx="760.0" cy="879.2" r="4"/>
+<text class="n-label" x="771.0" y="883.2">fixtures/fake-events.jsonl</text>
+<circle class="node-glow" cx="760.0" cy="895.8" r="9"/>
+<circle class="node-lit" cx="760.0" cy="895.8" r="4"/>
+<text class="n-label" x="771.0" y="899.8">fixtures/fake-heartbeats.jsonl</text>
+<circle class="node-glow" cx="760.0" cy="912.4" r="9"/>
+<circle class="node-lit" cx="760.0" cy="912.4" r="4"/>
+<text class="n-label" x="771.0" y="916.4">test_00_skeleton.py</text>
+<circle class="node-glow" cx="760.0" cy="929.0" r="9"/>
+<circle class="node-lit" cx="760.0" cy="929.0" r="4"/>
+<text class="n-label" x="771.0" y="933.0">test_01_events.py</text>
+<circle class="node-glow" cx="760.0" cy="945.6" r="9"/>
+<circle class="node-lit" cx="760.0" cy="945.6" r="4"/>
+<text class="n-label" x="771.0" y="949.6">test_01_protocol.py</text>
+<circle class="node-glow" cx="760.0" cy="962.2" r="9"/>
+<circle class="node-lit" cx="760.0" cy="962.2" r="4"/>
+<text class="n-label" x="771.0" y="966.2">test_02_fake_run.py</text>
+<circle class="node-glow" cx="760.0" cy="978.8" r="9"/>
+<circle class="node-lit" cx="760.0" cy="978.8" r="4"/>
+<text class="n-label" x="771.0" y="982.8">test_02_server.py</text>
+<circle class="node-glow" cx="760.0" cy="995.4" r="9"/>
+<circle class="node-lit" cx="760.0" cy="995.4" r="4"/>
+<text class="n-label" x="771.0" y="999.4">test_03_synthetic.py</text>
+<circle class="node-glow" cx="760.0" cy="1012.0" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1012.0" r="4"/>
+<text class="n-label" x="771.0" y="1016.0">test_03_template.py</text>
+<circle class="node-glow" cx="760.0" cy="1028.6" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1028.6" r="4"/>
+<text class="n-label" x="771.0" y="1032.6">test_04_cli.py</text>
+<circle class="node-glow" cx="760.0" cy="1045.2" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1045.2" r="4"/>
+<text class="n-label" x="771.0" y="1049.2">test_04_runner.py</text>
+<circle class="node-glow" cx="760.0" cy="1061.8" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1061.8" r="4"/>
+<text class="n-label" x="771.0" y="1065.8">test_05_measure_pure.py</text>
+<circle class="node-glow" cx="760.0" cy="1078.4" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1078.4" r="4"/>
+<text class="n-label" x="771.0" y="1082.4">test_05_scorecard.py</text>
+<circle class="node-glow" cx="760.0" cy="1095.0" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1095.0" r="4"/>
+<text class="n-label" x="771.0" y="1099.0">test_06_loop.py</text>
+<circle class="node-glow" cx="760.0" cy="1111.6" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1111.6" r="4"/>
+<text class="n-label" x="771.0" y="1115.6">test_06_tree.py</text>
+<circle class="node-glow" cx="760.0" cy="1128.2" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1128.2" r="4"/>
+<text class="n-label" x="771.0" y="1132.2">test_07_agents.py</text>
+<circle class="node-glow" cx="760.0" cy="1144.8" r="9"/>
+<circle class="node-lit" cx="760.0" cy="1144.8" r="4"/>
+<text class="n-label" x="771.0" y="1148.8">test_07_tuner.py</text>
+<circle class="node-ghost" cx="760.0" cy="1161.4" r="5"/>
+<circle class="halo" cx="760.0" cy="1161.4" r="10"/>
+<text class="n-label ghosted" x="772.0" y="1165.4">test_09_kuairand_data.py</text>
+<circle class="node-glow" cx="1112.0" cy="846" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="846" r="5"/>
+<text class="n-label" x="1124.0" y="850">scripts/apply_phase6_fixes.py</text><text class="n-sub" x="1324" y="850">· dead</text>
+<circle class="node-glow" cx="1112.0" cy="873" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="873" r="5"/>
+<text class="n-label" x="1124.0" y="877">scripts/patch_phase6_all.py</text><text class="n-sub" x="1311" y="877">· dead</text>
+<circle class="node-glow" cx="1112.0" cy="900" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="900" r="5"/>
+<text class="n-label" x="1124.0" y="904">scripts/patch_phase6_tree.py</text><text class="n-sub" x="1318" y="904">· dead</text>
+<circle class="node-glow" cx="1112.0" cy="927" r="11"/>
+<circle class="node-lit" cx="1112.0" cy="927" r="6"/>
+<text class="n-label" x="1125.0" y="931">context/  (15 docs + internal/)</text><text class="n-sub" x="1339" y="931">· untracked</text>
+<circle class="node-glow" cx="1112.0" cy="954" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="954" r="5"/>
+<text class="n-label" x="1124.0" y="958">README.md</text>
+<circle class="node-glow" cx="1112.0" cy="981" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="981" r="5"/>
+<text class="n-label" x="1124.0" y="985">pyproject.toml</text>
+<circle class="node-glow" cx="1112.0" cy="1008" r="10"/>
+<circle class="node-lit" cx="1112.0" cy="1008" r="5"/>
+<text class="n-label" x="1124.0" y="1012">.gitignore</text>
+</svg>
+    </div>
+    <p class="legend">
+      <span class="k"><span class="sw lit"></span> on disk today</span>
+      <span class="k"><span class="sw gh"></span> owed by the fourteen steps</span>
+      <span class="k"><span class="sw rg"></span> ring = imported by a test</span>
+      <span class="k">breathing halo = rewritten or created by the runbook</span>
+      <span class="k"><span class="sw im"></span> import — dot on the imported file</span>
+      <span class="k"><span class="sw dt"></span> data flows toward the dot</span>
+      <span class="k"><span class="sw wl"></span> the Popen wall</span>
+      <span class="k">orb size = how much depends on it</span>
+    </p>
+    <div class="counts">
+      <div class="count t"><b>14</b>modules import types.py — the root</div>
+      <div class="count"><b>19</b>test files pin 17 modules</div>
+      <div class="count p"><b>9</b>files the runbook still owes</div>
+      <div class="count r"><b>9</b>dead or orphan files (Ali-CCP ×5, phase-6 ×3, harness/candidate ×1)</div>
+      <div class="count"><b>1</b>process boundary — runner.py:188</div>
+    </div>
+    <p class="gloss"><b>How to read it.</b> Inputs across the top (the kit, data, protocols, hypotheses), the engine in the middle (tasks, core, agents, the candidate), outputs along the bottom (runs, the live view, tests, the leftovers). The heavy traffic runs core → agents → candidate → runs and back into core through events.jsonl. The three Ali-CCP files and three phase-6 scripts have no lines touching them because nothing imports or reads them. <code>candidate/rules.jsonl</code> has exactly one line — to a test — which is the W3 finding drawn rather than described.</p>
+  </section>
+
+  <section>
+    <p class="seclabel">the manifest — every file, folder by folder</p>
+    <p class="gloss">✓ is on disk; ○ is owed by a runbook step and named with the step that writes it. Line counts are from <code>wc -l</code> today; "dead track" means no code path reaches the file.</p>
+    <p class="seclabel" style="margin-top:22px">STARTER KIT · outside the repo (~/Downloads)</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>README.md</b> — the rules. Direction 7 names the random log as an extra unbiased validation set — that is the oracle, under the organisers&#x27; own name</span></p><p class="probe"><span class="g">✓</span><span><b>data.py</b> — load / encode / SPLITS. Row order is the law: log_standard_4_08 first, then 4_22, filtered by date, file order kept</span></p><p class="probe"><span class="g">✓</span><span><b>evaluate.py</b> — the score. Positive-weighted GAUC + nDCG@5, zero-positive users count as 0. Imported, never copied, never edited</span></p><p class="probe"><span class="g">✓</span><span><b>submit.py</b> — read_submission and --check / --score / --make; the organisers&#x27; definition of a valid file</span></p><p class="probe"><span class="g">✓</span><span><b>baseline.py</b> — random / item-popularity / FM anchors. --model random must land at 0.4753 ± 0.001 or the harness is broken</span></p><p class="probe"><span class="g">✓</span><span><b>ablation_features.py</b> — reproduces the organisers&#x27; &#x27;more features gained nothing&#x27; table</span></p><p class="probe"><span class="g">✓</span><span><b>baseline_scores.json</b> — the published ladder, seed σ = 0.0008, ε = 0.002, N = 3</span></p><p class="probe"><span class="g">✓</span><span><b>KuaiRand-Pure/data/*.csv</b> <span class="ln">not extracted here</span> — log_standard_4_08_to_4_21 (train) · log_standard_4_22_to_5_08 (valid + test in one file) · log_random_4_22_to_5_08 (the oracle, 1.18 M rows) · video_features_basic</span></p></div>
+<p class="seclabel" style="margin-top:22px">data/</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>__init__.py</b> <span class="ln">1 lines</span> — package doc only</span></p><p class="probe"><span class="g">✓</span><span><b>ingest.py</b> <span class="ln">18 lines</span> <span class="ln">Ali-CCP stub · dead track</span> — phase-8 CSV→parquet streamer for Ali-CCP; never called, no KuaiRand use</span></p><p class="probe"><span class="g">✓</span><span><b>schema.py</b> <span class="ln">7 lines</span> <span class="ln">Ali-CCP stub · dead track</span> — Taobao field ids, never filled</span></p><p class="probe"><span class="g">✓</span><span><b>subsample.py</b> <span class="ln">15 lines</span> <span class="ln">Ali-CCP stub · dead track</span> — train-only subsample, never filled</span></p><p class="probe"><span class="r">○</span><span><b>kuairand.py</b> — STEP 2 — wraps kit data.py, never sorts; writes the five CSVs and their digests, once</span></p><p class="probe"><span class="r">○</span><span><b>kuairand/*.csv  (3, candidate-visible)</b> — train.csv (has long_view) · search_validation.csv (no label) · oracle_features.csv (no label)</span></p><p class="probe"><span class="r">○</span><span><b>kuairand/harness_only/</b> — search_labels.csv · oracle_labels.csv · digests.json — the scorer alone reads these</span></p></div>
+<p class="seclabel" style="margin-top:22px">protocols/ · reference/</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>synthetic.yaml</b> <span class="ln">68 lines</span> — the live ruler. Only five key paths are enforced (four digests + script_sha); everything else is documentation carried into the run header</span></p><p class="probe"><span class="g">✓</span><span><b>aliccp.yaml</b> <span class="ln">58 lines</span> <span class="ln">dead track</span> — Ali-CCP ruler; no CLI path ever loads it</span></p><p class="probe"><span class="r">○</span><span><b>kuairand.yaml</b> — STEP 3.1 writes it, 5.3 appends σ. Same five enforced key paths, KuaiRand meanings, hashed into every event</span></p><p class="probe"><span class="g">✓</span><span><b>reference/published_costs.yaml</b> <span class="ln">2 lines</span> <span class="ln">empty list</span> — phase 9 never filled it</span></p></div>
+<p class="seclabel" style="margin-top:22px">hypotheses/</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>hand.yaml</b> — five hand hypotheses (no LLM). Each carries a patch: path — used by `run --hypotheses`</span></p><p class="probe"><span class="g">✓</span><span><b>bank.yaml</b> <span class="ln">82 lines</span> — cold-start proposals sorted by p_win. No patch field: LLMCoder writes the diff at run time</span></p><p class="probe"><span class="g">✓</span><span><b>patches/base.diff</b> — FEATURES pinned to base</span></p><p class="probe"><span class="g">✓</span><span><b>patches/f_true.diff</b> — pins FEATURES=&quot;base,f_true&quot; — the planted true effect</span></p><p class="probe"><span class="g">✓</span><span><b>patches/f_marginal.diff</b> — planted marginal effect</span></p><p class="probe"><span class="g">✓</span><span><b>patches/f_zero.diff</b> — planted null effect</span></p><p class="probe"><span class="g">✓</span><span><b>patches/f_leak.diff</b> — planted leak — the leak audit must catch it</span></p></div>
+<p class="seclabel" style="margin-top:22px">harness/tasks/</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>base.py</b> <span class="ln">35 lines</span> — the Task protocol: prepare / candidate_env / score(preds, split) / rows(split), plus TaskPaths — which already has a holdout_validation seat</span></p><p class="probe"><span class="g">✓</span><span><b>synthetic.py</b> <span class="ln">313 lines</span> — generates the data, plants four effects, verifies digests, scores AUC. The only task the CLI can construct today (__main__.py:153, :333)</span></p><p class="probe"><span class="g">✓</span><span><b>aliccp.py</b> <span class="ln">27 lines</span> <span class="ln">stub · dead track</span> — 27 lines, never constructed</span></p><p class="probe"><span class="r">○</span><span><b>kuairand.py</b> — STEP 3.2 — the only file that will know KuaiRand exists: joins preds to harness_only labels by row_id, calls kit evaluate()</span></p></div>
+<p class="seclabel" style="margin-top:22px">harness/ · the core</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>types.py</b> <span class="ln">119 lines</span> — Hypothesis · Node · RunResult · Verdict · Cost · Rung · EVENT_TYPES · STATES. Imported by 14 modules — the biggest star</span></p><p class="probe"><span class="g">✓</span><span><b>protocol.py</b> <span class="ln">80 lines</span> — load() checks four top-level keys; protocol_hash() = sha256 of the ruler block only, run block excluded</span></p><p class="probe"><span class="g">✓</span><span><b>events.py</b> <span class="ln">154 lines</span> — EventLog: append-only events.jsonl, run header carries the whole protocol, heartbeat file</span></p><p class="probe"><span class="g">✓</span><span><b>measure.py</b> <span class="ln">551 lines</span> — verdict vs incumbent σ-scaled, rung specs, holdout_report() with visit accounting, CLEAR/UNCLEAR attribution (pinned open at tree.py:51)</span></p><p class="probe"><span class="g">✓</span><span><b>runner.py</b> <span class="ln">566 lines</span> — stages template+report → builds the env wall → Popen → watches progress.jsonl → classifies crash/oom/hang/nan; retries with halved batch. Asserts candidate_env ⊆ {TRAIN, VALID} at :550</span></p><p class="probe"><span class="g">✓</span><span><b>tree.py</b> <span class="ln">890 lines</span> — Queue (p_win + family stats) · Workspace (a git repo per run) · Tree loop: smoke → screen → replicate → holdout · lessons.jsonl</span></p><p class="probe"><span class="g">✓</span><span><b>__main__.py</b> <span class="ln">383 lines</span> — CLI: init / fake / run / run-one. Hardcodes SyntheticTask — there is no task registry; protocol.task only names the run id</span></p><p class="probe"><span class="g">✓</span><span><b>fake_run.py</b> <span class="ln">385 lines</span> — synthetic event stream so the UI can be built and tested without a real run</span></p><p class="probe"><span class="g">✓</span><span><b>outputs.py</b> <span class="ln">36 lines</span> <span class="ln">stub · #16</span> — Convergence(eps, n_rounds) + write_submission — stub on main; nothing reads the yaml&#x27;s convergence block</span></p><p class="probe"><span class="g">✓</span><span><b>audit.py</b> <span class="ln">19 lines</span> <span class="ln">stub</span> — 19 lines</span></p><p class="probe"><span class="g">✓</span><span><b>candidate/__init__.py</b> <span class="ln">1 lines</span> <span class="ln">orphan package</span> — harness/candidate/ — one docstring, imported by nothing</span></p><p class="probe"><span class="r">○</span><span><b>verify.py</b> — STEP 7 — rules.jsonl → static regex, shape, then LLM check over the patch, before any run</span></p></div>
+<p class="seclabel" style="margin-top:22px">harness/agents/ · the LLM side</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>llm.py</b> <span class="ln">168 lines</span> — AnthropicLLM over httpx + FakeLLM for tests; log_usage → Cost</span></p><p class="probe"><span class="g">✓</span><span><b>_util.py</b> <span class="ln">14 lines</span> — cost_dict helper</span></p><p class="probe"><span class="g">✓</span><span><b>cache.py</b> <span class="ln">84 lines</span> — ResearchCache — proposals keyed by brief hash</span></p><p class="probe"><span class="g">✓</span><span><b>brief.py</b> <span class="ln">27 lines</span> — compose(): protocol + organisers_brief.md → the text the researcher reads</span></p><p class="probe"><span class="g">✓</span><span><b>researcher.py</b> <span class="ln">202 lines</span> — propose(): brief + bank + lessons → new Hypothesis objects. Reads lessons as {heading,text} while tree writes {node,family,delta,…} (W1)</span></p><p class="probe"><span class="g">✓</span><span><b>coder.py</b> <span class="ln">109 lines</span> — LLMCoder.materialise(): asks for a diff against the workspace, runs contract checks, returns the diff path</span></p><p class="probe"><span class="g">✓</span><span><b>contract.py</b> <span class="ln">41 lines</span> — check_diff_contract / check_prompt_capability — hardcodes its own patterns, ignores rules.jsonl (W3)</span></p><p class="probe"><span class="g">✓</span><span><b>tuner.py</b> <span class="ln">148 lines</span> — optuna GPSampler over env overrides (BATCH / LR / EPOCHS), WilcoxonPruner; calls runner.run per trial</span></p></div>
+<p class="seclabel" style="margin-top:22px">candidate/ · above the wall</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>template.py</b> <span class="ln">251 lines</span> — THE SYNTHETIC CANDIDATE: torch MLP, parquet in/out, sample_id keys, p_click + p_conversion_given_click, SYNTHETIC_FAIL switch. Step 6 rewrites it for KuaiRand (numpy + csv, row_id, one score)</span></p><p class="probe"><span class="g">✓</span><span><b>report.py</b> <span class="ln">64 lines</span> — progress() / checkpoint.save() / result(); writes progress.jsonl + result.json. Must not import harness.*</span></p><p class="probe"><span class="g">✓</span><span><b>rules.jsonl</b> <span class="ln">7 lines</span> — C1–C7 seed rules, synthetic wording (VALID.*click, p_conversion_given_click). Read by one test and nothing else</span></p></div>
+<p class="seclabel" style="margin-top:22px">runs/&lt;run_id&gt;/ · written at run time</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>events.jsonl</b> — append-only; every other state is a fold over it</span></p><p class="probe"><span class="g">✓</span><span><b>heartbeat.jsonl</b> — worker liveness, one row per heartbeat_s</span></p><p class="probe"><span class="g">✓</span><span><b>data/  4 parquet + digests.json</b> — train · search_validation · holdout_validation · generated — written once by synthetic.prepare()</span></p><p class="probe"><span class="g">✓</span><span><b>workspace/  (a git repo)</b> — the candidate&#x27;s working tree; one commit per node</span></p><p class="probe"><span class="g">✓</span><span><b>patches/node-NNN.diff</b> — the applied diff, copied out of git for the record</span></p><p class="probe"><span class="g">✓</span><span><b>workspace/node-N/attempt-M/</b> — template.py + report.py staged here; progress.jsonl · result.json · preds.parquet · checkpoints written here</span></p><p class="probe"><span class="g">✓</span><span><b>lessons.jsonl</b> — one row per finished node, written by tree._append_lesson</span></p><p class="probe"><span class="r">○</span><span><b>submission.csv</b> — STEP 3.5 — written by outputs.write_submission, read back through kit submit.read_submission before the event is emitted</span></p></div>
+<p class="seclabel" style="margin-top:22px">app/ · the live view</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>__main__.py</b> <span class="ln">12 lines</span> — python -m app → serve()</span></p><p class="probe"><span class="g">✓</span><span><b>server.py</b> <span class="ln">170 lines</span> — FastAPI: tails events.jsonl over SSE with ?since=seq, serves static/</span></p><p class="probe"><span class="g">✓</span><span><b>static/index.html</b> <span class="ln">277 lines</span> — the shell</span></p><p class="probe"><span class="g">✓</span><span><b>static/app.js</b> <span class="ln">624 lines</span> — EventSource → reduce(events) → render; hashed-tier / not-hashed-tier protocol panels</span></p><p class="probe"><span class="g">✓</span><span><b>static/reducer.js</b> <span class="ln">424 lines</span> — pure fold: events → UI state</span></p><p class="probe"><span class="g">✓</span><span><b>static/reducer.test.js</b> <span class="ln">417 lines</span> — node test for the reducer</span></p></div>
+<p class="seclabel" style="margin-top:22px">tests/</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>conftest.py</b> <span class="ln">14 lines</span> — placeholder_protocol fixture</span></p><p class="probe"><span class="g">✓</span><span><b>helpers.py</b> <span class="ln">76 lines</span> — placeholder_protocol · run_candidate · stage_candidate</span></p><p class="probe"><span class="g">✓</span><span><b>fixtures/fake-events.jsonl</b> <span class="ln">118 lines</span> — recorded fake run</span></p><p class="probe"><span class="g">✓</span><span><b>fixtures/fake-heartbeats.jsonl</b> <span class="ln">141 lines</span> — recorded heartbeats</span></p><p class="probe"><span class="g">✓</span><span><b>test_00_skeleton.py</b> <span class="ln">347 lines</span> — types + import surface</span></p><p class="probe"><span class="g">✓</span><span><b>test_01_events.py</b> <span class="ln">197 lines</span> — EventLog</span></p><p class="probe"><span class="g">✓</span><span><b>test_01_protocol.py</b> <span class="ln">86 lines</span> — load + hash</span></p><p class="probe"><span class="g">✓</span><span><b>test_02_fake_run.py</b> <span class="ln">136 lines</span> — fake stream</span></p><p class="probe"><span class="g">✓</span><span><b>test_02_server.py</b> <span class="ln">171 lines</span> — SSE + static</span></p><p class="probe"><span class="g">✓</span><span><b>test_03_synthetic.py</b> <span class="ln">257 lines</span> — generator, digests, rules.jsonl shape</span></p><p class="probe"><span class="g">✓</span><span><b>test_03_template.py</b> <span class="ln">181 lines</span> — candidate contract</span></p><p class="probe"><span class="g">✓</span><span><b>test_04_cli.py</b> <span class="ln">37 lines</span> — CLI</span></p><p class="probe"><span class="g">✓</span><span><b>test_04_runner.py</b> <span class="ln">516 lines</span> — wall, failures, timeouts</span></p><p class="probe"><span class="g">✓</span><span><b>test_05_measure_pure.py</b> <span class="ln">458 lines</span> — verdict maths</span></p><p class="probe"><span class="g">✓</span><span><b>test_05_scorecard.py</b> <span class="ln">251 lines</span> — planted effects FP=0 FN=0 leak=caught</span></p><p class="probe"><span class="g">✓</span><span><b>test_06_loop.py</b> <span class="ln">159 lines</span> — end-to-end loop</span></p><p class="probe"><span class="g">✓</span><span><b>test_06_tree.py</b> <span class="ln">793 lines</span> — queue, workspace, ladder</span></p><p class="probe"><span class="g">✓</span><span><b>test_07_agents.py</b> <span class="ln">259 lines</span> — brief, cache, coder, researcher</span></p><p class="probe"><span class="g">✓</span><span><b>test_07_tuner.py</b> <span class="ln">204 lines</span> — optuna path</span></p><p class="probe"><span class="r">○</span><span><b>test_09_kuairand_data.py</b> — STEP 2 — digests match, no label in oracle_features, no test-dated rows</span></p></div>
+<p class="seclabel" style="margin-top:22px">scripts/ · context/ · root</p>
+<div class="evidence"><p class="probe"><span class="g">✓</span><span><b>scripts/apply_phase6_fixes.py</b> <span class="ln">320 lines</span> <span class="ln">dead</span> — phase-6 patcher, already applied</span></p><p class="probe"><span class="g">✓</span><span><b>scripts/patch_phase6_all.py</b> <span class="ln">253 lines</span> <span class="ln">dead</span> — phase-6 patcher, already applied</span></p><p class="probe"><span class="g">✓</span><span><b>scripts/patch_phase6_tree.py</b> <span class="ln">377 lines</span> <span class="ln">dead</span> — phase-6 patcher, already applied</span></p><p class="probe"><span class="g">✓</span><span><b>context/  (15 docs + internal/)</b> <span class="ln">untracked</span> — runbook, pivot, lineage, target architecture, build phases, reconciliation, organisers_brief.md (the SYNTHETIC brief the researcher reads), tomd.py</span></p><p class="probe"><span class="g">✓</span><span><b>README.md</b></span></p><p class="probe"><span class="g">✓</span><span><b>pyproject.toml</b> — beating-nise editable install; optuna==4.9.* declared</span></p><p class="probe"><span class="g">✓</span><span><b>.gitignore</b></span></p></div>
+  </section>
+
+  <section>
+    <p class="seclabel">one rung, start to finish — as it runs today on the synthetic task</p>
+    <ol class="frame">
+      <li><span><code>python -m harness run --hypotheses hypotheses/hand.yaml</code> — <b>__main__.py</b> loads <code>protocols/synthetic.yaml</code> through <code>protocol.load</code>, hashes the ruler, constructs <code>SyntheticTask</code> (hardcoded), opens <code>EventLog</code> which writes the run header into <code>runs/&lt;id&gt;/events.jsonl</code>.</span></li>
+      <li><span><b>synthetic.prepare()</b> generates the data, writes <code>runs/&lt;id&gt;/data/{train, search_validation, holdout_validation}.parquet</code>, verifies the five digests in the yaml. A placeholder digest (hex ≤ 15) skips verification — that is a bypass, and a test forbids it in real runs.</span></li>
+      <li><span><b>Tree.calibrate_baseline</b> runs the untouched template on five seeds to set σ; then <b>Queue.pop</b> yields <code>h-f-true</code>, and <b>PatchCoder.materialise</b> returns <code>hypotheses/patches/f_true.diff</code>. <b>Branch:</b> without <code>--hypotheses</code>, <code>researcher.propose</code> reads the brief + bank + lessons and <code>LLMCoder</code> writes the diff instead.</span></li>
+      <li><span><b>Workspace.commit_node</b> git-applies the diff in <code>runs/&lt;id&gt;/workspace</code> and copies it to <code>patches/node-001.diff</code>; the runner's <code>run_cfg["candidate_src"]</code> now points at that tree.</span></li>
+      <li><span><b>Runner.run(node, rung="screen", seed)</b> — <code>_stage_candidate</code> copies template.py + report.py into <code>workspace/node-1/attempt-1/</code>; <code>_build_env</code> drops any inherited variable naming holdout / rulebook / protocols, adds <code>DEVICE SEED WORKSPACE BATCH LR EPOCHS FEATURES</code> and the task's <code>TRAIN VALID</code>; <code>LocalBackend.run</code> Popens the script and polls <code>progress.jsonl</code>.</span></li>
+      <li><span>The candidate trains, calls <code>report.progress</code> and <code>report.checkpoint.save</code>, writes <code>preds.parquet</code> and <code>result.json</code>. <b>Branch:</b> a crash, OOM, hang, or NaN loss is classified by <code>runner.classify</code> and retried once with a halved batch.</span></li>
+      <li><span><b>synthetic.score(preds, "search")</b> joins by sample_id against the labels the candidate never saw and returns CTR AUC + CVR AUC; <b>measure</b> compares to the incumbent in σ units and returns a verdict; <b>events</b> appends it. Promotion climbs smoke → screen → replicate, and <code>_holdout_if_needed</code> spends one of two holdout visits.</span></li>
+      <li><span><b>tree._append_lesson</b> writes a row to <code>lessons.jsonl</code>; <code>family_stats</code> re-ranks the queue; <b>app/server.py</b> tails events.jsonl over SSE and <code>reducer.js</code> folds it into the page. Steps 2, 5 and 7 are exactly where the runbook swaps synthetic for KuaiRand.</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <p class="seclabel">the rules that hold it together</p>
+    <div class="rules">
+      <div class="rule"><b>The candidate sees only what crosses the wall.</b> <code>_build_env</code> is the whole capability model: three task paths plus knobs. Labels never have a path in that dict. Step 4 adds <code>ORACLE</code> and nothing else.</div>
+      <div class="rule"><b>events.jsonl is the only state.</b> Queue order, lessons, the L4 claim, the write-up and the UI are all folds over it; the run header carries the protocol so the log is self-describing.</div>
+      <div class="rule"><b>The spec lives in three hand-synced copies.</b> Protocol yaml declares the output, rules.jsonl demands it, template.py writes it. Change one, change all three, and let the tests catch what you missed.</div>
+      <div class="rule"><b>Who edits ≠ who runs.</b> tree + coder own the diff and the git workspace; runner owns the process. A new search policy touches the first; a new task touches the second and the task adapter.</div>
+    </div>
+  </section>
+
+  <footer class="answer">
+    <span>Source —</span>
+    <span class="word">~/beating-nise/context/File_ecosystem.html</span>
+    <span>Regenerate with <code>python3 ~/.claude/jobs/d1637e0c/tmp/gen_ecosystem.py</code>. Pairs with the <a href="https://claude.ai/code/artifact/b3b6980a-651f-47c1-a801-d9f9386814a7">runbook</a>; nothing there changes because of this page.</span>
+  </footer>
+</div>
+
+<script>
+// code-atlas starfield. Paste inside a <script> block at the end of the page.
+// CHANGE THE SEED for every new page in a series (any 3-4 digit number) so no
+// two pages have an identical star pattern. Everything else stays as-is.
+(function () {
+  var canvas = document.getElementById('stars');
+  var ctx = canvas.getContext('2d');
+  var tints = ['#dcdfea', '#dcdfea', '#dcdfea', '#8fc8c3', '#ac9fe8', '#d69cb1'];
+
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function draw() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = window.innerWidth, h = window.innerHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    var rand = mulberry(4471);   // <-- SEED: change per page
+    var n = Math.round((w * h) / 11000);
+    for (var i = 0; i < n; i++) {
+      var x = rand() * w, y = rand() * h;
+      var r = 0.4 + rand() * 1.1;
+      var a = 0.08 + rand() * 0.3;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = tints[Math.floor(rand() * tints.length)];
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  var t;
+  window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(draw, 150); });
+  draw();
+})();
+
+</script>

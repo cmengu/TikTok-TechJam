@@ -1,0 +1,524 @@
+<title>Seven Files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --ground:      #F7F8F8;
+  --surface:     #FFFFFF;
+  --surface-alt: #ECEEEF;
+  --ink:         #15181A;
+  --ink-soft:    #474D51;
+  --ink-mute:    #767D82;
+  --rule:        #DBDFE1;
+  --rule-soft:   #E8EBEC;
+  --gate:        #1F6A4D;
+  --gate-soft:   #E2EFE9;
+  --edit:        #A34B21;
+  --edit-soft:   #F7EAE2;
+  --stop:        #94302C;
+  --stop-soft:   #F8E6E5;
+  --shadow: 0 1px 2px rgba(21,24,26,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0D0F11;
+    --surface:     #14171A;
+    --surface-alt: #1B1F22;
+    --ink:         #E7EAEB;
+    --ink-soft:    #AEB5B9;
+    --ink-mute:    #7D858A;
+    --rule:        #282D31;
+    --rule-soft:   #1F2427;
+    --gate:        #5DB68F;
+    --gate-soft:   #162B22;
+    --edit:        #D9884F;
+    --edit-soft:   #2C1F16;
+    --stop:        #DC7B76;
+    --stop-soft:   #2E1A19;
+    --shadow: 0 1px 2px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:      #0D0F11;
+  --surface:     #14171A;
+  --surface-alt: #1B1F22;
+  --ink:         #E7EAEB;
+  --ink-soft:    #AEB5B9;
+  --ink-mute:    #7D858A;
+  --rule:        #282D31;
+  --rule-soft:   #1F2427;
+  --gate:        #5DB68F;
+  --gate-soft:   #162B22;
+  --edit:        #D9884F;
+  --edit-soft:   #2C1F16;
+  --stop:        #DC7B76;
+  --stop-soft:   #2E1A19;
+  --shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  font-size: 15.5px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 0 20px 80px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 840px; margin: 0 auto; }
+.mono, code, td.n { font-family: "IBM Plex Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif; }
+
+/* masthead */
+.masthead { padding: 48px 0 22px; border-bottom: 3px solid var(--ink); }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; font-weight: 500;
+  letter-spacing: .15em; text-transform: uppercase;
+  color: var(--ink-mute); margin: 0 0 14px;
+}
+h1 {
+  font-size: clamp(38px, 7vw, 60px);
+  font-weight: 700; line-height: 1;
+  letter-spacing: -.02em; margin: 0 0 14px;
+}
+.standfirst { font-size: 17.5px; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+
+/* sections */
+section { margin-top: 56px; }
+.sechead {
+  display: flex; align-items: baseline; gap: 12px;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 7px; margin-bottom: 20px;
+}
+.sechead .num {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px; font-weight: 600; color: var(--ink-mute); flex: none;
+}
+h2 { font-size: 25px; font-weight: 700; letter-spacing: -.012em; margin: 0; }
+h3 { font-size: 15px; font-weight: 700; margin: 24px 0 8px; letter-spacing: .002em; }
+p { margin: 0 0 13px; max-width: 72ch; }
+ul, ol { margin: 0 0 13px; padding-left: 19px; max-width: 72ch; }
+li { margin-bottom: 5px; }
+code { font-size: .87em; background: var(--surface-alt); padding: 1px 4px; border-radius: 2px; }
+b, strong { font-weight: 600; }
+
+/* command block */
+.cmd {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px; line-height: 1.75;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--ink);
+  border-radius: 0 2px 2px 0;
+  padding: 15px 18px;
+  margin: 0 0 14px;
+  overflow-x: auto;
+  box-shadow: var(--shadow);
+}
+.cmd .c { color: var(--ink); display: block; white-space: pre; }
+.cmd .c::before { content: "$ "; color: var(--ink-mute); }
+.cmd .c.plain::before { content: ""; }
+.cmd .g { display: block; color: var(--gate); white-space: pre; }
+.cmd .g::before { content: "→ "; }
+.cmd .note { display: block; color: var(--ink-mute); white-space: pre; }
+.cmd .note::before { content: "# "; }
+
+/* tables */
+.tablewrap { overflow-x: auto; margin: 0 0 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 13px 8px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-mute);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+td.n { white-space: nowrap; }
+tr.hi td { background: var(--gate-soft); font-weight: 600; }
+tr.warn td { background: var(--edit-soft); }
+
+/* pills */
+.pill {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 2px; white-space: nowrap;
+}
+.p-gate { background: var(--gate-soft); color: var(--gate); }
+.p-edit { background: var(--edit-soft); color: var(--edit); }
+.p-stop { background: var(--stop-soft); color: var(--stop); }
+.p-flat { background: var(--surface-alt); color: var(--ink-mute); }
+
+/* callout */
+.call {
+  border: 1px solid var(--edit);
+  border-radius: 2px;
+  background: var(--edit-soft);
+  padding: 18px 22px;
+  margin: 0 0 18px;
+}
+.call.gate { border-color: var(--gate); background: var(--gate-soft); }
+.call .lbl {
+  display: block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--edit); margin-bottom: 9px;
+}
+.call.gate .lbl { color: var(--gate); }
+.call p { margin: 0 0 11px; max-width: none; }
+.call p:last-child { margin-bottom: 0; }
+.call ul { max-width: none; margin-bottom: 11px; }
+
+/* step rows */
+.steps { border-top: 1px solid var(--rule); margin: 0 0 18px; }
+.step {
+  display: grid; grid-template-columns: 26px 1fr; gap: 0 16px;
+  padding: 13px 0; border-bottom: 1px solid var(--rule-soft);
+}
+.step-n { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; color: var(--edit); padding-top: 2px; }
+.step-b p { margin: 0; font-size: 14.5px; max-width: none; }
+.step-b p + p { margin-top: 6px; }
+
+.foot {
+  margin-top: 56px; padding-top: 16px;
+  border-top: 3px solid var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px; color: var(--ink-mute); line-height: 1.7;
+}
+.foot p { max-width: none; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">KuaiRand-Pure Starter Kit · teardown · 29 Aug</p>
+  <h1>Seven Files</h1>
+  <p class="standfirst">All seven read line by line. What the kit gives you, what it quietly withholds, what changed since Ali-CCP, and the exact edits — in order.</p>
+</header>
+
+<!-- 1 -->
+<section>
+  <div class="sechead"><span class="num">01</span><h2>Tonight, in four commands</h2></div>
+
+  <div class="cmd">
+    <span class="c">cd ~/Downloads/kuairand-starter-kit</span>
+    <span class="c">wget https://zenodo.org/records/10439422/files/KuaiRand-Pure.tar.gz</span>
+    <span class="c">tar xzf KuaiRand-Pure.tar.gz</span>
+  </div>
+
+  <div class="cmd">
+    <span class="c">python3 baseline.py --model random</span>
+    <span class="g">valid primary 0.4834 · test primary 0.4753 ± 0.001</span>
+    <span class="note">If this misses, the harness is broken. Fix it before anything else.</span>
+  </div>
+
+  <div class="cmd">
+    <span class="c">python3 baseline.py --model fm</span>
+    <span class="g">valid primary 0.6016 · test primary 0.5946 · ~40s, one CPU core</span>
+  </div>
+
+  <div class="cmd">
+    <span class="c">python3 submit.py --make --split test submission.csv</span>
+    <span class="c">python3 submit.py --check --split test submission.csv</span>
+    <span class="g">format and alignment check passed</span>
+  </div>
+
+  <p>That is deliverable 1 — "reproduce the official baseline" — done, and it is scored work, not setup.</p>
+</section>
+
+<!-- 2 -->
+<section>
+  <div class="sechead"><span class="num">02</span><h2>Do we have to build on it?</h2></div>
+
+  <p><b>No.</b> The kit is a starting point, not a required base. The problem statement says it exists "to lower the barrier to entry"; it lists "any open-source library or framework (PyTorch, RecBole, TorchRec, LightGBM…)" as in scope; and the kit's own README says you can skip <code>baseline.py</code> entirely and use PyTorch, LightGBM or xDeepFM, so long as scores reach <code>evaluate()</code>.</p>
+
+  <p>What binds you is a contract, not a codebase.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Binding — cannot change</th><th>Free — your call</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>evaluate.py</code>. It defines the score. Import it; never edit it.</td>
+        <td>Any library, framework or model. <b>numpy is not a constraint</b> — only the kit happens to be numpy-only.</td>
+      </tr>
+      <tr>
+        <td>The three date splits: train 0408–0421, valid 0422–0428, test 0429–0508.</td>
+        <td>Any pipeline stage. The statement is explicit that improvements are not limited to the model.</td>
+      </tr>
+      <tr>
+        <td>Submission schema, and <code>row_id</code> ordered "as produced by <code>data.load()</code>".</td>
+        <td>Any paper, public solution or pretrained weights.</td>
+      </tr>
+      <tr>
+        <td>The organizers' FM as the number to beat — valid 0.6016, test 0.5946. Explicitly "not a baseline the team builds itself".</td>
+        <td>Your own internal starter pipeline. The statement calls that "an internal step", which is fine.</td>
+      </tr>
+      <tr>
+        <td>ε = 0.002, N = 3, 50-iteration cap, 6 h wall-clock.</td>
+        <td>How you spend those iterations.</td>
+      </tr>
+      <tr>
+        <td>Per-iteration run logs: hypothesis, code diff, metrics, error and recovery events.</td>
+        <td>Their format. Ours is already JSONL events.</td>
+      </tr>
+      <tr>
+        <td><b>One hard rule: no external training data.</b> KuaiRand only, and no weights trained on these test labels.</td>
+        <td>Everything else. The resource policy is open by default.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="call">
+    <span class="lbl">One practical catch</span>
+    <p><code>row_id</code> is defined as the index into the split <em>as produced by <code>data.load()</code></em>. Write your own loader and its row order must match <code>data.py</code> exactly — <code>log_standard_4_08_to_4_21</code> first, then <code>4_22_to_5_08</code>, filter by date, keep file order. <code>submit.py --check</code> is the arbiter and it rejects any misalignment.</p>
+    <p>That is a reason to <b>wrap <code>data.py</code> rather than replace it</b> — a de-risking choice, not a rule. With 2.5 days, the constraint is time, not the kit.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section>
+  <div class="sechead"><span class="num">03</span><h2>What changed since Ali-CCP</h2></div>
+
+  <p>Everything the harness was calibrated against. The code ports; the constants and the contract do not.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th></th><th>Ali-CCP — what the repo assumes</th><th>KuaiRand-Pure — what is true</th></tr></thead>
+    <tbody>
+      <tr><td><b>Task</b></td><td>Two-stage CTR → CVR</td><td>Within-user ranking over logged impressions. No retrieval.</td></tr>
+      <tr><td><b>Label</b></td><td><code>click</code> / <code>conversion</code></td><td><code>long_view</code>, native 0/1 column</td></tr>
+      <tr><td><b>Metric</b></td><td><code>cvr_auc</code></td><td><code>primary</code> = mean(GAUC, nDCG@5)</td></tr>
+      <tr class="warn"><td><b>Range</b></td><td>[0, 1]</td><td>0.4753 random → 0.8645 oracle. Judge against 0.8645.</td></tr>
+      <tr class="warn"><td><b>Noise σ</b></td><td>assumed ≈ 0.020</td><td><b>0.0008</b> over five seeds. Every ladder constant is ~12× too coarse.</td></tr>
+      <tr><td><b>ε / N</b></td><td><code>LADDER_ETA</code> 0.005</td><td>ε = 0.002 (≈2.5σ), N = 3, given by the organizers</td></tr>
+      <tr><td><b>Stack</b></td><td>torch, pyarrow, parquet, CUDA</td><td>numpy only. No torch, pandas or sklearn.</td></tr>
+      <tr class="warn"><td><b>Run cost</b></td><td>GPU-minutes</td><td><b>40 seconds</b>, one CPU core. Compute stops being the budget.</td></tr>
+      <tr><td><b>Submission</b></td><td><code>sample_id, p_click, p_conversion_given_click</code>, scores in [0,1]</td><td><code>row_id, user_id, video_id, score</code>, any real number, NaN/Inf rejected</td></tr>
+      <tr><td><b>Primary key</b></td><td><code>sample_id</code></td><td><code>row_id</code> — <code>(user_id, video_id)</code> is <b>not</b> unique; 3.06% of test rows repeat, one 12 times</td></tr>
+      <tr class="warn"><td><b>Main trap</b></td><td>Label leakage</td><td>Anything constant within a user contributes <b>exactly zero</b>. User-side features only reach the score through an item-side cross.</td></tr>
+      <tr><td><b>Cost denominator</b></td><td>GPU-hours</td><td>Agent wall-clock and tokens. GPU-hours are zero for everyone.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>One more: the problem statement's <em>Limits</em> row still says "NDCG@10 / Recall@50, click = positive". It is stale. <code>evaluate.py</code>, <code>baseline_scores.json</code> and the benchmark table all agree on <code>long_view</code> / GAUC + nDCG@5. Treat the kit as authoritative.</p>
+</section>
+
+<!-- 3 -->
+<section>
+  <div class="sechead"><span class="num">04</span><h2>The seven files</h2></div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th class="n">Lines</th><th>What it is</th><th>Our action</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>evaluate.py</code></td><td class="n">61</td>
+        <td>GAUC, nDCG@5, primary. Every convention frozen in the header. <code>evaluate(user_ids, labels, scores)</code> — knows nothing about models.</td>
+        <td><span class="pill p-stop">Never edit</span> Import it. It defines the score.</td>
+      </tr>
+      <tr class="hi">
+        <td><code>data.py</code></td><td class="n">64</td>
+        <td>Loads two logs + video features, filters by date, encodes 5 fields to contiguous ids with a per-field UNK slot.</td>
+        <td><span class="pill p-edit">Edit first</span> See §04 — it throws away most of the dataset.</td>
+      </tr>
+      <tr>
+        <td><code>baseline.py</code></td><td class="n">118</td>
+        <td>Three models. <code>pop</code> is smoothed item popularity. <code>fm</code> is a hand-written Factorization Machine with Adam and early stopping on valid primary. <code>random</code> is the self-check.</td>
+        <td><span class="pill p-edit">The starting point</span> <code>FM.step</code> is where the loss lives.</td>
+      </tr>
+      <tr>
+        <td><code>baseline_scores.json</code></td><td class="n">—</td>
+        <td>Published valid and test scores, five-seed σ, ε/N, oracle ceiling, test-set user composition, and the exact FM config.</td>
+        <td><span class="pill p-flat">Read-only</span> Source for <code>protocols/kuairand.yaml</code>.</td>
+      </tr>
+      <tr>
+        <td><code>submit.py</code></td><td class="n">105</td>
+        <td><code>--make</code> writes a reference submission, <code>--check</code> validates header, row count, <code>row_id</code> continuity and per-row alignment, <code>--score</code> scores locally.</td>
+        <td><span class="pill p-gate">Our gate</span> The harness delegates its read-back to <code>read_submission</code>.</td>
+      </tr>
+      <tr>
+        <td><code>ablation_features.py</code></td><td class="n">78</td>
+        <td>Reproduces the "more features doesn't help" result over three seeds: 5 fields vs 9 vs CWM's 13.</td>
+        <td><span class="pill p-flat">Evidence</span> Cite it; don't rerun it.</td>
+      </tr>
+      <tr>
+        <td><code>README.md</code></td><td class="n">—</td>
+        <td>Task, ladder, ceiling warning, submission format, and the two lists that matter: measured dead ends, and ranked untried ground.</td>
+        <td><span class="pill p-edit">Seed the bank</span> Both lists go into the harness verbatim.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>About 700 lines, one dependency. The austerity is the message: the organizers are saying tooling is not the bottleneck, and they back it with a reference pipeline that trains in forty seconds.</p>
+</section>
+
+<!-- 4 -->
+<section>
+  <div class="sechead"><span class="num">05</span><h2>The finding: <code>load()</code> throws away most of the dataset</h2></div>
+
+  <p>Each row that <code>data.load()</code> returns is a seven-element tuple, and that is all the rest of the kit can ever see:</p>
+
+  <div class="cmd">
+    <span class="c plain">(date, user_id, video_id, author_id, tab, duration_ms, long_view)</span>
+    <span class="note">x[0]    x[1]     x[2]      x[3]       x[4]  x[5]         x[6]</span>
+  </div>
+
+  <p>The logs also carry <code>is_click</code>, <code>is_like</code>, <code>is_follow</code>, <code>is_comment</code>, <code>is_forward</code>, <code>play_time_ms</code> and <code>hourmin</code>. None of them survive the loader. And <code>load()</code> opens exactly two files — <code>log_standard_4_08_to_4_21</code> and <code>log_standard_4_22_to_5_08</code>. <b>It never opens <code>log_random_4_22_to_5_08_pure.csv</code>.</b></p>
+
+  <div class="call">
+    <span class="lbl">Why this is the first edit</span>
+    <p>Five of the organizers' seven untried directions need a column the loader currently discards:</p>
+    <ul>
+      <li><b>Multi-task</b> needs the five auxiliary feedback flags.</li>
+      <li><b>Watch-time modelling</b> needs <code>play_time_ms</code>.</li>
+      <li><b>Time features and drift</b> need <code>hourmin</code> — <code>date</code> is loaded but never used as a feature.</li>
+      <li><b>Unbiased validation</b> needs the random-exposure log, which is not loaded at all.</li>
+      <li><b>User history sequences</b> need the full per-user train history, which survives, but is easier to build once the other columns are there.</li>
+    </ul>
+    <p>Widening the tuple and adding a third file is roughly a dozen lines, and it unblocks four of the seven directions at once. Do it before touching the model.</p>
+  </div>
+
+  <p>The other thing to know about <code>data.py</code>: <code>encode()</code> builds its vocabularies from <b>train only</b>, gives every field an UNK slot, and lays all five fields into one shared embedding table via cumulative offsets. Any new field must follow that pattern or the FM's index arithmetic breaks.</p>
+</section>
+
+<!-- 5 -->
+<section>
+  <div class="sechead"><span class="num">06</span><h2>The test split is on disk, and off limits</h2></div>
+
+  <div class="call">
+    <span class="lbl">Correction to an earlier read of this page</span>
+    <p>KuaiRand-Pure is public and ships every split, so the "hidden" test labels are physically on your disk — <code>baseline.py</code> prints a test score and <code>submit.py --score --split test</code> runs. An earlier version of this page called that a design choice. <b>It is not.</b> The problem statement puts it out of scope: <em>"No hidden-test access during development (train + validation only)"</em>, and <em>"the agent develops using only the training split and the public validation feedback."</em></p>
+    <p>So the rule is simple: <b>the agent never reads the test split during a run.</b> Not as a selection signal, not as a diagnostic, not once. Enforce it in code rather than by discipline — the task adapter should refuse to hand the test labels to a candidate at all.</p>
+  </div>
+
+  <div class="call gate">
+    <span class="lbl">What the rules do fix, and what they leave open</span>
+    <p><b>Fixed:</b> the scored submission is "the validation-best checkpoint" at convergence, evaluated once on the hidden test. So validation selects the final answer, and the random-exposure log cannot replace it.</p>
+    <p><b>Open:</b> nothing constrains what gates a <em>promotion inside the loop</em>. That is where the randomly-exposed log belongs — a second, unbiased check on every candidate the search decides to keep, using an evaluation split the logging policy never touched. It steers the search; validation still picks the submission. Both statements can be true at once, and together they are the L4-v claim.</p>
+  </div>
+
+  <p>The published ladder, for reference. Valid and test both come from <code>baseline_scores.json</code>.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Model</th><th class="n">valid GAUC</th><th class="n">valid nDCG@5</th><th class="n">valid primary</th><th class="n">test primary</th></tr></thead>
+    <tbody>
+      <tr><td>random</td><td class="n">0.4993</td><td class="n">0.4675</td><td class="n">0.4834</td><td class="n">0.4753</td></tr>
+      <tr><td>item popularity</td><td class="n">0.6387</td><td class="n">0.5227</td><td class="n">0.5807</td><td class="n">0.5715</td></tr>
+      <tr class="hi"><td>FM — the bar</td><td class="n">0.6674</td><td class="n">0.5357</td><td class="n">0.6016</td><td class="n">0.5946</td></tr>
+      <tr><td>oracle ceiling</td><td class="n">1.0000</td><td class="n">0.6968</td><td class="n">0.8484</td><td class="n">0.8645</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>FM's config is published too: <code>k=16, lr=0.001, batch=8192, max_epochs=40, patience=4</code>, five fields. Note that <code>run_fm</code> early-stops on <b>validation primary</b> — so validation is already the search signal, which is exactly why it should not also be the selection signal.</p>
+</section>
+
+<!-- 6 -->
+<section>
+  <div class="sechead"><span class="num">07</span><h2>Where to change the model, by line</h2></div>
+
+  <p>The organizers' ranked list, mapped to the code you actually edit. Their order, kept.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th class="n">#</th><th>Direction</th><th>Where</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr class="hi">
+        <td class="n">1</td><td><b>Change the loss</b> — pointwise logloss to pairwise BPR or listwise softmax over each user's impressions</td>
+        <td><code>FM.step</code>, the line <code>g = (sigmoid(z) − y) / B</code>. Also needs a user-grouped sampler, since pairs and lists must come from one user.</td>
+        <td>~30 lines</td>
+      </tr>
+      <tr>
+        <td class="n">2</td><td>User history sequences (DIN / SIM)</td>
+        <td>New field in <code>data.py raw()</code>, plus pooling — the FM's shared table has no sequence slot, so this is the largest of the seven.</td>
+        <td>large</td>
+      </tr>
+      <tr>
+        <td class="n">3</td><td>Multi-task on the five auxiliary flags</td>
+        <td>Widen <code>load()</code>, add heads to <code>FM.logits</code>.</td>
+        <td>~40 lines</td>
+      </tr>
+      <tr>
+        <td class="n">4</td><td>Watch-time as censored regression (CWM's contribution)</td>
+        <td>Widen <code>load()</code> for <code>play_time_ms</code>, one-sided loss in <code>FM.step</code>.</td>
+        <td>~40 lines</td>
+      </tr>
+      <tr>
+        <td class="n">5</td><td>DeepFM / DCN / xDeepFM</td>
+        <td>Replaces the <code>FM</code> class outright.</td>
+        <td>large — and capacity was measured flat, so keep it fifth</td>
+      </tr>
+      <tr>
+        <td class="n">6</td><td>Time features and train/test drift</td>
+        <td><code>hourmin</code> into <code>load()</code>; <code>date</code> is already carried as <code>x[0]</code> and unused.</td>
+        <td>~10 lines</td>
+      </tr>
+      <tr class="hi">
+        <td class="n">7</td><td><b>Unbiased validation</b> — the randomly-exposed log, 1.18M rows</td>
+        <td>A third file in <code>load()</code>, then one extra <code>evaluate()</code> call per promotion.</td>
+        <td>~15 lines</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Two are known flat and should never be proposed: <b>more static features</b> (13 fields scored 0.5940 against 0.5950 for 5) and <b>more capacity</b> (k = 8/16/32 gave 0.5895 / 0.5902 / 0.5887). The stated reason is that <code>user_id × video_id</code> already absorbs most of the learnable signal and 1.14M rows will not support a larger model.</p>
+</section>
+
+<!-- 7 -->
+<section>
+  <div class="sechead"><span class="num">08</span><h2>What the harness takes from the kit</h2></div>
+
+  <div class="steps">
+    <div class="step"><div class="step-n">1</div><div class="step-b">
+      <p><b>Wrap, don't reimplement.</b> <code>harness/tasks/kuairand.py</code> calls <code>data.load</code> and <code>data.encode</code> directly. Rewriting the split is how the harness and the scorer drift apart.</p>
+    </div></div>
+    <div class="step"><div class="step-n">2</div><div class="step-b">
+      <p><b><code>candidate/template.py</code> becomes the FM path from <code>baseline.py</code></b> — numpy, CSV, no CUDA. The current 251 lines of torch and parquet go.</p>
+    </div></div>
+    <div class="step"><div class="step-n">3</div><div class="step-b">
+      <p><b><code>METRIC</code> changes from <code>cvr_auc</code> to <code>primary</code></b>, and every constant in <code>measure.py</code> is rederived from a σ you measure yourself. Expect ≈0.0008; don't hardcode theirs.</p>
+    </div></div>
+    <div class="step"><div class="step-n">4</div><div class="step-b">
+      <p><b>The submission writer delegates.</b> Keep the write-then-read-back structure; replace the validator body with a call into <code>submit.read_submission</code>, so our definition of valid cannot drift from the organizers'. Note it needs a full <code>data.load</code>, so cache the split rather than reloading per check.</p>
+    </div></div>
+    <div class="step"><div class="step-n">5</div><div class="step-b">
+      <p><b><code>rules.jsonl</code> gets the three measured dead ends</b> as seed rules — static features flat, capacity flat, within-user constants contribute zero — and <code>bank.yaml</code> is reseeded from the ranked untried list with the loss function first.</p>
+    </div></div>
+    <div class="step"><div class="step-n">6</div><div class="step-b">
+      <p><b><code>protocols/kuairand.yaml</code> is fully known in advance.</b> Splits are the three date ranges, baseline scores ship in <code>baseline_scores.json</code>, ε = 0.002 and N = 3 are given. Nothing in it needs measuring.</p>
+    </div></div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section>
+  <div class="sechead"><span class="num">09</span><h2>Traps</h2></div>
+
+  <ul>
+    <li><b>Scores are written at six significant figures</b> — <code>f"{s:.6g}"</code> in <code>write_submission</code>. Fine for a real-valued model, but a coarse or saturating score function will produce ties, and ties change the ranking.</li>
+    <li><b><code>row_id</code> order is defined by file order, not by sorting.</b> Read <code>log_standard_4_08_to_4_21</code> first, then <code>4_22_to_5_08</code>, filter by date, keep the original order. If you ever sort the rows, alignment breaks and <code>--check</code> rejects the file.</li>
+    <li><b>nDCG counts every user; GAUC does not.</b> Users with no positives score a flat 0.0 that still enters the nDCG mean, which is why the ceiling is 0.7289 rather than 1.0. GAUC skips them entirely. The two metrics disagree about who counts, and that is the whole reason the ceiling sits where it does.</li>
+    <li><b>New fields must join the shared offset table.</b> <code>encode()</code> lays all fields into one embedding matrix by cumulative offset; adding one outside that scheme silently corrupts the indices.</li>
+    <li><b>CWM is a reference, not a starting point.</b> It pins <code>torch==1.6.0</code> from 2020, and its evaluation label is a reconstructed <code>long_view2</code> rather than the native column. Read it; don't build on it.</li>
+  </ul>
+</section>
+
+<footer class="foot">
+  <p>All seven files read in full at <code>~/Downloads/kuairand-starter-kit</code>, 26 Aug build. Numbers quoted from <code>baseline_scores.json</code> and the file headers, not from the README summary. The local-test-labels observation is from the code: <code>submit.py</code> accepts <code>--split test</code> and <code>baseline.py</code> evaluates on test, both using labels loaded from the public files. Rules quoted from the problem statement, last updated 27 Aug 2026 17:55.</p>
+  <p>Companion pages: <em>The KuaiRand Pivot</em> (repo status), <em>The Dormant Wires</em> (what the papers say we already built), <em>The External Oracle</em> (target architecture and the path back).</p>
+</footer>
+
+</div>
