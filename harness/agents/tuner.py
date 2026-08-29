@@ -100,7 +100,7 @@ def tune(
         )
         if not result.ok:
             return None
-        return float(result.metrics.get("cvr_auc", 0.0))
+        return float(result.metrics.get(runner.task.metric, 0.0))
 
     if budget < 10:
         scores: list[tuple[float, dict[str, Any]]] = []

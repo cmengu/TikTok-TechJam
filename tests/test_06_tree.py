@@ -148,6 +148,7 @@ class FakeMeasure:
     script: list[Verdict] = field(default_factory=list)
     band: Band | None = field(default_factory=_band)
     holdout_calls: list[int] = field(default_factory=list)
+    metric: str = "cvr_auc"
     _i: int = 0
     _holdout_visits: int = 0
     events: EventLog | None = None

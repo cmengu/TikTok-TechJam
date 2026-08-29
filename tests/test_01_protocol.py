@@ -11,7 +11,7 @@ from harness import protocol as proto
 
 ROOT = Path(__file__).resolve().parents[1]
 SYNTHETIC = ROOT / "protocols" / "synthetic.yaml"
-ALICCP = ROOT / "protocols" / "aliccp.yaml"
+KUAIRAND = ROOT / "protocols" / "kuairand.yaml"
 
 
 def _ruler() -> dict:
@@ -79,8 +79,8 @@ def test_missing_ruler_raises(tmp_path: Path):
 
 
 def test_nulls_allowed():
-    p = proto.load(ALICCP)
-    assert p.task == "aliccp"
-    assert p.ruler["convergence"]["epsilon"] is None
+    p = proto.load(KUAIRAND)
+    assert p.task == "kuairand"
+    assert p.ruler["calibration"]["sigma"] is None
     assert p.protocol_hash.startswith("sha256:")
     assert len(p.protocol_hash) == len("sha256:") + 64

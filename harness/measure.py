@@ -42,7 +42,6 @@ RHO_REFRESH_AFTER = 3
 # Redline §6 Ladder: stall threshold as multiple of sd (consumed by phase 6)
 STALL_SD_MULT = 2.0
 
-METRIC = "cvr_auc"
 LEAK_RULE_GAIN = "leak_implausible_gain"
 LEAK_RULE_FEATURE = "R3_single_feature"
 
@@ -252,11 +251,17 @@ def combine_inconclusive(a: Verdict, b: Verdict) -> Literal["re_measure"]:
 
 class Measure:
     def __init__(
-        self, events: EventLog, protocol: Protocol, band: Band | None
+        self,
+        events: EventLog,
+        protocol: Protocol,
+        band: Band | None,
+        *,
+        metric: str,
     ) -> None:
         self.events = events
         self.protocol = protocol
         self.band = band
+        self.metric = metric
         self._holdout_visits = 0
         self._replicate_deltas: list[list[float]] = []
         self._rho_refreshed = False
@@ -294,7 +299,7 @@ class Measure:
                 raise CalibrationError(
                     f"screen seed {seed} failed: {result.failure_class}"
                 )
-            screen_scores.append(float(result.metrics[METRIC]))
+            screen_scores.append(float(result.metrics[self.metric]))
 
         pair_scores: list[float] = []
         for seed in fixed_pair:
@@ -305,7 +310,7 @@ class Measure:
                 raise CalibrationError(
                     f"fixed-pair seed {seed} failed: {result.failure_class}"
                 )
-            pair_scores.append(float(result.metrics[METRIC]))
+            pair_scores.append(float(result.metrics[self.metric]))
         if len(pair_scores) != 2:
             raise CalibrationError("fixed_pair must yield exactly two scores")
 
@@ -318,7 +323,7 @@ class Measure:
                 raise CalibrationError(
                     f"full seed {seed} failed: {result.failure_class}"
                 )
-            full_scores.append(float(result.metrics[METRIC]))
+            full_scores.append(float(result.metrics[self.metric]))
 
         band = calibrate(
             screen_scores, full_scores, (pair_scores[0], pair_scores[1])
@@ -327,7 +332,7 @@ class Measure:
         self.events.emit(
             "measurement",
             stage="calibrate",
-            metric=METRIC,
+            metric=self.metric,
             band=_band_payload(band),
             summary=(
                 f"calibrated band bar={band.bar:.4f} "
@@ -355,7 +360,7 @@ class Measure:
 
         band = self.band
         seeds = [r.seed for r in results]
-        scores = [float(r.metrics.get(METRIC, float("nan"))) for r in results]
+        scores = [float(r.metrics.get(self.metric, float("nan"))) for r in results]
         deltas = [
             float(score) - incumbent.get(seed)
             for seed, score in zip(seeds, scores, strict=True)
@@ -421,7 +426,7 @@ class Measure:
             node=node.id,
             rung=rung,
             state=state,
-            metric=METRIC,
+            metric=self.metric,
             delta_mean=delta_mean,
             delta_per_seed=deltas,
             band=(-sd, sd),
@@ -431,7 +436,7 @@ class Measure:
         payload: dict[str, Any] = {
             "node": node.id,
             "state": state,
-            "metric": METRIC,
+            "metric": self.metric,
             "scores": scores,
             "seeds": seeds,
             "band": _band_payload(band),
@@ -486,7 +491,7 @@ class Measure:
                 raise RuntimeError(
                     f"holdout seed {seed} failed: {result.failure_class}"
                 )
-            cand = float(result.metrics[METRIC])
+            cand = float(result.metrics[self.metric])
             inc = incumbent.get(seed)
             candidate_scores.append(cand)
             incumbent_scores.append(inc)
@@ -504,7 +509,7 @@ class Measure:
             node=node.id,
             rung="holdout",
             visit=visit,
-            metric=METRIC,
+            metric=self.metric,
             value=new_holdout,
             delta_mean=delta_mean,
             seeds=seeds,
@@ -514,7 +519,7 @@ class Measure:
             self.events.emit(
                 "prediction",
                 node=node.id,
-                metric=METRIC,
+                metric=self.metric,
                 value=new_holdout,
                 best_reported=next_best,
                 band=_band_payload(self.band) if self.band else None,
@@ -548,7 +553,7 @@ class Measure:
             "measurement",
             stage="calibrate",
             refreshed=True,
-            metric=METRIC,
+            metric=self.metric,
             band=_band_payload(refreshed),
             summary=(
                 f"refreshed ρ={refreshed.rho:.3f} bar={refreshed.bar:.4f} "

@@ -13,7 +13,7 @@ from sklearn.metrics import roc_auc_score
 
 from helpers import placeholder_protocol
 from harness.events import EventLog
-from harness.measure import METRIC, Measure, SeedCache
+from harness.measure import Measure, SeedCache
 from harness.runner import Runner
 from harness.tasks.synthetic import SyntheticTask
 from harness.types import Cost, Node
@@ -65,9 +65,9 @@ class RecordingRunner:
 
     def run(self, *args, **kwargs):
         result = self.inner.run(*args, **kwargs)
-        if result.ok and METRIC in result.metrics:
+        if result.ok and self.inner.task.metric in result.metrics:
             self.by_rung_seed[(result.rung, result.seed)] = float(
-                result.metrics[METRIC]
+                result.metrics[self.inner.task.metric]
             )
         return result
 
@@ -108,7 +108,7 @@ def scorecard(synth_200k, tmp_path_factory):
     }
     inner = Runner(events, task, run_cfg, heartbeat_s=30.0)
     runner = RecordingRunner(inner)
-    measure = Measure(events, proto, band=None)
+    measure = Measure(events, proto, band=None, metric="cvr_auc")
     baseline = _node(1, "base")
 
     band = measure.calibrate_from_runs(

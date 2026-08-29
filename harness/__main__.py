@@ -108,7 +108,7 @@ def _cmd_run(argv: list[str]) -> None:
     from harness.agents.researcher import propose
     from harness.measure import Measure
     from harness.runner import Runner
-    from harness.tasks.synthetic import SyntheticTask
+    from harness.tasks import make_task
     from harness.tree import PatchCoder, Queue, Tree, Workspace, family_stats
     from harness.types import Cost, Node
 
@@ -159,7 +159,7 @@ def _cmd_run(argv: list[str]) -> None:
     )
     use_agents = args.hypotheses is None
     hyps = _load_hypotheses(hyps_path)
-    task = SyntheticTask(n_impressions=args.rows)
+    task = make_task(protocol, n_impressions=args.rows)
     paths = task.prepare(protocol, run_dir / "data")
     events = EventLog(run_dir, run_id, protocol)
     try:
@@ -183,7 +183,7 @@ def _cmd_run(argv: list[str]) -> None:
             },
         }
         runner = Runner(events, task, run_cfg, heartbeat_s=30.0)
-        measure = Measure(events, protocol, band=None)
+        measure = Measure(events, protocol, band=None, metric=task.metric)
         workspace = Workspace(run_dir, run_id)
         queue = Queue(events)
         hyp_index = {h.id: h for h in hyps}
@@ -287,7 +287,7 @@ def _cmd_run_one(argv: list[str]) -> None:
     import copy
 
     from harness.runner import Runner
-    from harness.tasks.synthetic import SyntheticTask
+    from harness.tasks import make_task
     from harness.types import Cost, Node
 
     parser = argparse.ArgumentParser(prog="python -m harness run-one")
@@ -339,7 +339,7 @@ def _cmd_run_one(argv: list[str]) -> None:
         flush=True,
     )
 
-    task = SyntheticTask(n_impressions=args.rows)
+    task = make_task(protocol, n_impressions=args.rows)
     paths = task.prepare(protocol, run_dir / "data")
     events = EventLog(run_dir, run_id, protocol)
     try:

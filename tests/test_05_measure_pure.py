@@ -256,7 +256,7 @@ def test_attribution_gate(tmp_path: Path):
     try:
         band = _band(rho=0.5)
         # bar at ρ0.5, σ_full 0.012 → 0.0114; deltas well above
-        measure = Measure(events, proto, band)
+        measure = Measure(events, proto, band, metric="cvr_auc")
         inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
         results = [
             _result(1, 0.53, rung="replicate"),
@@ -303,7 +303,7 @@ def test_holdout_budget(tmp_path: Path):
     runner = FakeRunner(
         scores={("holdout", s): 0.56 for s in range(1, HOLDOUT_SEEDS + 1)}
     )
-    measure = Measure(events, proto, _band())
+    measure = Measure(events, proto, _band(), metric="cvr_auc")
     inc = SeedCache({s: 0.55 for s in range(1, HOLDOUT_SEEDS + 1)})
     try:
         r1 = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
@@ -330,7 +330,7 @@ def test_holdout_candidate_side_only(tmp_path: Path):
     runner = FakeRunner(
         scores={("holdout", s): 0.56 + 0.001 * s for s in range(1, HOLDOUT_SEEDS + 1)}
     )
-    measure = Measure(events, proto, _band())
+    measure = Measure(events, proto, _band(), metric="cvr_auc")
     inc = SeedCache({s: 0.55 for s in range(1, HOLDOUT_SEEDS + 1)})
     try:
         report = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
@@ -367,7 +367,7 @@ def test_inconclusive_never_stacks():
 def test_verdict_pairs_by_seed(tmp_path: Path):
     proto = placeholder_protocol(tmp_path)
     events = EventLog(tmp_path / "run-pair", "pair", proto)
-    measure = Measure(events, proto, _band())
+    measure = Measure(events, proto, _band(), metric="cvr_auc")
     # cache order different from results order
     inc = SeedCache({3: 0.50, 1: 0.50, 2: 0.50})
     results = [
@@ -394,7 +394,7 @@ def test_rho_refresh(tmp_path: Path):
     events = EventLog(tmp_path / "run-rho", "rho", proto)
     # Start at ρ=0.5; tight deltas → ρ rises, bar falls
     band = _band(rho=0.5)
-    measure = Measure(events, proto, band)
+    measure = Measure(events, proto, band, metric="cvr_auc")
     inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
     tight = [
         _result(1, 0.53, rung="replicate"),
@@ -433,7 +433,7 @@ def test_verdict_emits_event(tmp_path: Path):
     proto = placeholder_protocol(tmp_path)
     events = EventLog(tmp_path / "run-ve", "ve", proto)
     band = _band(rho=0.5)
-    measure = Measure(events, proto, band)
+    measure = Measure(events, proto, band, metric="cvr_auc")
     # Huge mean delta → leak trip
     inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
     big = band.sd_delta_full * 6 + 0.50

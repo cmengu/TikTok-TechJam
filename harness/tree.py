@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from harness.events import EventLog
-from harness.measure import METRIC, SeedCache
+from harness.measure import SeedCache
 from harness.outputs import Convergence, write_submission
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
 
@@ -472,9 +472,9 @@ class Tree:
 
             def run(self, node, rung, seed, timeout_s, **kwargs):  # noqa: ANN001
                 res = self._inner.run(node, rung, seed, timeout_s, **kwargs)
-                if res.ok and METRIC in res.metrics:
+                if res.ok and self.measure.metric in res.metrics:
                     self.by_rung_seed[(str(rung), int(seed))] = float(
-                        res.metrics[METRIC]
+                        res.metrics[self.measure.metric]
                     )
                 return res
 
@@ -502,7 +502,7 @@ class Tree:
             )
             if not res.ok:
                 raise RuntimeError(f"baseline holdout seed {seed} failed")
-            holdout_scores[seed] = float(res.metrics[METRIC])
+            holdout_scores[seed] = float(res.metrics[self.measure.metric])
         self.holdout_inc = SeedCache(holdout_scores)
         self._best_reported = statistics.mean(holdout_scores.values())
 
@@ -674,7 +674,7 @@ class Tree:
                 if self.workspace and self.incumbent and self.incumbent.commit:
                     self.workspace.checkout(self.incumbent.commit)
                 return
-            if self._convergence.update(float(screen.metrics[METRIC])):
+            if self._convergence.update(float(screen.metrics[self.measure.metric])):
                 self._finish("convergence")
                 return
             self._set_state(node, "replicating")
@@ -694,7 +694,7 @@ class Tree:
                     break
                 results.append(res)
                 try:
-                    d = float(res.metrics[METRIC]) - self.full_inc.get(seed)
+                    d = float(res.metrics[self.measure.metric]) - self.full_inc.get(seed)
                 except Exception:
                     d = None
                 self._append_lesson(node, family, d, gpu_min, diff_summary)
@@ -712,9 +712,9 @@ class Tree:
             if v_rep.state == "promoted":
                 self._promotions += 1
                 screen_roll = dict(self.screen_inc.as_dict())
-                screen_roll[SCREEN_SEED] = float(screen.metrics[METRIC])
+                screen_roll[SCREEN_SEED] = float(screen.metrics[self.measure.metric])
                 self.screen_inc = SeedCache(screen_roll)
-                self.full_inc = SeedCache({r.seed: float(r.metrics[METRIC]) for r in results})
+                self.full_inc = SeedCache({r.seed: float(r.metrics[self.measure.metric]) for r in results})
                 self.incumbent = node
                 self._holdout_if_needed(node, at_end=False)
                 if results[-1].result_path is not None:
@@ -730,7 +730,7 @@ class Tree:
                     )
             elif self.workspace and self.incumbent and self.incumbent.commit:
                 self.workspace.checkout(self.incumbent.commit)
-            rep_mean = statistics.mean(float(r.metrics[METRIC]) for r in results)
+            rep_mean = statistics.mean(float(r.metrics[self.measure.metric]) for r in results)
             if self._convergence.update(rep_mean):
                 self._finish("convergence")
                 return
@@ -844,7 +844,7 @@ class Tree:
                     pass
             elif self._best_reported > 0:
                 self.events.emit(
-                    "prediction", node=self.incumbent.id, metric=METRIC,
+                    "prediction", node=self.incumbent.id, metric=self.measure.metric,
                     value=self._best_reported, best_reported=self._best_reported,
                     summary=(
                         f"prediction {self._best_reported:.4f} "

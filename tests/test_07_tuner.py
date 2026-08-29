@@ -21,6 +21,7 @@ class FakeRunner:
     calls: list[tuple[str, int]] = field(default_factory=list)
     knob_history: list[dict] = field(default_factory=list)
     fail_on: set[int] = field(default_factory=set)
+    task: object = field(default_factory=lambda: type("T", (), {"metric": "cvr_auc"})())
 
     def run(self, node: Node, rung: str, seed: int, timeout_s: float, **_) -> RunResult:
         del timeout_s
