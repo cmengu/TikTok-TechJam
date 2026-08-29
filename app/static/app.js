@@ -187,27 +187,46 @@ function collapseFeed(feed) {
   return groups;
 }
 
+function buildEventRow(g) {
+  const label = feedLabel(g.kind);
+  if (g.count === 1) {
+    const ev = g.last;
+    const bits = [`#${ev.seq}`, label];
+    if (ev.node != null) bits.push(`node=${ev.node}`);
+    if (ev.class) bits.push(`class=${ev.class}`);
+    if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
+    bits.push(`— ${ev.summary || ""}`);
+    return `<li>${escapeHtml(bits.join(" "))}</li>`;
+  }
+  const text = `#${g.first.seq}–#${g.last.seq} ${g.count}× ${label} — ${g.last.summary || ""}`;
+  return `<li>${escapeHtml(text)}</li>`;
+}
+
+// A gap is a run of seq numbers skipped between two known boundary seqs
+// (never negative — highSeq and lowSeq are always adjacent group boundaries,
+// or a group boundary against the run's seq=1 start or state.lastSeq). We
+// can't say which event kinds were skipped without re-reading state.log, so
+// the marker only ever names a count.
+function buildGapRow(highSeq, lowSeq) {
+  const count = highSeq - lowSeq - 1;
+  if (count <= 0) return "";
+  return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${count} events not shown</li>`;
+}
+
 function buildEventsPanel(state) {
   const groups = collapseFeed(state.feed);
   const all = groups.slice().reverse();
   if (!all.length) return `<p class="panel-empty">no events yet</p>`;
-  const rows = all
-    .map((g) => {
-      const label = feedLabel(g.kind);
-      if (g.count === 1) {
-        const ev = g.last;
-        const bits = [`#${ev.seq}`, label];
-        if (ev.node != null) bits.push(`node=${ev.node}`);
-        if (ev.class) bits.push(`class=${ev.class}`);
-        if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
-        bits.push(`— ${ev.summary || ""}`);
-        return `<li>${escapeHtml(bits.join(" "))}</li>`;
-      }
-      const text = `#${g.first.seq}–#${g.last.seq} ${g.count}× ${label} — ${g.last.summary || ""}`;
-      return `<li>${escapeHtml(text)}</li>`;
-    })
-    .join("");
-  return `<div class="event-scroll"><ul class="event-list">${rows}</ul></div>`;
+  const rows = [];
+  rows.push(buildGapRow(state.lastSeq, all[0].last.seq));
+  all.forEach((g, i) => {
+    rows.push(buildEventRow(g));
+    if (i < all.length - 1) {
+      rows.push(buildGapRow(g.first.seq, all[i + 1].last.seq));
+    }
+  });
+  rows.push(buildGapRow(all[all.length - 1].first.seq, 1));
+  return `<div class="event-scroll"><ul class="event-list">${rows.join("")}</ul></div>`;
 }
 
 // Counts verdicts after the most recent "promoted" one (all of them, if
