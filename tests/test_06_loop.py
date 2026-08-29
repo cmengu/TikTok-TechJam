@@ -69,7 +69,7 @@ def loop_run(tmp_path_factory):
         "stall_threshold_s": 300.0,
     }
     runner = Runner(events, task, run_cfg, heartbeat_s=30.0)
-    measure = Measure(events, proto, band=None)
+    measure = Measure(events, proto, band=None, metric="cvr_auc")
     workspace = Workspace(run_dir, "p6-loop")
     hyps = _load_hand()
     by_id = {h.id: h for h in hyps}

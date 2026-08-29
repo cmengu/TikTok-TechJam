@@ -41,6 +41,14 @@ class Convergence:
 
 
 def _readback_predictions(path: Path, task, expected_rows: int) -> dict:
+    if getattr(task, "name", None) == "kuairand":
+        result = task.readback_submission(path)
+        if result["rows"] != expected_rows:
+            raise SubmissionError(
+                f"row count {result['rows']} != expected {expected_rows}"
+            )
+        return result
+
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         if reader.fieldnames is None:
@@ -124,14 +132,15 @@ def write_submission(
         data = json.loads(result_path.read_text(encoding="utf-8"))
         preds = Path(data["preds"])
         scores = task.score(preds, "search")
-        node_score = float(node.scores.get("cvr_auc", [0.0])[-1])
-        if abs(scores["cvr_auc"] - node_score) > 1e-4:
+        metric = getattr(task, "metric", "cvr_auc")
+        node_score = float(node.scores.get(metric, [0.0])[-1])
+        if abs(scores[metric] - node_score) > 1e-4:
             raise SubmissionError(
-                f"checkpoint dry-run cvr_auc {scores['cvr_auc']:.6f} "
+                f"checkpoint dry-run {metric} {scores[metric]:.6f} "
                 f"!= node {node_score:.6f}"
             )
         dest = ckpt_dest
-        readback = {"ok": True, "cvr_auc": scores["cvr_auc"]}
+        readback = {"ok": True, metric: scores[metric]}
     else:
         raise SubmissionError(f"unknown mode {mode!r}")
 

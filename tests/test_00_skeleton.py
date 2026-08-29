@@ -48,6 +48,7 @@ IMPLEMENTED = {
     "harness.agents._util",
     "data.kuairand",
     "harness.kit",
+    "harness.tasks.kuairand",
 }
 
 PRODUCT_STATES = {
@@ -226,11 +227,10 @@ def test_state_vocabulary():
 
 def test_protocol_files_parse():
     synthetic = yaml.safe_load((ROOT / "protocols" / "synthetic.yaml").read_text())
-    aliccp = yaml.safe_load((ROOT / "protocols" / "aliccp.yaml").read_text())
+    kuairand = yaml.safe_load((ROOT / "protocols" / "kuairand.yaml").read_text())
     assert _nulls_under(synthetic["ruler"]) == set()
-    nulls = _nulls_under(aliccp)
-    assert nulls == ALICCP_NULL_PATHS
-    assert len(nulls) == 7
+    assert kuairand["task"] == "kuairand"
+    assert kuairand["ruler"]["calibration"]["sigma"] is None
 
 
 def _stub_callables():

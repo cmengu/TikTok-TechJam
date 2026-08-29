@@ -56,7 +56,7 @@ ruler:
       - gauc
       - ndcg_at_5
   scoring:
-    script_sha: pending
+    script_sha: b9deb77bfcba30467329cdbd21bcfb102736dddb66a21716195712039ed41050
     evaluate_sha: ecfde28392eb14fec4f488083251df50624e1af2b86278b962daecfb42d195de
     submit_sha: ab01bb2b970ae2a9f2ead299f5240b71ff4126c2d9bb0e0c4de6c7e245dc148c
     prediction_columns:

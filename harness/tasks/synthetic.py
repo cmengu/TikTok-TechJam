@@ -172,6 +172,7 @@ def _score_script_sha() -> str:
 
 class SyntheticTask:
     name = "synthetic"
+    metric = "cvr_auc"
 
     def __init__(self, n_impressions: int = 1_000_000) -> None:
         self.n_impressions = int(n_impressions)
