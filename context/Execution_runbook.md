@@ -697,7 +697,7 @@ It is also the smallest working example of the numerical-honesty principle from 
 
 **3.1 — Write protocols/kuairand.yaml from the aliccp template**
 
-Same shape: schema_version, task, ruler with data digests, splits, metrics, scoring, baseline, convergence, seeds. Fill the digests from step 2. Write convergence.epsilon: 0.002 and n_rounds: 3 now — they are the organisers’ numbers from baseline_scores.json, not measurements, and step 5 does not touch them. Splits are the kit’s date ranges; the metric block is primary over all impressions, positive long_view, output score. The complete file, key by key, is in “How the files wrap the task” above — keep the five digest key paths it marks, they are what prepare() and fake mode read. Leave only the calibration block (σ) null for step 5 — the loader treats a placeholder as an error, so a forgotten null fails at startup rather than mid-run. Then delete the Ali-CCP layer: data/ingest.py, data/schema.py, harness/tasks/aliccp.py, protocols/aliccp.yaml — six NotImplementedError go with them and nothing imports them.
+Same shape: schema_version, task, ruler with data digests, splits, metrics, scoring, baseline, convergence, seeds. Fill the digests from step 2. Write convergence.epsilon: 0.002 and n_rounds: 3 now — they are the organisers’ numbers from baseline_scores.json, not measurements, and step 5 does not touch them. Splits are the kit’s date ranges; the metric block is primary over all impressions, positive long_view, output score. The complete file, key by key, is in “How the files wrap the task” above — keep the five digest key paths it marks, they are what prepare() and fake mode read. Leave only the calibration block (σ) null for step 5 — the loader treats a placeholder as an error, so a forgotten null fails at startup rather than mid-run. Then delete the Ali-CCP layer: data/ingest.py, data/schema.py, harness/tasks/aliccp.py, protocols/aliccp.yaml — six NotImplementedError go with them and nothing imports them — but two tests read protocols/aliccp.yaml (test_00_skeleton.py:225 for the nulls check, test_01_protocol.py:14 and :83 for load and task name): retarget both to synthetic.yaml in the same PR or the deletion turns the suite red.
 
 **3.2 — Write harness/tasks/kuairand.py by copying the synthetic adapter**
 
@@ -709,9 +709,9 @@ Join predictions to the split’s labels by row_id, then call the kit’s evalua
 
 The edge cases are already decided in evaluate.py’s header and you inherit them by not reimplementing: a zero-positive user scores nDCG 0.0 and is averaged in; GAUC counts only users with 0 < positives < impressions and is weighted by positive count, not a plain mean; nDCG gain is 2^rel − 1. A hand-rolled roc_auc_score loop with np.mean(gaucs) is a second definition of the score, and it is wrong. Pin the file: put evaluate.py’s SHA-256 in the protocol beside the data digests.
 
-**3.4 — Change METRIC to "primary" and follow the compile errors**
+**3.4 — Make the metric name come from the task — do not rename the global**
 
-One constant, several call sites, and the errors are the checklist. Any place that still reads cvr_auc after this is a place that would have silently compared against a metric the new task never produces.
+Because step 6.0 keeps the synthetic task alive, cvr_auc stays in use at ~40 sites (synthetic.py, fake_run.py, six test files, the reducer tests). Renaming measure.METRIC to "primary" would break all of them. Instead each adapter declares metric: str — "cvr_auc" on SyntheticTask, "primary" on KuaiRandTask — and Measure takes it at construction; every site that read the module constant reads self.metric. Two hardcoded literals must go with it: measure.py:45 and agents/tuner.py:103 (result.metrics.get("cvr_auc", 0.0)). fake_run.py keeps cvr_auc — it is a synthetic fixture and its golden log must not change.
 
 **3.5 — Retarget the submission read-back before it can bite you**
 
@@ -729,19 +729,25 @@ Score the random, item-popularity and FM predictors through score(preds, "search
 
 **NEW** harness/tasks/kuairand.py copy synthetic.py, replace generate() with a reader
 **EDIT** harness/tasks/__init__.py register the adapter by name
-**EDIT** harness/measure.py line 45 · METRIC
+**EDIT** harness/measure.py line 45 · METRIC becomes Measure(metric=task.metric); also agents/tuner.py:103
 **EDIT** harness/tree.py construct Convergence(eps, n_rounds) from protocol.ruler["convergence"] — it counts rounds on the incumbent's valid primary, never on the oracle
 **EDIT** harness/outputs.py PREDICTION_COLUMNS, drop the clamp, delegate read-back to submit.read_submission
-**DEL** data/ingest.py · data/schema.py · harness/tasks/aliccp.py · protocols/aliccp.yaml the Ali-CCP layer, six NotImplementedError
+**DEL** data/ingest.py · data/schema.py · harness/tasks/aliccp.py · protocols/aliccp.yaml the Ali-CCP layer, six NotImplementedError — and retarget test_00_skeleton.py:225, test_01_protocol.py:14/:83 to synthetic.yaml
 **NEW** tests/test_10_kuairand_task.py
 
 ```
-# harness/measure.py:45
+# harness/measure.py:45 — the constant becomes a constructor argument
 - METRIC = "cvr_auc"
-+ METRIC = "primary"
++ class Measure:
++     def __init__(self, ..., metric: str):   # task.metric — "cvr_auc" synthetic, "primary" kuairand
++         self.metric = metric
+# harness/agents/tuner.py:103 — the other hardcoded literal
+- return float(result.metrics.get("cvr_auc", 0.0))
++ return float(result.metrics.get(self.metric, 0.0))
 
-# then follow the errors — they are the checklist
-grep -rn 'cvr_auc' harness/ tests/ app/ data/ protocols/    # must be empty — aliccp is gone
+# then the checklist: no metric literal may remain in the task-blind layer
+grep -n '"cvr_auc"\|"primary"' harness/measure.py harness/tree.py harness/agents/tuner.py harness/runner.py   # must be empty
+grep -rn 'aliccp' harness/ tests/ data/ protocols/    # must be empty after 3.1's deletions + the two test retargets
 ```
 
 ```
@@ -779,7 +785,7 @@ def score(self, preds_path, split) -> dict[str, float]:
 | test_score_rejects_missing_ids | A prediction file missing rows raises, naming the count difference. | Refusal twin; this is the guard that makes the oracle path safe. |
 | test_score_rejects_noncontiguous_row_id | A duplicated or skipped row_id raises, and so does a file sorted by score. | The other way to satisfy a set-equality check while being wrong — and the exact rejection submit.py --check would give later. |
 | test_metric_returns_components | score() returns gauc and ndcg_at_5 alongside primary. | Step 10 imports these keys; without the test they get quietly dropped in a refactor and attribution silently degrades. |
-| test_no_module_reads_cvr_auc | The string cvr_auc appears nowhere in the repository — no carve-out, the Ali-CCP files are gone. | A repository-wide grep as an assertion. Catches the call site you missed in 3.4. |
+| test_metric_name_comes_from_task | No metric literal ("cvr_auc" or "primary") appears in measure.py, tree.py, tuner.py or runner.py; Measure(metric="primary") and Measure(metric="cvr_auc") both produce verdicts on their own task’s metrics dict. | A grep over the task-blind layer plus the affirmative twin on both tasks. Catches the literal you missed in 3.4 and keeps the synthetic suite green. |
 
 **GATE:**
 Three reference predictors score within tolerance of their published valid values through score(preds, "search"), the kit’s FM prediction file passes submit.py --check --split valid, and pytest -q tests/test_10_kuairand_task.py is green. The first end-to-end run-one is step 6’s gate. (There is no --task or --rung flag on the CLI; the four subcommands are in “Conventions”.)
