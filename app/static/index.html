@@ -278,6 +278,17 @@
       border-radius: var(--r-ctl);
       padding: var(--s2) var(--s3);
     }
+    /* ~5 rows at the .event-list row height below. Most rows wrap to two
+       lines (collapsed groups and longer summaries routinely do at this
+       panel's width), so this is tuned against rendered rows, not the
+       single-line arithmetic (line-height 1.55 on 0.85rem text + var(--s2)
+       padding + 1px border ≈ 38px) that undershoots real content. Bounds the
+       panel so a long-running run's full event list (FEED_CAP in
+       reducer.js) never grows the dashboard grid row — only this scrolls. */
+    .event-scroll {
+      max-height: 260px;
+      overflow-y: auto;
+    }
     .event-list {
       list-style: none;
       margin: 0;

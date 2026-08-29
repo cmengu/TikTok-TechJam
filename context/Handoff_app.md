@@ -528,10 +528,13 @@ along, is anything wrong.** Five panels:
    the replicate agreed — render it normally. The verdict badge is always
    `ev.state` verbatim; the app reports the harness's verdict, it never
    invents one.
-3. **Last five events** — from `state.feed`, newest first. `inconclusive` must
-   appear as its own event kind, never folded into `rejected`. Collapse
-   consecutive same-type rows (the six startup `hypothesis_queued` events
-   should be one row saying so, not six).
+3. **Events** — from `state.feed`, newest first, as a scrollable list (all of
+   `state.feed`, not just the last five — the panel is capped to ~5 rows of
+   height via `.event-scroll`'s `max-height`, so scrolling reveals older
+   events without growing the dashboard grid row). `inconclusive` must appear
+   as its own event kind, never folded into `rejected`. Collapse consecutive
+   same-type rows (the six startup `hypothesis_queued` events should be one
+   row saying so, not six).
 4. **Progress toward stopping** — `protocol.ruler.convergence` (`epsilon`,
    `n_rounds`) plus verdicts since the last `promoted` verdict. **Label this
    "derived in the app" explicitly**: the harness is specified to emit a

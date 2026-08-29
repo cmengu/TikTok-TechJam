@@ -63,7 +63,7 @@ const FEED_TYPES = new Set([
 ]);
 
 const LOG_CAP = 500;
-const FEED_CAP = 50;
+const FEED_CAP = 1000;
 const MEASUREMENTS_CAP = 500;
 
 export const initial = () => ({
