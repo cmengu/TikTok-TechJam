@@ -592,7 +592,7 @@ the batch-2 band model:
   (`:428-442`). `rung` was parked by agreement in batch 1; the harness has
   unparked it.
 - Two additive event types exist: `incumbent_changed` and `prediction`
-  (`harness/types.py:41-42`). The reducer handles both.
+  (`harness/types.py:40-41`). The reducer handles both.
 - `harness/fake_run.py` still emits the old `[lo, hi]` pair and no `rung`.
   It is the teammate's file. He has been asked to update it. The app must
   work correctly either way, and must not be edited to assume he has.
@@ -941,6 +941,17 @@ live needs `tabindex="0"`, a `keydown` handler for Enter and Space, and
 probably `role="treeitem"`. That is an app.js change with its own checkpoint,
 and it is not in batch 4's scope.
 
+## The stale-worker threshold is a display choice
+
+`WORKER_STALE_MS = 5000` (app.js:66-69) is what decides when a worker in the
+"Now running" panel gets marked stale. Its own comment says the value "isn't
+specified anywhere" — nothing in the event stream defines when a worker
+should be considered stale; 5 seconds is a judgment call the app made,
+picked only because it comfortably exceeds normal inter-heartbeat gaps at
+the fake run's default 20x speed. It is a display heuristic, not a
+harness-specified number, and should be revisited if a real worker's
+heartbeat cadence turns out to differ from the fake run's.
+
 ## Gap grammar — the closed list
 
 Dashed edges have exactly five sanctioned uses, audited at checkpoint 5:
@@ -993,3 +1004,41 @@ were resolved at batch 5 checkpoint 1:
   trip, and a second tinted element there would cost the rule trip its status
   as the loudest thing on the screen. `color: var(--pos)` and `font-weight: 600`
   remain — the badge still reads as the incumbent, just without a fill.
+
+## The app is closed here
+
+This is the last app checkpoint. The UI is being closed out, not paused.
+What follows is a plain account of what's built and what isn't — none of it
+is a "future enhancement."
+
+**Three screens are built: Dashboard, Protocol, Run.** Everything else in
+`ROUTES` (app.js:965-995) renders `renderStub`: Brief, Research, Hypotheses,
+Audit → Replication, Audit → Cost, Audit → Reliability, Report — seven routes,
+all seven named on batch 1's "Explicitly parked" list. Only two are actually
+blocked on missing data: no event in the stream carries a `cost` field, so
+spend stays a dashed gap everywhere, including Audit → Cost. The other five —
+Brief, Research, Hypotheses, Audit → Reliability, Report — are not
+data-blocked; the reducer already holds what they'd need. Nobody scoped a
+screen for them. One correction to the parked list's own reasoning while
+we're being plain about gaps: it still says Audit → Replication is parked
+because verdicts carry no `rung`. That stopped being true in batch 3 —
+verdicts have carried `rung` since PR #10 landed (`harness/measure.py:433`),
+and the node dossier displays it verbatim (app.js:720, :738). Audit →
+Replication is a stub for the same reason as the other four now: nobody
+built it, not because the data is missing.
+
+**Keyboard selection of tree nodes is unbuilt, and it is the largest known
+gap.** The primary interaction on the Run screen — selecting a node — has no
+keyboard path. `.tree-node:focus-visible` is styled and ready; nothing makes
+it live (`grep -c tabindex app/static/app.js` → 0, `grep -c keydown
+app/static/app.js` → 0). It needs `tabindex="0"`, a `keydown` handler for
+Enter and Space, and probably `role="treeitem"`. Anyone picking this app back
+up should start there.
+
+**`Δ` (U+0394) and `⚠` (U+26A0) are missing from the latin subset** of both
+self-hosted fonts and fall back to a system font (see "Known: webfont subset
+gaps" above). Unfixed, by design, until app.js is back in scope.
+
+**Both grammars are closed and audited.** Dashed has exactly five sanctioned
+uses; tint has exactly three. See "Gap grammar — the closed list" above for
+the tables — they are not restated here.
