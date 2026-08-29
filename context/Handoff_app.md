@@ -463,3 +463,258 @@ so the teammate can see what was deliberately left.
 - Do not add a control that changes a run. Every such control is an
   intervention, and interventions are 20% of the grade.
 - Do not download or touch Ali-CCP (step 8).
+
+---
+
+# Handoff — App batch 2 (header strip · Dashboard) · 27 Aug
+
+Batch 1 is merged/open as PR #9. Branch `app-batch-2` off updated `main` once
+#9 lands; if it has not landed, branch off `app-batch-1` and say so in the PR.
+
+**Framework decision, now settled: stay vanilla.** No framework, no bundler, no
+npm dependency. Revisit only if batch 3 (Run tree + node dossier) proves it
+necessary. Adopting one now would mean rewriting the shell and Protocol page.
+
+Everything below reads from reduced state. The reducer does not change in this
+batch. If you believe it must, stop and say so rather than editing it.
+
+## Task 4 — header strip
+
+Populate the `<header id="header-strip">` slots left empty in batch 1. Visible
+on every route. Five slots, four of them live:
+
+| Slot | Source |
+|---|---|
+| Run state | `state.run.status` (`waiting`/`running`/`ended`) + `state.run.endReason` when ended |
+| Submission written | `state.submissions.length > 0` → green "submission written"; zero → amber "no submission yet" |
+| Spend | **PARKED.** Render a dimmed `—` with a `title` saying spend is not yet instrumented. Do not invent a number, do not compute one from anything |
+| Interventions | `state.interventions.length` |
+| Elapsed vs budget | `state.run.startedAt` → now, against `state.run.protocol.run.budget.wall_clock_h` |
+
+Notes:
+
+- **Elapsed needs a clock, and the reducer has none by design** (it is pure —
+  no `Date.now()`). The view owns the ticking: one `setInterval` at 1s that
+  re-renders only the header, never the route. Freeze it at `endedAt` once
+  `status === "ended"`.
+- Budget may be `null` (aliccp until the webinar). Show elapsed alone with a
+  "no budget set" chip rather than dividing by null.
+- Submission written is a *light*, not a count. `submission_written` carries
+  only `{node, path, summary}` — no validity field; validation is the
+  teammate's phase 9/10 and does not exist in the stream yet. The header
+  reports what happened (a file was written), not a verdict on it. The green
+  state's `title` says so explicitly: "written from a promoted node; not
+  validated — rulebook post-checks are not instrumented yet".
+- The header is not a control panel. Nothing in it is clickable except, if you
+  like, a link to the route that explains it.
+
+## Task 5 — Dashboard
+
+Replace the provisional four-panel view. Per the product spec, the Dashboard
+answers four questions in five seconds: **is it alive, what's it doing, how far
+along, is anything wrong.** Five panels:
+
+1. **Now running** — one panel per worker from `state.workers`. Status, node,
+   step/total, loss, attempt. A worker whose latest heartbeat is stale should
+   look stale (the heartbeat's `t` vs now, same clock as the header).
+2. **Score against baseline** — the incumbent's latest promoted scores per
+   metric, each **with its noise band**, against
+   `protocol.ruler.baseline.published` and the `reproduced` spread. The
+   number and its band are always shown — never delete the reading, never
+   compute or override the verdict. `band` means opposite things depending on
+   which verdict produced it (see `harness/measure.py`): for
+   `inconclusive`/`rejected` (screening), inside the band means no signal —
+   grey it. For `replicating`/`promoted` (replication), inside the band means
+   the replicate agreed — render it normally. The verdict badge is always
+   `ev.state` verbatim; the app reports the harness's verdict, it never
+   invents one.
+3. **Last five events** — from `state.feed`, newest first. `inconclusive` must
+   appear as its own event kind, never folded into `rejected`. Collapse
+   consecutive same-type rows (the six startup `hypothesis_queued` events
+   should be one row saying so, not six).
+4. **Progress toward stopping** — `protocol.ruler.convergence` (`epsilon`,
+   `n_rounds`) plus verdicts since the last `promoted` verdict. **Label this
+   "derived in the app" explicitly**: the harness is specified to emit a
+   convergence counter on every verdict (`outputs.py`, phase 9) and does not
+   yet. When that event arrives, this panel switches to it. Do not present a
+   derived number as if the harness reported it.
+5. **Paper ticker** — titles from `state.research.sources`, ticking past. Titles
+   only here; the Research tab is where a paper is attached to the hypothesis
+   it produced. Show cache hit/miss tallies from `state.research` beside it.
+
+**Nothing on the Dashboard changes the run.** Every control that could is an
+intervention, and interventions are 20% of the grade.
+
+## Out of scope for batch 2
+
+Run tree redesign, node dossier, Research, Hypotheses, Audit, Report, and
+everything on the batch-1 parked list (cost/spend, `rung` on verdicts, Brief).
+
+## Gate
+
+- `python -m pytest` and `node --test "app/static/*.test.js"` green.
+- Real browser, not the DOM shim: `python -m harness fake --speed 20` +
+  `python -m app`, look at it.
+- Confirm: header visible on every route and updates live; elapsed ticks
+  without re-rendering the route; spend slot dimmed, not fabricated; all five
+  Dashboard panels populate; no bare score without a band; inconclusive renders
+  grey and labelled; a mid-stream refresh reproduces the same state; zero
+  console errors.
+- Pre-commit sync as always.
+
+---
+
+# Handoff — App batch 3 (band contract · Run tree · node dossier) · 28 Aug
+
+Branch `app-batch-3`, cut from `app-batch-2` because PR #11 had not merged
+when batch 3 opened. Once #11 lands, batch 3's base is already contained in
+`main` — do not rebase.
+
+**Framework decision holds: stay vanilla.** Batch 3 was the agreed revisit
+point. The Run tree does not force a framework: the reducer already holds
+the full node graph, and the tree is a recursive render over it.
+
+## What PR #10 changed underneath us
+
+The teammate's real `harness/measure.py` landed mid-batch-2 and invalidated
+the batch-2 band model:
+
+- A verdict's `band` is now a **dict** (`_band_payload` is `asdict(Band)`,
+  `measure.py:120-121`). The new `Band` has no `lo`/`hi` at all — it carries
+  `sigma_screen`, `sigma_full`, `sigma_pair`, `ratio`, `rho`,
+  `sd_delta_screen`, `sd_delta_full`, `bar`, `source`, `n_replicated`
+  (`measure.py:51-61`).
+- **Nothing tests containment.** `screen_verdict` compares a delta to
+  `SCREEN_ADVANCE_SD * sd_delta_screen` (`:194`); `replicate_verdict`
+  compares a mean delta to `promote_bar(band)` (`:214`). The inside/outside
+  model from batch 2 was a `fake_run.py` artefact.
+- Verdicts now carry `rung`, `delta_mean` and `delta_per_seed`
+  (`:428-442`). `rung` was parked by agreement in batch 1; the harness has
+  unparked it.
+- Two additive event types exist: `incumbent_changed` and `prediction`
+  (`harness/types.py:41-42`). The reducer handles both.
+- `harness/fake_run.py` still emits the old `[lo, hi]` pair and no `rung`.
+  It is the teammate's file. He has been asked to update it. The app must
+  work correctly either way, and must not be edited to assume he has.
+
+## The band contract — settled, do not re-litigate
+
+`app/static/band.js` is a pure module (no DOM, no `app.js` imports). It is
+the only place that interprets a band. Nothing else may parse `band`.
+
+`readBand(raw)` returns one of three shapes and never throws:
+
+| shape | when | fields |
+|---|---|---|
+| `measure` | non-null, non-array object | the raw dict |
+| `legacy` | array of exactly two finite numbers | `{lo, hi}` |
+| `none` | anything else, including null/undefined | `null` |
+
+`verdictReading(verdict)` returns
+`{shape, value, valueKind, threshold, thresholdLabel, side, rung}`.
+
+Three rules, each of which cost us a bug to learn:
+
+1. **Discriminate on `rung`, never on `state`.** The harness branches on
+   `rung` (`measure.py:364`, `:371`) and puts it in the payload (`:433`).
+   State does not invert: `replicating` is a *screen* outcome (`:369`);
+   `rejected` comes from both rungs (`:369`, `:406`, `:409`);
+   `inconclusive` comes from both (`:369`, `:399`).
+2. **A missing rung is not a guess.** A dict band with no `rung` means "we
+   do not know which comparison the harness made". `threshold` stays null.
+   Same rule as spend and vs-baseline significance: a visible gap beats a
+   plausible number.
+3. **`legacy` and `none` never get a threshold.** `lo`/`hi` are not
+   something `screen_verdict` or `promote_bar` compared against.
+
+Two sync tests guard the contract and will fail loudly if the teammate
+changes the harness: `test_band_fields_match_python` (against `class Band`)
+and `test_screen_advance_sd_matches_python` (against `SCREEN_ADVANCE_SD`).
+
+Boundary note: the harness advances on `>=` (`:194`) and fails on `<`
+(`:214`), so a value exactly at the threshold **passes** in both
+directions. `side` reports `at` as its own value; the view decides.
+
+## Task 6 — wire the Score panel to band.js
+
+`renderScoreCell` still gates on `Array.isArray(verdict.band) && length === 2`.
+Against a real verdict that is false, so it falls through to a bare number
+with no band and no annotation — a silent failure of the rule the panel
+exists to enforce.
+
+- Replace the inline band parsing with `verdictReading`. Delete `app.js`'s
+  own `verdictBandTest` once nothing calls it.
+- **The Incumbent cell still shows a score, not a delta.** The column
+  answers "where does the incumbent stand against the published
+  baseline" — a score question. `delta_mean` answers "did this node beat
+  the *previous incumbent*" — a different question, and it belongs in the
+  node dossier.
+- When `threshold` is present, annotate the cell with the harness's own
+  comparison, e.g. `Δ +0.015 ≥ bar 0.012`. Use `thresholdLabel` verbatim.
+- When `threshold` is null, say which comparison is unavailable and why
+  (legacy band / no rung). Never grey a verdict for a missing threshold.
+- **Do not grey a promoted verdict.** That was batch 2's bug and the new
+  model makes it structural: a promoted verdict is a replicate pass, which
+  by definition cleared the bar.
+
+## Task 7 — Run tree
+
+The reducer already holds everything. Do not change it.
+
+`state.nodes` is keyed by node id, each carrying `parent`, `kind`,
+`hypothesisId`, `state`, `stateHistory`, `scores`, `seeds`, `bands`,
+`latestVerdict`, `failures`, `recoveries`, `ruleTrips`, `createdSeq`.
+`state.nodeOrder` is creation order. `state.incumbent` is the current
+incumbent's node id.
+
+- Recursive render over `parent`. Roots are nodes with `parent === null`.
+- Each node shows id, hypothesis id, kind, and its state **verbatim from
+  `ev.state`**. The app reports the harness's verdict; it never computes,
+  renames or infers one. Never reuse `inconclusive` as a display word for
+  anything but the state of that name.
+- Mark the incumbent from `state.incumbent`, not by scanning verdicts.
+- A node with no parent link and no known parent id is an orphan — render
+  it at the root with a marker, do not drop it. Dropping data silently was
+  the `queue_reordered` bug in batch 1.
+- Nodes are selectable; selection drives the dossier. Route as
+  `#/run/<nodeId>`. An unknown id renders "no such node", not a blank page.
+- Per-route render key as established in batch 1: selecting a node must not
+  re-render the whole app.
+
+## Task 8 — node dossier
+
+The panel beside the tree, for the selected node. Everything from
+`state.nodes[id]` plus that node's verdicts filtered out of `state.verdicts`.
+
+- Full state history from `stateHistory`, with seq and time.
+- Every verdict for the node, newest first, each run through
+  `verdictReading`: the delta, the threshold it was measured against, the
+  label, and which side. This is where `delta_mean` and `delta_per_seed`
+  belong.
+- `rung` per verdict, shown plainly. It is no longer parked.
+- Failures, recoveries and rule trips from the node's own arrays.
+- Scores and seeds per metric.
+- If `attribution` or `rule_trips` are present on a verdict, show them —
+  a leak trip is the most important thing a node can carry.
+
+## Out of scope for batch 3
+
+Research, Hypotheses, Audit, Report, the Brief screen, and cost/spend.
+`harness/fake_run.py` and every other file under `harness/` — not our lane.
+
+## Gate
+
+- `python -m pytest` and `node --test "app/static/*.test.js"` green.
+- **Real browser, hard-reloaded.** `python -m harness fake --speed 2` +
+  `python -m app`, then **Cmd+Shift+R** — a plain reload serves cached JS
+  and will show you the previous build's behaviour. This cost us a full
+  round trip in batch 3.
+- Console open, zero errors.
+- Confirm: the tree renders all three fake-stream nodes with the right
+  parentage; the incumbent is marked; selecting a node fills the dossier
+  and does not re-render the route; the Score panel shows a band annotation
+  or an explicit reason there is none, and never a bare number; a
+  mid-stream refresh reproduces the same state.
+- Smoke test is a standing step, not a one-off. Batch 2 shipped three bugs
+  that 27 passing tests never touched; all three surfaced within ten
+  minutes of running it.

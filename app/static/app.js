@@ -1,6 +1,9 @@
 /** App shell: hash router + SSE client. Vanilla JS, no framework, no build step. */
 
 import { initial, reduce } from "./reducer.js";
+import { verdictAnnotation } from "./band.js";
+import { buildTree } from "./tree.js";
+import { buildDossier } from "./dossier.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -37,10 +40,9 @@ let eventsSince = 0;
 let heartbeatSince = 0;
 
 const metaEl = () => document.getElementById("meta");
-const viewEl = () => document.getElementById("view");
 
 function requireView() {
-  const el = viewEl();
+  const el = document.getElementById("view");
   if (!el) {
     throw new Error(
       'Missing #view — hard-refresh (Cmd+Shift+R). Old cached index.html has no #view.',
@@ -56,109 +58,228 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;");
 }
 
-// --- Dashboard: the existing Phase 2 four-panel view, moved as-is. This is
-// the provisional pre-redesign layout (see Handoff_app.md, "Explicitly
-// parked" — Dashboard redesign is not this batch); only the container
-// changed, from a fixed <main> to a route-owned render function. ---
+// --- Dashboard: five panels answering "is it alive, what's it doing, how far
+// along, is anything wrong" per the product spec (Handoff_app.md, Task 5).
+// This batch builds panels 1-3 only; 4 (stopping progress) and 5 (paper
+// ticker) land next checkpoint. No control here may change a run. ---
 
-function buildTreeHtml(state) {
-  const nodes = Object.values(state.nodes);
-  const byParent = new Map();
-  for (const n of nodes) {
-    const key = n.parent == null ? "root" : String(n.parent);
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key).push(n);
-  }
-  for (const list of byParent.values()) {
-    list.sort((a, b) => a.id - b.id);
-  }
-  const lines = [];
-  function walk(parentKey, depth) {
-    const kids = byParent.get(parentKey) || [];
-    for (const n of kids) {
-      const pad = "  ".repeat(depth);
-      lines.push(
-        `${pad}#${n.id} ${n.kind} [${n.state}]` +
-          (n.parent != null ? ` ← ${n.parent}` : ""),
-      );
-      walk(String(n.id), depth + 1);
-    }
-  }
-  walk("root", 0);
-  return lines.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
-}
+// Heartbeat cadence isn't specified anywhere; 5s is a judgment call for "the
+// worker has gone quiet" that comfortably exceeds normal inter-heartbeat gaps
+// even at the fake-run's default 20x speed.
+const WORKER_STALE_MS = 5000;
 
-function buildQueueHtml(state) {
-  return state.queue
-    .map((h) => {
-      const label = `${h.id} · ${h.stage}/${h.mechanism || "?"}`;
-      return `<li>${escapeHtml(label)}</li>`;
-    })
-    .join("");
-}
-
-function buildFeedHtml(state) {
-  return state.feed
-    .map((ev) => {
-      const bits = [`#${ev.seq}`, ev.type];
-      if (ev.node != null) bits.push(`node=${ev.node}`);
-      if (ev.class) bits.push(`class=${ev.class}`);
-      if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
-      if (ev.state) bits.push(`state=${ev.state}`);
-      bits.push(`— ${ev.summary || ""}`);
-      return `<li>${escapeHtml(bits.join(" "))}</li>`;
-    })
-    .join("");
-}
-
-function buildWorkersHtml(state) {
-  return Object.entries(state.workers)
-    .map(([w, ev]) => {
+function buildNowRunningPanel(state, nowMs) {
+  const entries = Object.entries(state.workers);
+  if (!entries.length) return `<p class="panel-empty">no workers yet</p>`;
+  const rows = entries
+    .map(([worker, ev]) => {
+      const heartbeatMs = ev.t ? new Date(ev.t).getTime() : NaN;
+      // reducer.js:397 sets run.status to "ended" on run_ended; once the run
+      // has ended, heartbeat silence is expected, not a fault, so the stale
+      // test is meaningless there.
+      const stale =
+        state.run.status !== "ended" &&
+        Number.isFinite(heartbeatMs) &&
+        nowMs - heartbeatMs > WORKER_STALE_MS;
       const prog =
         ev.total != null && ev.total > 0
           ? `${ev.step ?? 0}/${ev.total}`
           : ev.progress != null
             ? String(ev.progress)
             : "—";
-      const loss = ev.loss != null ? ` loss=${Number(ev.loss).toFixed(4)}` : "";
-      const attempt = ev.attempt != null ? ` attempt=${ev.attempt}` : "";
-      const label = `${w}: ${ev.status || "running"} node=${ev.node ?? "—"} step=${prog}${loss}${attempt}`;
-      return `<li>${escapeHtml(label)}</li>`;
+      const bits = [`node ${ev.node ?? "—"}`, `step ${prog}`];
+      if (ev.loss != null) bits.push(`loss ${Number(ev.loss).toFixed(4)}`);
+      if (ev.attempt != null) bits.push(`attempt ${ev.attempt}`);
+      const label = `${worker}: ${ev.status || "running"} — ${bits.join(" · ")}`;
+      const staleTag = stale ? ` ${chip("stale", "chip-null")}` : "";
+      return `<li class="${stale ? "worker-stale" : ""}">${escapeHtml(label)}${staleTag}</li>`;
     })
     .join("");
+  return `<ul class="worker-list">${rows}</ul>`;
 }
 
-function buildIncumbentHtml(state) {
-  const id = state.incumbent;
-  if (id == null) return `<li>${escapeHtml("— none yet")}</li>`;
-  const node = state.nodes[id];
-  const hyp = node?.hypothesisId != null ? String(node.hypothesisId) : "?";
-  const st = node?.state != null ? String(node.state) : "?";
-  return `<li>${escapeHtml(`#${id} ${hyp} [${st}]`)}</li>`;
+function mean(arr) {
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+// The incumbent for a metric is the latest verdict that actually promoted a
+// node on it — not just the latest verdict, which might be a screen tick on
+// an unrelated node.
+function latestPromoted(state, metric) {
+  for (let i = state.verdicts.length - 1; i >= 0; i--) {
+    const v = state.verdicts[i];
+    if (v.metric === metric && v.state === "promoted") return v;
+  }
+  return null;
+}
+
+// The app reports the harness's verdict; it never computes or overrides one.
+// The number is always shown — every row reaching this panel is a replicate
+// pass (see latestPromoted, which filters to state === "promoted"), so by
+// definition it cleared the bar. Nothing here greys a promoted verdict.
+// The value shown is a SCORE (mean of verdict.scores), not delta_mean:
+// this column answers "where does the incumbent stand against the published
+// baseline", not "did this node beat the previous incumbent" — that's the
+// node dossier's question (Handoff_app.md, "Task 6"). verdictAnnotation's
+// text/reason still comes from the delta the harness actually compared.
+function renderScoreCell(verdict) {
+  if (!verdict || !Array.isArray(verdict.scores) || !verdict.scores.length) {
+    return chip("not yet promoted", "chip-null");
+  }
+  const value = mean(verdict.scores);
+  const { text, reason } = verdictAnnotation(verdict);
+  const note = text
+    ? `<span class="band-note">(${escapeHtml(text)})</span>`
+    : `<span class="band-note" title="${escapeHtml(reason)}">(${escapeHtml(reason)})</span>`;
+  return `<span class="score-value">${fmtNum(value)}</span> ${note}`;
+}
+
+function buildScorePanel(state) {
+  const protocol = state.run.protocol;
+  if (!protocol) return `<p class="waiting">Waiting for run_started…</p>`;
+  const ruler = protocol.ruler || {};
+  const metricNames = Object.keys(ruler.metrics || {});
+  if (!metricNames.length) return `<p class="panel-empty">no metrics defined</p>`;
+  const published = ruler.baseline?.published || {};
+  const reproduced = ruler.baseline?.reproduced || {};
+  const rows = metricNames
+    .map(
+      (metric) => `<tr>
+        <td>${escapeHtml(metric)}</td>
+        <td>${renderScalar(published[metric])}</td>
+        <td>${formatReproduced(reproduced[metric])}</td>
+        <td>${renderScoreCell(latestPromoted(state, metric))}</td>
+      </tr>`,
+    )
+    .join("");
+  return `
+    <table class="metrics score-table">
+      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="hdr-dim panel-note" title="a promoted verdict's band tests whether the replicate agreed with the screen, not whether the lead over baseline clears run-to-run noise. harness/measure.py::calibrate is implemented and computes a Band from screen/full run noise, but nothing in the harness compares that Band — or the incumbent's score — against protocol.ruler.baseline.published for significance">vs-baseline significance: not yet instrumented</p>
+  `;
+}
+
+// A verdict's event "kind" for feed purposes is its outcome state, not the
+// generic "verdict" type — inconclusive and rejected must never collapse
+// into each other or into a shared "verdict" bucket.
+function feedKind(ev) {
+  return ev.type === "verdict" ? ev.state || "verdict" : ev.type;
+}
+
+function feedLabel(kind) {
+  return kind.replaceAll("_", " ");
+}
+
+function collapseFeed(feed) {
+  const groups = [];
+  for (const ev of feed) {
+    const kind = feedKind(ev);
+    const last = groups[groups.length - 1];
+    if (last && last.kind === kind) {
+      last.count += 1;
+      last.last = ev;
+    } else {
+      groups.push({ kind, count: 1, first: ev, last: ev });
+    }
+  }
+  return groups;
+}
+
+function buildEventsPanel(state) {
+  const groups = collapseFeed(state.feed);
+  const lastFive = groups.slice(-5).reverse();
+  if (!lastFive.length) return `<p class="panel-empty">no events yet</p>`;
+  const rows = lastFive
+    .map((g) => {
+      const label = feedLabel(g.kind);
+      if (g.count === 1) {
+        const ev = g.last;
+        const bits = [`#${ev.seq}`, label];
+        if (ev.node != null) bits.push(`node=${ev.node}`);
+        if (ev.class) bits.push(`class=${ev.class}`);
+        if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
+        bits.push(`— ${ev.summary || ""}`);
+        return `<li>${escapeHtml(bits.join(" "))}</li>`;
+      }
+      const text = `#${g.first.seq}–#${g.last.seq} ${g.count}× ${label} — ${g.last.summary || ""}`;
+      return `<li>${escapeHtml(text)}</li>`;
+    })
+    .join("");
+  return `<ul class="event-list">${rows}</ul>`;
+}
+
+// Counts verdicts after the most recent "promoted" one (all of them, if
+// there has been no promotion yet). This is NOT the harness's convergence
+// counter — harness/outputs.py::Convergence.update(searchval_score) tracks
+// whether the search-validation score has stopped improving by more than
+// epsilon across n_rounds, a different quantity, and it raises
+// NotImplementedError today regardless. It also can't be reconstructed from
+// the event stream: measurement events carry {node, metric, value, seed}
+// with no split label, so search-validation and holdout scores are
+// indistinguishable here. This count is a stand-in derived in the view from
+// state.verdicts, never presented as harness-reported.
+function verdictsSinceLastPromoted(state) {
+  const verdicts = state.verdicts;
+  for (let i = verdicts.length - 1; i >= 0; i--) {
+    if (verdicts[i].state === "promoted") return verdicts.length - 1 - i;
+  }
+  return verdicts.length;
+}
+
+function buildStoppingPanel(state) {
+  const protocol = state.run.protocol;
+  if (!protocol) return `<p class="waiting">Waiting for run_started…</p>`;
+  const convergence = protocol.ruler?.convergence || {};
+  const since = verdictsSinceLastPromoted(state);
+  return `
+    <p class="derived-note" title="harness/outputs.py::Convergence.update(searchval_score) is specified to track rounds without improvement and does not yet (raises NotImplementedError) — nothing below is that counter">${chip("derived in the app", "chip-derived")}</p>
+    <dl class="kv">
+      ${kv("epsilon (protocol target)", renderScalar(convergence.epsilon))}
+      ${kv("n_rounds (protocol target)", renderScalar(convergence.n_rounds))}
+    </dl>
+    <p class="panel-note" title="counts verdicts in state.verdicts since the last one with state === &quot;promoted&quot; — not the harness's rounds-without-improvement count, which does not exist yet">verdicts since last promotion: ${since} (not the convergence counter — the harness's rounds-without-improvement count does not exist yet)</p>
+  `;
+}
+
+// Titles only — the Research tab (out of scope this batch) is where a paper
+// is attached to the hypothesis it produced.
+function buildPaperTickerPanel(state) {
+  const research = state.research;
+  const titles = research.sources.map((s) => s.title).filter(Boolean);
+  const list = titles.length
+    ? `<ul class="ticker">${titles.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>`
+    : `<p class="panel-empty">no research sources yet</p>`;
+  return `
+    ${list}
+    <p class="cache-tally">cache hits: ${research.hits} · misses: ${research.misses}</p>
+  `;
 }
 
 function renderDashboard(state) {
+  const nowMs = Date.now();
   requireView().innerHTML = `
     <div class="dashboard-grid">
       <section>
-        <h2>Run tree</h2>
-        <ul>${buildTreeHtml(state)}</ul>
-      </section>
-      <section>
-        <h2>Incumbent</h2>
-        <ul>${buildIncumbentHtml(state)}</ul>
-      </section>
-      <section>
-        <h2>Hypotheses</h2>
-        <ul>${buildQueueHtml(state)}</ul>
-      </section>
-      <section>
         <h2>Now running</h2>
-        <ul>${buildWorkersHtml(state)}</ul>
+        ${buildNowRunningPanel(state, nowMs)}
       </section>
       <section>
-        <h2>Event log</h2>
-        <ul>${buildFeedHtml(state)}</ul>
+        <h2>Score against baseline</h2>
+        ${buildScorePanel(state)}
+      </section>
+      <section>
+        <h2>Last five events</h2>
+        ${buildEventsPanel(state)}
+      </section>
+      <section>
+        <h2>Progress toward stopping</h2>
+        ${buildStoppingPanel(state)}
+      </section>
+      <section>
+        <h2>Paper ticker</h2>
+        ${buildPaperTickerPanel(state)}
       </section>
     </div>
   `;
@@ -447,6 +568,393 @@ function initClickToCopy() {
   });
 }
 
+// --- Run tree: recursive render over buildTree(state) (tree.js — pure, no
+// DOM). Handoff_app.md, "Task 7". The dossier beside the tree is a
+// placeholder; building it is Task 8, explicitly out of scope here. ---
+
+// "#/run/<id>" -> "<id>" (as a string; node ids from node_created come over
+// the wire as numbers, but plain-object property access coerces either way,
+// so state.nodes[selectedId] and String(node.id) === selectedId both work
+// without further parsing). initRunTreeClicks encodes the id with
+// encodeURIComponent when it builds the hash, so this must decode it back —
+// guarded, since a hand-edited or corrupted hash can carry a malformed
+// escape sequence that would otherwise throw out of the router. "#/run"
+// alone -> null (nothing selected yet).
+function selectedRunNodeId(path) {
+  const m = /^run\/(.+)$/.exec(path);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (_) {
+    return m[1]; // malformed escape sequence: fall back to the raw segment
+  }
+}
+
+// Render key for the "run" route: only the things this screen actually
+// displays (which nodes exist, each one's verbatim state, the incumbent,
+// which node is selected, and that selected node's dossier contents) should
+// force a rebuild. Everything else that flows through the store —
+// heartbeats, measurement ticks, cache lookups — must not re-render the
+// tree. Same pattern as Protocol's key (Handoff_app.md, batch 1), just keyed
+// on Run's own slice of state plus the selected id, since selection lives in
+// the URL, not in state.
+//
+// The trap this closes: a new verdict, failure, recovery or rule trip does
+// not always change the node's `state` (e.g. an "inconclusive" screen
+// verdict on an already-"screening" node, or a rule_trip that doesn't
+// retarget the node's state). nodeSig alone would then stay identical and
+// renderRoute's early-return would leave the dossier showing stale data.
+// Counting the selected node's own dossier-relevant arrays (via buildDossier
+// — dossier.js already does the id-type-safe ev.node filtering) closes that
+// gap without keying on state.lastSeq, which changes on every heartbeat and
+// would defeat the whole point of a key.
+function runRouteKey(state, path) {
+  const nodeSig = state.nodeOrder
+    .map((id) => `${id}:${state.nodes[id] ? state.nodes[id].state : "?"}`)
+    .join(",");
+  const selectedId = selectedRunNodeId(path);
+  const dossier = selectedId != null ? buildDossier(state, selectedId) : null;
+  const selectedSig = dossier
+    ? `${dossier.verdicts.length}:${dossier.node.failures.length}:${dossier.node.recoveries.length}:${dossier.node.ruleTrips.length}`
+    : "none";
+  return `${path}|${nodeSig}|${state.incumbent}|${selectedSig}`;
+}
+
+function renderTreeNode(entry, state, selectedId) {
+  const { node, children, orphan } = entry;
+  const isIncumbent = state.incumbent != null && String(state.incumbent) === String(node.id);
+  const isSelected = selectedId != null && String(selectedId) === String(node.id);
+  const classes = ["tree-node"];
+  if (isSelected) classes.push("tree-node-selected");
+  if (orphan) classes.push("tree-node-orphan");
+  const hypHtml =
+    node.hypothesisId != null
+      ? escapeHtml(String(node.hypothesisId))
+      : chip("no hypothesis id", "chip-null");
+  const badges = [];
+  if (isIncumbent) badges.push(chip("incumbent", "chip-incumbent"));
+  if (orphan) badges.push(chip("orphan", "chip-null"));
+  const childrenHtml = children.length
+    ? `<ul class="tree-children">${children.map((c) => renderTreeNode(c, state, selectedId)).join("")}</ul>`
+    : "";
+  return `
+    <li>
+      <div class="${classes.join(" ")}" data-node-id="${escapeAttr(String(node.id))}">
+        <span class="tree-node-id">#${escapeHtml(String(node.id))}</span>
+        <span class="tree-node-hyp">hyp ${hypHtml}</span>
+        <span class="tree-node-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
+        <span class="tree-node-state">${escapeHtml(String(node.state ?? "?"))}</span>
+        ${badges.join(" ")}
+      </div>
+      ${childrenHtml}
+    </li>
+  `;
+}
+
+// --- Node dossier: the panel beside the tree, for the selected node
+// (dossier.js — pure, no DOM). Handoff_app.md, "Task 8". Never re-derives
+// band logic: threshold/thresholdLabel/side come straight from
+// dossier.js's verdictReading; the "why" text for a missing threshold comes
+// straight from band.js's own verdictAnnotation, same as the Score panel. ---
+
+function fmtSeedValues(arr) {
+  if (!Array.isArray(arr) || !arr.length) return chip("none", "chip-null");
+  return arr
+    .map((n) => (typeof n === "number" && Number.isFinite(n) ? fmtNum(n) : escapeHtml(String(n))))
+    .join(", ");
+}
+
+function renderDossierHeader(node) {
+  const hypHtml =
+    node.hypothesisId != null
+      ? escapeHtml(String(node.hypothesisId))
+      : chip("no hypothesis id", "chip-null");
+  return `
+    <div class="dossier-header">
+      <span class="dossier-id">#${escapeHtml(String(node.id))}</span>
+      <span class="dossier-hyp">hyp ${hypHtml}</span>
+      <span class="dossier-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
+      <span class="dossier-state">${escapeHtml(String(node.state ?? "?"))}</span>
+    </div>
+  `;
+}
+
+function renderDossierHistory(node) {
+  const history = Array.isArray(node.stateHistory) ? node.stateHistory : [];
+  if (!history.length) return `<p class="panel-empty">no state history</p>`;
+  const rows = history
+    .map(
+      (h) =>
+        `<li>${escapeHtml(String(h.state))} <span class="dossier-dim">— seq ${escapeHtml(String(h.seq))} — ${escapeHtml(String(h.t))}</span></li>`,
+    )
+    .join("");
+  return `<ol class="dossier-history">${rows}</ol>`;
+}
+
+// side is verdictReading's own "above"/"below"/"at" — "at" passes in both
+// screen_verdict (>=) and replicate_verdict (<), per band.js's comment on
+// the boundary. Rendered verbatim, not relabelled.
+function sideLabel(side) {
+  if (side === "above") return "above";
+  if (side === "below") return "below";
+  if (side === "at") return "at (passes)";
+  return "—";
+}
+
+function renderVerdictEntry({ verdict, reading }) {
+  let thresholdHtml;
+  if (reading.threshold != null) {
+    thresholdHtml = `<div>threshold: ${fmtNum(reading.threshold)} (${escapeHtml(reading.thresholdLabel)}) — side: ${escapeHtml(sideLabel(reading.side))}</div>`;
+  } else {
+    // Rule 2/3 of the band contract (Handoff_app.md): a missing rung or a
+    // legacy/none band shape never gets a fabricated threshold — say which
+    // comparison is unavailable and why, via band.js's own verdictAnnotation,
+    // never invent one here.
+    const { reason } = verdictAnnotation(verdict);
+    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || "no band was reported for this verdict")}</div>`;
+  }
+  const deltaMeanHtml =
+    typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)
+      ? `<div>Δ mean: ${fmtNum(verdict.delta_mean)}</div>`
+      : `<div>Δ mean: ${chip("not reported", "chip-null")}</div>`;
+  const rungHtml = `<div>rung: ${verdict.rung != null ? escapeHtml(String(verdict.rung)) : chip("not reported", "chip-null")}</div>`;
+  const deltaPerSeedHtml = `<div>Δ per seed: ${fmtSeedValues(verdict.delta_per_seed)}</div>`;
+  const attributionHtml =
+    verdict.attribution != null
+      ? `<div>attribution: ${escapeHtml(String(verdict.attribution))}</div>`
+      : "";
+  // A leak trip is the most important thing a node can carry — visually
+  // prominent, not just another line item (Handoff_app.md, "Task 8").
+  const ruleTripsHtml =
+    Array.isArray(verdict.rule_trips) && verdict.rule_trips.length
+      ? `<div class="dossier-rule-trip">⚠ rule trips: ${verdict.rule_trips.map((r) => escapeHtml(String(r))).join(", ")}</div>`
+      : "";
+  return `
+    <li class="dossier-verdict">
+      <div class="dossier-verdict-head">
+        <span class="dossier-verdict-state">${escapeHtml(String(verdict.state ?? "?"))}</span>
+        <span class="dossier-dim">metric ${escapeHtml(String(verdict.metric ?? "?"))} · seq ${escapeHtml(String(verdict.seq ?? "?"))} · ${escapeHtml(String(verdict.t ?? ""))}</span>
+      </div>
+      ${rungHtml}
+      ${deltaMeanHtml}
+      ${thresholdHtml}
+      ${deltaPerSeedHtml}
+      ${attributionHtml}
+      ${ruleTripsHtml}
+    </li>
+  `;
+}
+
+function renderDossierVerdicts(verdicts) {
+  if (!verdicts.length) return `<p class="panel-empty">no verdicts yet</p>`;
+  return `<ul class="dossier-verdicts">${verdicts.map(renderVerdictEntry).join("")}</ul>`;
+}
+
+function renderReliabilityList(items, formatOne) {
+  if (!items.length) return `<p class="panel-empty">none</p>`;
+  return `<ul class="dossier-reliability">${items.map((ev) => `<li>${formatOne(ev)}</li>`).join("")}</ul>`;
+}
+
+function renderDossierReliability(node) {
+  const failures = Array.isArray(node.failures) ? node.failures : [];
+  const recoveries = Array.isArray(node.recoveries) ? node.recoveries : [];
+  const ruleTrips = Array.isArray(node.ruleTrips) ? node.ruleTrips : [];
+  const failuresHtml = renderReliabilityList(failures, (ev) =>
+    escapeHtml(`${ev.class ?? "?"} — ${ev.summary ?? ""}`),
+  );
+  const recoveriesHtml = renderReliabilityList(recoveries, (ev) =>
+    escapeHtml(`${ev.action ?? "?"} (${ev.class ?? "?"}) — ${ev.summary ?? ""}`),
+  );
+  const ruleTripsHtml = ruleTrips.length
+    ? `<ul class="dossier-reliability">${ruleTrips
+        .map(
+          (ev) =>
+            `<li class="dossier-rule-trip">⚠ ${escapeHtml(`${ev.rule ?? "?"} — ${ev.summary ?? ""}`)}</li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="panel-empty">none</p>`;
+  return `
+    <div class="dossier-section">
+      <h3>Failures</h3>
+      ${failuresHtml}
+    </div>
+    <div class="dossier-section">
+      <h3>Recoveries</h3>
+      ${recoveriesHtml}
+    </div>
+    <div class="dossier-section">
+      <h3>Rule trips</h3>
+      ${ruleTripsHtml}
+    </div>
+  `;
+}
+
+function renderDossierScores(node) {
+  const scores = node.scores && typeof node.scores === "object" ? node.scores : {};
+  const metricNames = Object.keys(scores);
+  if (!metricNames.length) return `<p class="panel-empty">no scores yet</p>`;
+  const rows = metricNames
+    .map((m) => `${kv(m, fmtSeedValues(scores[m]))}`)
+    .join("");
+  return `<dl class="kv">${rows}</dl>`;
+}
+
+function renderDossier(dossier) {
+  const { node, verdicts } = dossier;
+  return `
+    ${renderDossierHeader(node)}
+    <div class="dossier-section">
+      <h3>State history</h3>
+      ${renderDossierHistory(node)}
+    </div>
+    <div class="dossier-section">
+      <h3>Verdicts</h3>
+      ${renderDossierVerdicts(verdicts)}
+    </div>
+    ${renderDossierReliability(node)}
+    <div class="dossier-section">
+      <h3>Scores</h3>
+      ${renderDossierScores(node)}
+    </div>
+    <div class="dossier-section">
+      <h3>Seeds</h3>
+      <p>${fmtSeedValues(node.seeds)}</p>
+    </div>
+  `;
+}
+
+function renderRun(state, path) {
+  const selectedId = selectedRunNodeId(path);
+  const roots = buildTree(state);
+  const treeHtml = roots.length
+    ? `<ul class="tree-root">${roots.map((r) => renderTreeNode(r, state, selectedId)).join("")}</ul>`
+    : `<p class="panel-empty">no nodes yet</p>`;
+
+  // An unknown node id must render "no such node" inside the Run screen —
+  // never a blank page, never a fall-through to Dashboard.
+  let dossierHtml;
+  if (selectedId == null) {
+    dossierHtml = `<p class="panel-empty">select a node</p>`;
+  } else if (!Object.prototype.hasOwnProperty.call(state.nodes, selectedId)) {
+    dossierHtml = `<p class="panel-empty">no such node</p>`;
+  } else {
+    const dossier = buildDossier(state, selectedId);
+    dossierHtml = dossier ? renderDossier(dossier) : `<p class="panel-empty">no such node</p>`;
+  }
+
+  requireView().innerHTML = `
+    <div class="run-grid">
+      <section class="run-tree-panel">
+        <h2>Run tree</h2>
+        ${treeHtml}
+      </section>
+      <section class="run-dossier-panel">
+        <h2>Node dossier</h2>
+        ${dossierHtml}
+      </section>
+    </div>
+  `;
+}
+
+// Delegated on #view (a stable element across renders — only its innerHTML
+// changes), same pattern as initClickToCopy, so this is wired once in
+// main() rather than re-attached on every render.
+function initRunTreeClicks() {
+  requireView().addEventListener("click", (e) => {
+    const target = e.target.closest(".tree-node[data-node-id]");
+    if (!target) return;
+    location.hash = `#/run/${encodeURIComponent(target.dataset.nodeId)}`;
+  });
+}
+
+// --- header strip: visible on every route. Reads only from reduced state,
+// plus wall-clock time for the elapsed figure — the reducer stays pure (no
+// Date.now()), so the view owns the one clock that needs it. Handoff_app.md,
+// "header strip". ---
+
+function fmtNum(n) {
+  return Number(n.toFixed(6)).toString();
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+function dot(colorClass) {
+  return `<span class="hdr-dot ${colorClass}"></span>`;
+}
+
+function renderRunStateSlot(run) {
+  let colorClass = "dot-grey";
+  let text = "waiting";
+  if (run.status === "running") {
+    colorClass = "dot-green";
+    text = "running";
+  } else if (run.status === "ended") {
+    colorClass = "dot-grey";
+    text = run.endReason ? `ended — ${run.endReason}` : "ended";
+  }
+  document.getElementById("hdr-run-state").innerHTML =
+    `${dot(colorClass)}${escapeHtml(text)}`;
+}
+
+// submission_written carries only {node, path, summary} — no validity field.
+// Validation is the teammate's phase 9/10 and does not exist in the stream
+// yet, so this reports what happened (a file was written), not a verdict on
+// it. Same honesty rule as spend: say what the stream says, nothing more.
+function renderSubmissionSlot(state) {
+  const written = state.submissions.length > 0;
+  const colorClass = written ? "dot-green" : "dot-amber";
+  const text = written ? "submission written" : "no submission yet";
+  const title = written
+    ? ' title="written from a promoted node; not validated — rulebook post-checks are not instrumented yet"'
+    : "";
+  document.getElementById("hdr-submission-light").innerHTML =
+    `<span${title}>${dot(colorClass)}${escapeHtml(text)}</span>`;
+}
+
+// Spend is parked (see Handoff_app.md): no cost data exists in the event
+// stream. A dimmed em dash is a visible gap; a computed zero would look like
+// a real reading and be worse than the gap it hides.
+function renderSpendSlot() {
+  document.getElementById("hdr-spend").innerHTML =
+    `<span class="hdr-dim" title="spend is not yet instrumented — no cost data in the event stream">spend —</span>`;
+}
+
+function renderInterventionsSlot(state) {
+  document.getElementById("hdr-interventions").textContent =
+    `interventions: ${state.interventions.length}`;
+}
+
+function renderElapsedBudgetSlot(run) {
+  const el = document.getElementById("hdr-elapsed-budget");
+  if (!run.startedAt) {
+    el.textContent = "not started";
+    return;
+  }
+  const end = run.status === "ended" && run.endedAt ? new Date(run.endedAt) : new Date();
+  const elapsed = formatDuration(end - new Date(run.startedAt));
+  const budgetH = run.protocol?.run?.budget?.wall_clock_h;
+  if (budgetH == null) {
+    el.innerHTML = `${escapeHtml(elapsed)} ${chip("no budget set", "chip-null")}`;
+  } else {
+    el.textContent = `${elapsed} / ${fmtNum(budgetH)}h budget`;
+  }
+}
+
+function renderHeader(state) {
+  renderRunStateSlot(state.run);
+  renderSubmissionSlot(state);
+  renderSpendSlot();
+  renderInterventionsSlot(state);
+  renderElapsedBudgetSlot(state.run);
+}
+
 function renderStub(label) {
   return () => {
     requireView().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
@@ -467,7 +975,19 @@ const ROUTES = [
   { hash: "brief", render: renderStub("Brief") },
   { hash: "research", render: renderStub("Research") },
   { hash: "hypotheses", render: renderStub("Hypotheses") },
-  { hash: "run", render: renderStub("Run") },
+  // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
+  // hash strings exactly, so "#/run/3" matched nothing and fell through to
+  // the DEFAULT_ROUTE (Dashboard). match() below is what fixes that; hash
+  // stays "run" for both so the sidebar highlight and key still work as a
+  // single route. key includes the selected id (from path, not state) so
+  // clicking a different node still forces a render despite the hash
+  // staying "run".
+  {
+    hash: "run",
+    match: (path) => path === "run" || path.startsWith("run/"),
+    render: renderRun,
+    key: runRouteKey,
+  },
   { hash: "audit/replication", render: renderStub("Audit — Replication") },
   { hash: "audit/cost", render: renderStub("Audit — Cost") },
   { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
@@ -500,32 +1020,62 @@ function renderRoute() {
     location.hash = `#/${redirect}`; // hashchange re-invokes renderRoute with the resolved path
     return;
   }
-  const route = ROUTES.find((r) => r.hash === path) || ROUTES.find((r) => r.hash === DEFAULT_ROUTE);
+  const route =
+    ROUTES.find((r) => (r.match ? r.match(path) : r.hash === path)) ||
+    ROUTES.find((r) => r.hash === DEFAULT_ROUTE);
   highlightSidebar(route.hash);
   const state = store.getState();
   if (route.key) {
-    const key = route.key(state);
+    const key = route.key(state, path);
     if (lastRenderedHash === route.hash && key === lastRenderedKey) return;
     lastRenderedKey = key;
   }
   lastRenderedHash = route.hash;
-  route.render(state);
+  route.render(state, path);
 }
 
 function updateMeta(state) {
   const run = state.run;
+  // reducer.js:149 sets lastSeq synchronously inside reduce(), before
+  // store.applyEvent()'s notify() fires — the module-level eventsSince
+  // variable below is only reassigned *after* notify() returns (line 783),
+  // so a render triggered by that same applyEvent() would see the previous
+  // value. state.lastSeq is always current at render time.
   metaEl().textContent = run.id
-    ? `run ${run.id} · ${run.task || "?"} · ${run.protocolHash || ""} · events@${eventsSince}`
-    : `run ${runId || "?"} · events@${eventsSince}`;
+    ? `run ${run.id} · ${run.task || "?"} · ${run.protocolHash || ""} · events@${state.lastSeq}`
+    : `run ${runId || "?"} · events@${state.lastSeq}`;
 }
 
 function renderApp(state) {
+  renderHeader(state);
+  if (state.run.status === "ended") stopHeaderTick();
+  else startHeaderTick();
   updateMeta(state);
   renderRoute();
 }
 
 window.addEventListener("hashchange", renderRoute);
 store.subscribe(renderApp);
+
+// Elapsed-vs-budget needs to tick even when no new event arrives. This is the
+// only interval in the app and it touches the header alone — never
+// renderRoute() — so an in-progress route (e.g. a text selection on
+// Protocol) is never disturbed by the clock. Stopped once the run ends: the
+// elapsed value is frozen at endedAt by then, so a still-firing tick would
+// only repaint the same text forever. Restarted by renderApp if
+// followNewestRun later swings onto a fresh (non-ended) run.
+let headerTickId = null;
+
+function startHeaderTick() {
+  if (headerTickId != null) return;
+  headerTickId = setInterval(() => renderHeader(store.getState()), 1000);
+}
+
+function stopHeaderTick() {
+  if (headerTickId == null) return;
+  clearInterval(headerTickId);
+  headerTickId = null;
+}
 
 // --- live source: two EventSource connections, reconnect-with-since and the
 // newest-run poller. Unchanged from Phase 2 other than routing through the
@@ -611,6 +1161,7 @@ function startApp(source) {
 async function main() {
   try {
     initClickToCopy();
+    initRunTreeClicks();
     if (!location.hash) location.hash = `#/${DEFAULT_ROUTE}`;
     runId = await resolveRunId();
     renderApp(store.getState()); // initial paint: meta + route before first event
