@@ -893,7 +893,7 @@ Panel separation comes from the surface value step, not the border.
 ## Dead selectors removed
 
 `.score-above`, `.score-below` and `.score-inconclusive` were removed at
-checkpoint 2a. They styled nothing: `renderScoreCell` (app/static/app.js:126)
+checkpoint 2a. They styled nothing: `renderScoreCell` (app/static/app.js:125)
 emits only `score-value` and `band-note`, and by design the Score panel never
 greys a promoted verdict — every row reaching it has already cleared the bar
 (app.js:116-119). If per-verdict greying is ever wanted in this panel it is
@@ -980,13 +980,13 @@ were resolved at batch 5 checkpoint 1:
 
 - `.worker-list li.worker-stale` — blessed as the third sanctioned tint,
   above. No CSS change; it was already correct.
-- `.hash-value.copied` (index.html:738-741) — its `background: var(--pos-wash)`
+- `.hash-value.copied` (index.html:737-740) — its `background: var(--pos-wash)`
   declaration is removed. It is an 800ms feedback flash (app.js:560-561), not
   a state, so it now reads `border-color: var(--pos); color: var(--pos);`
   instead of filling.
 - `.chip-incumbent` (index.html:465-468) — its dead `background: var(--pos-wash)`
   declaration is deleted outright rather than fixed to actually render. `.chip`
-  (index.html:697-698) declares `background: var(--sunken)` with equal
+  (index.html:696-697) declares `background: var(--sunken)` with equal
   specificity and was always winning the cascade on any element carrying both
   classes, so the wash never rendered. The decision is to keep the incumbent
   badge a neutral pill on purpose: it sits on the Run screen beside the rule
