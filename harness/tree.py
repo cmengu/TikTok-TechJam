@@ -83,9 +83,10 @@ class PatchCoder:
 class Workspace:
     """Git repo at runs/<id>/workspace; branch run/<id>; initial commit = template."""
 
-    def __init__(self, run_dir: Path, run_id: str) -> None:
+    def __init__(self, run_dir: Path, run_id: str, *, candidate_dir: Path | None = None) -> None:
         self.run_dir = Path(run_dir)
         self.run_id = run_id
+        self.candidate_dir = candidate_dir or (REPO_ROOT / "candidate" / "synthetic")
         self.path = self.run_dir / "workspace"
         self.patches_dir = self.run_dir / "patches"
         self.patches_dir.mkdir(parents=True, exist_ok=True)
@@ -103,8 +104,9 @@ class Workspace:
         )
 
     def _init_repo(self) -> None:
-        for name in ("template.py", "report.py"):
-            shutil.copy2(CANDIDATE_DIR / name, self.path / name)
+        report_src = REPO_ROOT / "candidate" / "report.py"
+        shutil.copy2(self.candidate_dir / "template.py", self.path / "template.py")
+        shutil.copy2(report_src, self.path / "report.py")
         self._git("init")
         self._git("checkout", "-b", f"run/{self.run_id}")
         self._git("config", "user.email", "harness@local")

@@ -170,9 +170,13 @@ def _score_script_sha() -> str:
     ).hexdigest()
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 class SyntheticTask:
     name = "synthetic"
     metric = "cvr_auc"
+    candidate_dir = REPO_ROOT / "candidate" / "synthetic"
 
     def __init__(self, n_impressions: int = 1_000_000) -> None:
         self.n_impressions = int(n_impressions)

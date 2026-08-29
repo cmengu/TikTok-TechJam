@@ -498,12 +498,14 @@ class Runner:
         Phase 6 may set ``run_cfg["candidate_src"]`` to the git Workspace working
         tree so patches apply; otherwise copies from repo ``candidate/``.
         """
-        src_dir = Path(self.run_cfg["candidate_src"]) if self.run_cfg.get("candidate_src") else CANDIDATE_DIR
-        for name in ("template.py", "report.py"):
-            src = src_dir / name
-            if not src.is_file():
-                raise FileNotFoundError(f"missing candidate script: {src}")
-            shutil.copy2(src, workspace / name)
+        src_dir = (
+            Path(self.run_cfg["candidate_src"])
+            if self.run_cfg.get("candidate_src")
+            else self.task.candidate_dir
+        )
+        report_src = REPO_ROOT / "candidate" / "report.py"
+        shutil.copy2(src_dir / "template.py", workspace / "template.py")
+        shutil.copy2(report_src, workspace / "report.py")
 
     def _failure_summary(self, node_id: int, failure: str, attempt: int) -> str:
         if failure == "diverged":
