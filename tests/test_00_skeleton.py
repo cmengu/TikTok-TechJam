@@ -36,6 +36,8 @@ IMPLEMENTED = {
     "harness.runner",
     "harness.measure",
     "harness.tree",
+    "harness.audit",
+    "harness.outputs",
     "harness.agents.llm",
     "harness.agents.cache",
     "harness.agents.brief",

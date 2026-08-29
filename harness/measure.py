@@ -266,6 +266,10 @@ class Measure:
             else 600.0
         )
 
+    @property
+    def holdout_visits(self) -> int:
+        return self._holdout_visits
+
     def calibrate_from_runs(
         self,
         runner,
@@ -340,6 +344,7 @@ class Measure:
         rung: Rung,
         attribution: Literal["clear", "unclear", None] = None,
         single_feature_aucs: dict[str, float] | None = None,
+        gpu_min: float | None = None,
     ) -> Verdict:
         if self.band is None:
             raise CalibrationError("Measure.verdict requires a calibrated Band")
@@ -437,6 +442,8 @@ class Measure:
         }
         if attribution is not None:
             payload["attribution"] = attribution
+        if gpu_min is not None:
+            payload["gpu_min"] = float(gpu_min)
         if rule_trips:
             payload["rule_trips"] = rule_trips
         self.events.emit("verdict", **payload)
@@ -464,7 +471,7 @@ class Measure:
         timeout_s = float(
             getattr(runner, "run_cfg", {}).get("timeout_s", self._timeout_s)
         )
-        seeds = list(range(HOLDOUT_SEEDS))
+        seeds = list(range(1, HOLDOUT_SEEDS + 1))
         # Count the visit before launching so a crash mid-visit still consumes budget.
         self._holdout_visits += 1
         visit = self._holdout_visits

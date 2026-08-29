@@ -299,6 +299,8 @@ class SyntheticTask:
         return {"ctr_auc": ctr_auc, "cvr_auc": cvr_auc}
 
     def rows(self, split: str) -> int:
+        if split == "test":
+            return self.n_impressions
         if split in self._tables:
             return self._tables[split].num_rows
         if self._paths is None:

@@ -440,3 +440,41 @@ with the app open — tree grows, incumbent becomes `+f_true`. Record the run id
 Phase 7 swaps `PatchCoder` for `LLMCoder` and fills the queue from a researcher.
 `Coder` + `Queue` are the swap points. A later PR may add `resume` on top of
 `Tree.rebuild`.
+
+---
+
+## Phase 9 · Outputs and audit
+
+**Owner** A: submission writer · B: audit, report, registry  
+**Depends on** phases 2 and 6 (decoupled from phase 7 agents)  
+**Source** `#p9` / Backend_plan §9
+
+### Goal
+
+Pure projections over the event log (replication, cost, reliability), submission
+writer with read-back, organisers' convergence rule, pre-scoring prediction,
+run registry, and markdown report. Three audit API endpoints wire the Audit tab.
+
+### In scope
+
+`harness/audit.py`, `harness/outputs.py`, `app/server.py` (three audit endpoints),
+`harness/tree.py` (exactly two calls: `Convergence.update` per verdict,
+`write_submission` on promotion), `reference/published_costs.yaml`,
+`tests/test_09_audit.py`, `tests/test_09_outputs.py`.
+
+### Locked decisions (phase 9)
+
+1. **Prediction owner** — `measure.holdout_report` emits `prediction`; `outputs.write_prediction` only locates the existing event.
+2. **Organiser parameters** — submission columns and real ε/N are config; `aliccp.yaml` convergence stays `null`.
+3. **Decoupled from phase 7** — landed from `main` after `fix/phase-6-review`; agents branch proceeds separately.
+
+### Gate to phase 8
+
+All tests green. Manual: Audit tab shows real numbers on the phase-6 fallback run;
+first promotion writes a submission that passes read-back.
+
+### Hands forward
+
+Phase 8 (Ali-CCP ingest) once the organisers' webinar lands, with audit already
+watching iteration 0. Degraded mode (`llm_api` → hand-written bank) lands as its
+own small PR between phases 9 and 8.

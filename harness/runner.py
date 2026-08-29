@@ -13,7 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 
 from harness.events import EventLog
 from harness.tasks.base import Task, TaskPaths
@@ -60,6 +60,23 @@ RECOVERY_ACTION = {
 }
 
 DEFAULT_STALL_S = 5 * 60.0
+SMOKE_MAX_ROWS = 20_000
+
+
+@dataclass(frozen=True)
+class RungSpec:
+    score_split: Literal["search", "holdout"] | None
+    epochs: int | None
+    max_rows: int | None
+
+
+RUNG_ENV: dict[Rung, RungSpec] = {
+    "smoke": RungSpec(score_split=None, epochs=1, max_rows=SMOKE_MAX_ROWS),
+    "screen": RungSpec(score_split="search", epochs=1, max_rows=None),
+    "full": RungSpec(score_split="search", epochs=None, max_rows=None),
+    "replicate": RungSpec(score_split="search", epochs=None, max_rows=None),
+    "holdout": RungSpec(score_split="holdout", epochs=None, max_rows=None),
+}
 
 
 @dataclass
@@ -330,14 +347,20 @@ class Runner:
         overrides = dict(env_overrides or {})
         paths: TaskPaths = self.run_cfg["paths"]
         run_dir = Path(self.run_cfg["run_dir"])
-        workspace = run_dir / "workspace" / f"node-{node.id}" / f"attempt-{attempt}"
+        workspace = (
+            run_dir / "attempts" / f"node-{node.id}" / f"attempt-{attempt}"
+        )
         workspace.mkdir(parents=True, exist_ok=True)
 
+        spec = RUNG_ENV[rung]
         env = self._build_env(
             workspace=workspace,
             paths=paths,
             seed=seed,
+            rung=rung,
             overrides=overrides,
+            epochs=spec.epochs,
+            max_rows=spec.max_rows,
         )
 
         progress: list[dict] = []
@@ -387,7 +410,10 @@ class Runner:
 
         if failure is None:
             preds = self._preds_from_result(result_path)
-            metrics = self.task.score(preds, "search")
+            if spec.score_split is None:
+                metrics: dict[str, float] = {}
+            else:
+                metrics = self.task.score(preds, spec.score_split)
             return RunResult(
                 node=node.id,
                 attempt=attempt,
@@ -408,12 +434,6 @@ class Runner:
             event_returncode = 137
 
         summary = self._failure_summary(node.id, failure, attempt)
-        self.events.emit(
-            "state_changed",
-            node=node.id,
-            state="debugging",
-            summary=f"node {node.id} → debugging after {failure}",
-        )
         self.events.emit(
             "failure",
             node=node.id,
@@ -493,12 +513,27 @@ class Runner:
             )
         return f"node {node_id} failed: {failure} (attempt {attempt})"
 
+    def _resolve_paths(self, paths: TaskPaths) -> TaskPaths:
+        return TaskPaths(
+            train=Path(paths.train).resolve(),
+            search_validation=Path(paths.search_validation).resolve(),
+            holdout_validation=Path(paths.holdout_validation).resolve(),
+            scoring_script=(
+                Path(paths.scoring_script).resolve()
+                if paths.scoring_script is not None
+                else None
+            ),
+        )
+
     def _build_env(
         self,
         workspace: Path,
         paths: TaskPaths,
         seed: int,
+        rung: Rung,
         overrides: dict,
+        epochs: int | None,
+        max_rows: int | None,
     ) -> dict:
         # Start from a minimal capability-safe copy of the host env.
         env = {
@@ -528,14 +563,20 @@ class Runner:
         base = {
             "DEVICE": str(self.run_cfg.get("device", "cpu")),
             "SEED": str(seed),
-            "WORKSPACE": str(workspace),
+            "WORKSPACE": str(workspace.resolve()),
             "BATCH": str(self.run_cfg.get("batch", 1024)),
             "LR": str(self.run_cfg.get("lr", "1e-3")),
-            "EPOCHS": str(self.run_cfg.get("epochs", 1)),
+            "EPOCHS": str(
+                epochs if epochs is not None else self.run_cfg.get("epochs", 1)
+            ),
             "FEATURES": str(self.run_cfg.get("features", "base")),
         }
-        base.update(self.task.candidate_env(paths))
+        resolved = self._resolve_paths(paths)
+        candidate_paths = self.task.candidate_env(resolved)
+        base.update(candidate_paths)
         base.update({k: str(v) for k, v in overrides.items()})
+        if max_rows is not None:
+            base["MAX_ROWS"] = str(max_rows)
         env.update(base)
 
         device = env.get("DEVICE", "cpu")
@@ -546,7 +587,7 @@ class Runner:
 
         # Capability: never pass holdout or protocol paths.
         env.pop("HOLDOUT", None)
-        assert set(self.task.candidate_env(paths)) <= {"TRAIN", "VALID"}
+        assert set(candidate_paths) <= {"TRAIN", "VALID"}
         return env
 
     @staticmethod

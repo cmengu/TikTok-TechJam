@@ -164,6 +164,9 @@ def main() -> None:
     bce = nn.BCEWithLogitsLoss()
 
     n = len(train_cols["sample_id"])
+    max_rows = os.environ.get("MAX_ROWS")
+    if max_rows:
+        n = min(n, int(max_rows))
     n_steps = max(1, (n + batch_size - 1) // batch_size * epochs)
     mid = max(1, n_steps // 2)
     report_every = max(1, n_steps // 10)

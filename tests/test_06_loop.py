@@ -72,12 +72,9 @@ def loop_run(tmp_path_factory):
     measure = Measure(events, proto, band=None)
     workspace = Workspace(run_dir, "p6-loop")
     hyps = _load_hand()
-    # Prefer planted features before base so f_true can become incumbent.
-    order = ["h-f-true", "h-f-marginal", "h-f-zero", "h-f-leak", "h-base"]
     by_id = {h.id: h for h in hyps}
-    ordered = [by_id[i] for i in order if i in by_id]
     queue = Queue(events)
-    for h in ordered:
+    for h in hyps:
         queue.push(h)
     tree = Tree(
         events,
