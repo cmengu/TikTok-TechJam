@@ -1,0 +1,782 @@
+<title>The External Oracle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Public+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --ground:      #F8F9FB;
+  --surface:     #FFFFFF;
+  --surface-alt: #EEF1F5;
+  --ink:         #14161D;
+  --ink-soft:    #4B5262;
+  --ink-mute:    #79808F;
+  --rule:        #DDE1E8;
+  --rule-soft:   #E9ECF1;
+
+  --target:      #8E2C3B;
+  --target-soft: #F7E7E9;
+  --on-target:   #FFFFFF;
+  --have:        #35597F;
+  --have-soft:   #E5EDF6;
+  --part:        #8A6017;
+  --part-soft:   #F8EFDE;
+  --miss:        #6B7280;
+  --miss-soft:   #EDEFF2;
+
+  --shadow: 0 1px 2px rgba(20,22,29,.05), 0 12px 30px -20px rgba(20,22,29,.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0C0E13;
+    --surface:     #13161D;
+    --surface-alt: #191D26;
+    --ink:         #E6E9EF;
+    --ink-soft:    #ADB4C0;
+    --ink-mute:    #7C8493;
+    --rule:        #272C36;
+    --rule-soft:   #1E222B;
+
+    --target:      #E08794;
+    --target-soft: #331A1F;
+    --on-target:   #14161D;
+    --have:        #83AEDC;
+    --have-soft:   #16263A;
+    --part:        #D6A758;
+    --part-soft:   #2C2417;
+    --miss:        #8A919E;
+    --miss-soft:   #1D212A;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 12px 30px -20px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:      #0C0E13;
+  --surface:     #13161D;
+  --surface-alt: #191D26;
+  --ink:         #E6E9EF;
+  --ink-soft:    #ADB4C0;
+  --ink-mute:    #7C8493;
+  --rule:        #272C36;
+  --rule-soft:   #1E222B;
+
+  --target:      #E08794;
+  --target-soft: #331A1F;
+  --on-target:   #14161D;
+  --have:        #83AEDC;
+  --have-soft:   #16263A;
+  --part:        #D6A758;
+  --part-soft:   #2C2417;
+  --miss:        #8A919E;
+  --miss-soft:   #1D212A;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 12px 30px -20px rgba(0,0,0,.9);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Public Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0 22px 90px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 880px; margin: 0 auto; }
+
+.serif { font-family: "Instrument Serif", Georgia, "Times New Roman", serif; font-weight: 400; }
+.mono, code { font-family: "Roboto Mono", "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+/* ---------- masthead ---------- */
+.masthead { padding: 56px 0 26px; border-bottom: 1px solid var(--rule); }
+.eyebrow {
+  font-family: "Roboto Mono", monospace;
+  font-size: 11px; font-weight: 500;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--target);
+  margin: 0 0 20px;
+}
+h1 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(46px, 8.5vw, 82px);
+  font-weight: 400; line-height: .98;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+  margin: 0 0 20px;
+}
+.standfirst {
+  font-size: 19px; line-height: 1.52;
+  color: var(--ink-soft);
+  max-width: 62ch; margin: 0;
+}
+
+/* ---------- destination banner ---------- */
+.dest {
+  margin: 36px 0 0;
+  border: 1px solid var(--target);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dest-hd {
+  background: var(--target);
+  color: var(--on-target);
+  font-family: "Roboto Mono", monospace;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .16em; text-transform: uppercase;
+  padding: 9px 22px;
+}
+.dest-bd { background: var(--target-soft); padding: 24px 26px; }
+.dest-bd p { margin: 0 0 14px; max-width: none; }
+.dest-bd p:last-child { margin-bottom: 0; }
+.dest-bd .big {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 25px; line-height: 1.28; color: var(--ink);
+  letter-spacing: -.01em;
+}
+
+/* ---------- sections ---------- */
+section { margin-top: 74px; }
+.sechead {
+  display: flex; align-items: baseline; gap: 16px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 10px; margin-bottom: 26px;
+}
+.sechead .tag {
+  font-family: "Roboto Mono", monospace;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .14em; color: var(--target);
+  flex: none; text-transform: uppercase;
+}
+h2 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 34px; font-weight: 400;
+  letter-spacing: -.012em; margin: 0;
+  text-wrap: balance;
+}
+h3 {
+  font-size: 16px; font-weight: 700;
+  letter-spacing: -.002em;
+  margin: 32px 0 10px;
+}
+h4 {
+  font-family: "Roboto Mono", monospace;
+  font-size: 11px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-mute);
+  margin: 26px 0 10px;
+}
+p { margin: 0 0 16px; max-width: 70ch; }
+ul, ol { margin: 0 0 16px; padding-left: 20px; max-width: 70ch; }
+li { margin-bottom: 7px; }
+code {
+  font-size: .86em;
+  background: var(--surface-alt);
+  padding: 1px 5px; border-radius: 2px;
+}
+a { color: var(--target); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--target); outline-offset: 3px; }
+strong, b { font-weight: 700; }
+
+/* ---------- figure ---------- */
+figure {
+  margin: 26px 0 30px;
+  padding: 22px 20px 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  box-shadow: var(--shadow);
+}
+.scroller { overflow-x: auto; }
+figure svg { display: block; min-width: 880px; width: 100%; height: auto; }
+figcaption {
+  font-size: 13.5px; line-height: 1.55;
+  color: var(--ink-soft);
+  margin-top: 15px; padding-top: 13px;
+  border-top: 1px solid var(--rule-soft);
+  max-width: none;
+}
+.b-have { fill: var(--have-soft); stroke: var(--have); stroke-width: 1.2; }
+.b-part { fill: var(--part-soft); stroke: var(--part); stroke-width: 1.2; }
+.b-miss { fill: var(--miss-soft); stroke: var(--miss); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.b-targ { fill: var(--target-soft); stroke: var(--target); stroke-width: 2.4; }
+.b-log  { fill: var(--surface-alt); stroke: var(--rule); stroke-width: 1.2; }
+.t-main { font-family: "Public Sans", sans-serif; font-size: 12px; font-weight: 600; fill: var(--ink); }
+.t-sub  { font-family: "Roboto Mono", monospace; font-size: 9.5px; fill: var(--ink-mute); }
+.t-col  { font-family: "Roboto Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: .13em; fill: var(--ink-mute); }
+.t-flow { font-family: "Roboto Mono", monospace; font-size: 9.5px; fill: var(--ink-mute); }
+.t-targ { font-family: "Roboto Mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; fill: var(--target); }
+.arrow  { stroke: var(--ink-mute); stroke-width: 1.3; fill: none; }
+.arrowhead { fill: var(--ink-mute); }
+
+/* ---------- legend ---------- */
+.legend {
+  display: flex; flex-wrap: wrap; gap: 8px 20px;
+  font-family: "Roboto Mono", monospace;
+  font-size: 11px; color: var(--ink-soft);
+  margin-top: 14px;
+}
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 13px; height: 13px; border-radius: 2px; display: inline-block; }
+.sw-have { background: var(--have-soft); border: 1px solid var(--have); }
+.sw-part { background: var(--part-soft); border: 1px solid var(--part); }
+.sw-miss { background: var(--miss-soft); border: 1px dashed var(--miss); }
+.sw-targ { background: var(--target-soft); border: 2px solid var(--target); }
+
+/* ---------- ladder ---------- */
+.ladder { border-top: 1px solid var(--rule); margin: 0 0 22px; }
+.rung {
+  display: grid;
+  grid-template-columns: 62px 1fr 132px;
+  gap: 0 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  align-items: baseline;
+}
+.rung-l {
+  font-family: "Roboto Mono", monospace;
+  font-size: 13px; font-weight: 700; color: var(--ink-mute);
+}
+.rung-t { font-size: 15px; color: var(--ink-soft); }
+.rung-t b { color: var(--ink); font-weight: 700; }
+.rung-m {
+  font-family: "Roboto Mono", monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; text-align: right;
+}
+.rung.here { background: var(--part-soft); }
+.rung.here .rung-l { color: var(--part); }
+.rung.here .rung-m { color: var(--part); }
+.rung.goal { background: var(--target-soft); }
+.rung.goal .rung-l { color: var(--target); }
+.rung.goal .rung-m { color: var(--target); }
+.rung.goal .rung-t b { color: var(--target); }
+@media (max-width: 620px) {
+  .rung { grid-template-columns: 50px 1fr; gap: 4px 14px; }
+  .rung-m { grid-column: 2; text-align: left; }
+}
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; margin: 0 0 22px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td {
+  text-align: left; padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+th {
+  font-family: "Roboto Mono", monospace;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+td.n { font-family: "Roboto Mono", monospace; white-space: nowrap; }
+tr.spot td { background: var(--target-soft); }
+
+/* ---------- pills ---------- */
+.pill {
+  display: inline-block;
+  font-family: "Roboto Mono", monospace;
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 2px;
+  white-space: nowrap;
+}
+.p-have { background: var(--have-soft);   color: var(--have); }
+.p-part { background: var(--part-soft);   color: var(--part); }
+.p-miss { background: var(--miss-soft);   color: var(--miss); }
+.p-targ { background: var(--target-soft); color: var(--target); }
+
+/* ---------- spec blocks ---------- */
+.spec {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 20px 24px;
+  margin: 0 0 16px;
+}
+.spec h3 { margin: 0 0 12px; font-size: 16px; }
+.spec p { font-size: 15px; margin: 0 0 12px; max-width: none; }
+.spec p:last-child { margin-bottom: 0; }
+.spec ul { font-size: 15px; max-width: none; }
+
+.eq {
+  font-family: "Roboto Mono", monospace;
+  font-size: 13px; line-height: 1.65;
+  background: var(--surface-alt);
+  border-left: 2px solid var(--ink-mute);
+  padding: 14px 18px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+}
+.eq .lbl {
+  display: block;
+  font-size: 9.5px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--ink-mute); margin-bottom: 8px;
+}
+.eq .gl {
+  font-family: "Public Sans", sans-serif;
+  font-size: 14px; color: var(--ink-soft);
+  margin-top: 11px; padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  white-space: normal;
+}
+
+/* ---------- backward path ---------- */
+.path { margin: 0; }
+.leg {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 0 24px;
+  padding: 20px 0;
+  border-top: 1px solid var(--rule);
+}
+.leg:last-child { border-bottom: 1px solid var(--rule); }
+.leg-t {
+  font-family: "Roboto Mono", monospace;
+  font-size: 12px; font-weight: 700;
+  color: var(--target); letter-spacing: .04em;
+  padding-top: 3px;
+}
+.leg-t small {
+  display: block; font-weight: 400; color: var(--ink-mute);
+  letter-spacing: .08em; margin-top: 3px; font-size: 10px;
+}
+.leg-b h3 { margin: 0 0 8px; font-size: 17px; }
+.leg-b p { font-size: 15px; margin: 0 0 10px; max-width: none; }
+.leg-b p:last-child { margin-bottom: 0; }
+.leg-b ul { font-size: 15px; max-width: none; margin-bottom: 10px; }
+.gate {
+  font-family: "Roboto Mono", monospace;
+  font-size: 12px; color: var(--ink-soft);
+  margin-top: 12px; padding-top: 11px;
+  border-top: 1px dashed var(--rule);
+}
+.gate b {
+  color: var(--ink-mute); font-weight: 500; letter-spacing: .09em;
+  text-transform: uppercase; font-size: 9.5px; margin-right: 7px;
+}
+@media (max-width: 560px) {
+  .leg { grid-template-columns: 1fr; gap: 8px; }
+}
+
+.foot {
+  margin-top: 70px; padding-top: 20px;
+  border-top: 2px solid var(--ink);
+  font-family: "Roboto Mono", monospace;
+  font-size: 11.5px; color: var(--ink-mute);
+  line-height: 1.75;
+}
+.foot p { max-width: none; margin-bottom: 12px; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Target architecture · NOVA · AgentX · and nine adjacent systems · 29 Aug</p>
+  <h1>The External Oracle</h1>
+  <p class="standfirst">The last read told you what was broken without telling you what you were building toward. This one starts at the destination — a named rung on a published autonomy ladder, one component away — and derives the path back to tonight.</p>
+</header>
+
+<div class="dest">
+  <div class="dest-hd">The destination, stated once</div>
+  <div class="dest-bd">
+    <p class="big">A search loop in which no result is believed on the strength of the same distribution that produced it.</p>
+    <p>The August 2026 survey of autonomous research agents grades systems L0 to L5 and splits the closed-loop tier in two. <b>L4-m</b> is mechanical: the loop re-runs on its own internal metric. <b>L4-v</b> is validated: revisions are gated by an <em>external oracle</em> the search cannot game. Of twenty-four systems it audits, nine reach L4. Seven are mechanical, one is author-claimed, and <b>exactly one is externally validated — CAMEO, from 2020, which is not an LLM system at all.</b></p>
+    <p>No LLM-era system in that corpus demonstrates an in-loop external oracle. KuaiRand hands you one for free: <code>log_random_4_22_to_5_08_pure.csv</code>, roughly 1.18 million <em>randomly exposed</em> impressions, unpolluted by the logging policy that generated every other split. Wiring it in as a promotion gate is about an hour of work and it moves the harness from the tier everyone is in to the tier one pre-LLM system occupies.</p>
+    <p>One boundary, from the rules: the scored submission is fixed as the validation-best checkpoint at convergence, so the oracle gates what the search <em>keeps</em>, not what it finally submits. And the test split — public data, physically on your disk — is out of scope during development and must never be read by a run.</p>
+    <p><b>That is where you are going.</b> Everything below either builds toward it or is deliberately cut.</p>
+  </div>
+</div>
+
+<!-- ============================ BLUEPRINT ============================ -->
+<section>
+  <div class="sechead"><span class="tag">Blueprint</span><h2>The loop you should end up with</h2></div>
+
+  <p>Synthesised from all eleven systems read for this page, then colour-coded against your working tree at <code>3e22b28</code>. Read it left to right: a hypothesis is proposed, cheap gates reject it before anything expensive runs, deterministic measurement produces every number, and judgment decides whether the result is believed and recorded.</p>
+
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 900 372" role="img" aria-label="Reference architecture for the search loop, in four stages: propose, gate, measure, judge, with a feedback arc returning to propose and an event log spanning the whole pipeline.">
+      <text class="t-col" x="20"  y="16">1 · PROPOSE</text>
+      <text class="t-col" x="245" y="16">2 · GATE — CHEAP REJECTS</text>
+      <text class="t-col" x="470" y="16">3 · MEASURE — DETERMINISTIC</text>
+      <text class="t-col" x="695" y="16">4 · JUDGE</text>
+
+      <!-- column 1 -->
+      <rect class="b-part" x="20" y="30" width="185" height="46" rx="2"/>
+      <text class="t-main" x="32" y="50">Hypothesis bank + priors</text>
+      <text class="t-sub"  x="32" y="65">bank.yaml · wrong contents</text>
+
+      <rect class="b-have" x="20" y="88" width="185" height="46" rx="2"/>
+      <text class="t-main" x="32" y="108">LLM proposer</text>
+      <text class="t-sub"  x="32" y="123">agents/researcher.py</text>
+
+      <rect class="b-part" x="20" y="146" width="185" height="46" rx="2"/>
+      <text class="t-main" x="32" y="166">Trajectory memory</text>
+      <text class="t-sub"  x="32" y="181">lessons.jsonl · wire broken</text>
+
+      <rect class="b-miss" x="20" y="204" width="185" height="46" rx="2"/>
+      <text class="t-main" x="32" y="224">Forbidden-pattern store</text>
+      <text class="t-sub"  x="32" y="239">rules.jsonl · no consumer</text>
+
+      <!-- column 2 -->
+      <rect class="b-part" x="245" y="30" width="185" height="46" rx="2"/>
+      <text class="t-main" x="257" y="50">Constraint filter</text>
+      <text class="t-sub"  x="257" y="65">hardcoded, cannot grow</text>
+
+      <rect class="b-have" x="245" y="88" width="185" height="46" rx="2"/>
+      <text class="t-main" x="257" y="108">Semantic gate · V_sem</text>
+      <text class="t-sub"  x="257" y="123">static + llm rules</text>
+
+      <rect class="b-have" x="245" y="146" width="185" height="46" rx="2"/>
+      <text class="t-main" x="257" y="166">Local smoke · V_loc</text>
+      <text class="t-sub"  x="257" y="181">smoke rung, 60s cap</text>
+
+      <!-- column 3 -->
+      <rect class="b-have" x="470" y="30" width="185" height="46" rx="2"/>
+      <text class="t-main" x="482" y="50">Runner + classifier</text>
+      <text class="t-sub"  x="482" y="65">retry table · watchdog</text>
+
+      <rect class="b-part" x="470" y="88" width="185" height="46" rx="2"/>
+      <text class="t-main" x="482" y="108">Noise band + ladder</text>
+      <text class="t-sub"  x="482" y="123">σ off by 12×</text>
+
+      <rect class="b-targ" x="470" y="146" width="185" height="46" rx="2"/>
+      <text class="t-targ" x="482" y="163">← THE DESTINATION</text>
+      <text class="t-main" x="482" y="179">External oracle</text>
+      <text class="t-sub"  x="482" y="192">random-exposure holdout</text>
+
+      <!-- column 4 -->
+      <rect class="b-part" x="695" y="30" width="185" height="46" rx="2"/>
+      <text class="t-main" x="707" y="50">Attribution check</text>
+      <text class="t-sub"  x="707" y="65">built, pinned to "clear"</text>
+
+      <rect class="b-have" x="695" y="88" width="185" height="46" rx="2"/>
+      <text class="t-main" x="707" y="108">Promote / reject</text>
+      <text class="t-sub"  x="707" y="123">measure.py verdict</text>
+
+      <rect class="b-part" x="695" y="146" width="185" height="46" rx="2"/>
+      <text class="t-main" x="707" y="166">Submission writer</text>
+      <text class="t-sub"  x="707" y="181">wrong CSV schema</text>
+
+      <!-- inter-column arrows -->
+      <path class="arrow" d="M207 111 H231"/>
+      <path class="arrowhead" d="M231 106 L243 111 L231 116 Z"/>
+      <path class="arrow" d="M432 111 H456"/>
+      <path class="arrowhead" d="M456 106 L468 111 L456 116 Z"/>
+      <path class="arrow" d="M657 111 H681"/>
+      <path class="arrowhead" d="M681 106 L693 111 L681 116 Z"/>
+
+      <!-- event log spine -->
+      <rect class="b-log" x="20" y="266" width="860" height="40" rx="2"/>
+      <text class="t-main" x="34" y="284">Append-only event log · every box writes, nothing holds private state</text>
+      <text class="t-sub"  x="34" y="298">events.jsonl — 18 typed events · replay reconstructs the whole run · this is deliverable 3</text>
+
+      <!-- feedback arc -->
+      <path class="arrow" d="M787 198 V226 H113 V262" stroke-dasharray="5 4"/>
+      <path class="arrowhead" d="M108 250 L113 262 L118 250 Z"/>
+      <text class="t-flow" x="450" y="219" text-anchor="middle">verdict → trajectory memory + new forbidden rule → next proposal</text>
+    </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw sw-have"></i>built and correct</span>
+      <span><i class="sw sw-part"></i>built, wrong or disconnected</span>
+      <span><i class="sw sw-miss"></i>absent</span>
+      <span><i class="sw sw-targ"></i>the one component that defines the destination</span>
+    </div>
+    <figcaption>Eleven of fourteen boxes already exist. The loop is not missing machinery — it is missing one component and four connections. The dashed return arc is the part every paper on this page agrees is what separates a search from a sequence of guesses.</figcaption>
+  </figure>
+
+  <h3>Where that puts you on the ladder</h3>
+  <p>The survey's autonomy grades are the cleanest way to say what "better" means here, because they are about who validates rather than how much the agent does.</p>
+
+  <div class="ladder">
+    <div class="rung"><div class="rung-l">L1</div><div class="rung-t">Tool-augmented — a human drives, the model assists</div><div class="rung-m">—</div></div>
+    <div class="rung"><div class="rung-l">L2</div><div class="rung-t">Stage-local — autonomous inside one bounded task</div><div class="rung-m">—</div></div>
+    <div class="rung"><div class="rung-l">L3</div><div class="rung-t">Pipeline — chains several stages without approval per step</div><div class="rung-m">—</div></div>
+    <div class="rung here"><div class="rung-l">L4-m</div><div class="rung-t"><b>Closed loop, mechanical</b> — results feed back and revise the next hypothesis, but the trigger is the loop's own internal metric</div><div class="rung-m">You are here</div></div>
+    <div class="rung goal"><div class="rung-l">L4-v</div><div class="rung-t"><b>Closed loop, validated</b> — revisions are gated by an oracle outside the search: an independent checker or a measurement the optimiser cannot influence</div><div class="rung-m">One hour away</div></div>
+    <div class="rung"><div class="rung-l">L5</div><div class="rung-t">Open-ended — aspirational, nothing occupies it</div><div class="rung-m">—</div></div>
+  </div>
+
+  <p>Two things make L4-v reachable rather than aspirational for you. The random-exposure log is a genuine external oracle — it was collected under a different policy, so a model that scores well by agreeing with the production recommender gets no credit from it. And AgentX's attribution check is a second, independent oracle of a different kind: it asks whether the <em>mechanism</em> the hypothesis claimed actually fired, which a metric alone can never answer. You have the consumer for one and the raw file for the other.</p>
+</section>
+
+<!-- ============================ NOVA ============================ -->
+<section>
+  <div class="sechead"><span class="tag">NOVA</span><h2>Tencent's harness, in full</h2></div>
+
+  <p><em>A Verification-Aware Agent Harness for Architecture Evolution in Industrial Recommender Systems</em>, arXiv:2606.27243, 20 authors. Read this one closely: it is the same object as your tree, built by people with a billion users and a production A/B test at the end of it.</p>
+
+  <h4>The state and the objective</h4>
+  <div class="eq">
+    <span class="lbl">Architecture state</span>
+    A_t = (G_t, φ_t, F_t)<br>
+    <span style="color:var(--ink-mute)">G = model graph · φ = structural hyper-parameters · F = feature configuration</span><br><br>
+    <span class="lbl">Two-stage objective</span>
+    offline:  max_A  J_offline(A) = AUC(A),  A ∈ A_Ω<br>
+    online:   J_online(A) = Σ_i w_i · m_i(A),  m_i ∈ {GMV, Bias}
+    <div class="gl">The decomposition of the state into graph, hyper-parameters and features is worth adopting verbatim, because it is also a taxonomy of <em>modification kinds</em> — and your <code>Stage</code> literal (<code>data / features / objective / architecture / training / ensemble</code>) is already a finer-grained version of the same idea. Ω is the hard-constraint set: interface compatibility, tensor shapes, dtypes, feature availability, framework and serving compatibility, latency, parameter and FLOPs budgets. Yours is smaller and mostly about leakage, which is the right translation.</div>
+  </div>
+
+  <h4>Seven named agents, one main orchestrator</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Agent</th><th>Does</th><th>Your equivalent</th></tr></thead>
+    <tbody>
+      <tr><td><b>Initialization</b></td><td>Parses production code, extracts architecture priors from papers, loads the knowledge base</td><td><code>agents/brief.py</code> + protocol yaml</td></tr>
+      <tr><td><b>Solution-Design</b></td><td>Maps requirements to concrete modification plans; emits ranked candidates <em>and</em> the architecture gradient</td><td><code>agents/researcher.py</code></td></tr>
+      <tr><td><b>Code-Generation</b></td><td>Turns a design into an executable diff, grounded in production context</td><td><code>agents/coder.py</code></td></tr>
+      <tr><td><b>Quality-Review</b></td><td>Semantic architecture review before anything runs — the <code>V_sem</code> gate</td><td><code>agents/contract.py</code></td></tr>
+      <tr><td><b>Local-Testing</b></td><td>Single-machine executability — the <code>V_loc</code> gate</td><td>smoke rung</td></tr>
+      <tr><td><b>Offline Train &amp; Eval</b></td><td>Trains survivors, computes ΔJ</td><td><code>runner.py</code> + ladder</td></tr>
+      <tr><td><b>Online Experiment</b></td><td>Ships the best offline candidate to a 5% traffic A/B</td><td>no equivalent — and none needed</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>The architecture gradient</h4>
+  <div class="eq">
+    <span class="lbl">Equation 5</span>
+    g_t = Grad(e_{t−1}, V_t, ΔJ_t, H_t)<br><br>
+    g_t.weak_components   → which part of (G, φ, F) is the bottleneck<br>
+    g_t.directions        → which families to explore next<br>
+    g_t.forbidden         → patterns that failed, were invalid, or went negative
+    <div class="gl">Not a number — a structured object with three named fields, recomputed every round from the last edit, its verification diagnostics, its measured delta, and the whole history. Your <code>family_stats()</code> → <code>Queue.score_hyp()</code> path implements the middle field and nothing else.</div>
+  </div>
+
+  <p>Forbidden entries are stored in a specific shape: <b>an edit-pattern mapped to a defect-class</b>, tagged with the round that produced it. The paper's own example is a rule learned in round 7 — <em>sequence self-attention without a causal mask</em> → <em>future-information leakage</em>. That is exactly the schema <code>candidate/rules.jsonl</code> already has, down to the <code>statement</code> / <code>pattern</code> / <code>severity</code> split.</p>
+
+  <h4>What the ablation actually proves</h4>
+  <p>This is the most useful table in either paper, because it tells you which component to protect when you run out of time. Effective pass rate on the harder task, with one component removed at a time:</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Configuration</th><th class="n">EPR (L3)</th><th>Reading</th></tr></thead>
+    <tbody>
+      <tr class="spot"><td>NOVA, full</td><td class="n">60.0%</td><td>—</td></tr>
+      <tr><td>w/o Solution Design</td><td class="n">18.2%</td><td><b>Planning is the load-bearing component.</b> Removing the step that turns a goal into a concrete plan costs two thirds of the performance — more than any verification component</td></tr>
+      <tr><td>w/o Paper Reproduction</td><td class="n">33.3%</td><td>Landing rate <em>rises</em> to 91.7% while semantic-failure rate balloons to 63.6% — the agent writes code that runs and is wrong</td></tr>
+      <tr><td>w/o Gradient Feedback</td><td class="n">37.5%</td><td>Failures stop becoming search knowledge; the loop repeats itself</td></tr>
+      <tr><td>ReAct agent only</td><td class="n">7.1%</td><td>The whole harness is the contribution, not the model</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="eq">
+    <span class="lbl">Equation 12 — the metric to steal</span>
+    EPR = N₊ / N_g = LPR · (1 − SFR)
+    <div class="gl">Effective pass rate factors into landing pass rate times one minus semantic failure rate. The second row above is why the factorisation matters: a change that raises LPR while raising SFR is worse than useless, and a single success-rate number hides it. Your log already separates these — a <code>failure</code> event is a landing failure, a <code>rule_trip</code> is a semantic one — so you can report EPR, LPR and SFR for your own run with no new instrumentation. <b>That is a results table no other team will have.</b></div>
+  </div>
+</section>
+
+<!-- ============================ AGENTX ============================ -->
+<section>
+  <div class="sechead"><span class="tag">AgentX</span><h2>Kuaishou's engine, in full</h2></div>
+
+  <p><em>Towards Agent-Driven Self-Iteration of Industrial Recommender Systems</em>, arXiv:2606.26859, 62 authors, deployed. Four stages over a shared knowledge layer, plus a layer that rewrites the agents themselves.</p>
+
+  <h4>The knowledge layer — four bases, not one</h4>
+  <ul>
+    <li><b>Experiment KB</b> — historical launch reviews: target scenario, affected user groups, metric movements, launch decision, post-hoc diagnosis. Queried when a proposal needs empirical precedent.</li>
+    <li><b>System KB</b> — a three-layer domain wiki: a <em>schema</em> layer defining field types and relations, a <em>wiki</em> layer of standardised Markdown entries, and a <em>raw-source</em> layer linking each entry back to the code it describes. Built by extractor agents, not by hand.</li>
+    <li><b>Data Analysis</b> — metric definitions, SQL plans, offline statistics; validates that a proposed segment is actually big enough to move a metric.</li>
+    <li><b>Model Research</b> — papers decomposed into <em>typed claims</em>: problem, assumption, method, finding, limitation, plus architecture components and inter-paper relations, each grounded against production feature contracts.</li>
+  </ul>
+  <p>The three-layer System KB is the transferable idea. An entry is only trusted because it links back to the source it was extracted from — which is the same discipline as your rule that no state exists that is not a fold over the event log.</p>
+
+  <h4>How a proposal is scored</h4>
+  <div class="eq">
+    <span class="lbl">Brainstorm ranking</span>
+    S(c|q) = λ_o·O(c,q) + λ_b·B(c) + λ_f·F(c) + λ_h·H(c) + λ_e·E(c|q) − λ_r·R(c)<br>
+    E(c|q) = Σ_k α_k(q,c) · e_k(c)      over the four knowledge bases
+    <div class="gl">Objective alignment, business validity, feasibility, <em>handoff completeness</em>, evidence, minus risk. Handoff completeness is the surprising term: a proposal is scored partly on whether it is specified well enough for the next agent to act on without asking. Ideas are also bucketed as <em>ready-to-implement</em>, <em>probe-first</em>, or <em>moonshot-backlog</em> rather than ranked on one axis — which is a better fit for your convergence rule than a single <code>expected_gain</code> float.</div>
+  </div>
+
+  <h4>The model-developing state machine</h4>
+  <div class="eq">
+    <span class="lbl">Section 5.2</span>
+    policy → (code ↔ verify)_{≤3 rewrites} | experts×N_{concurrent} → exec → final_review
+    <div class="gl">Every stage has a deterministic exit condition. The rewrite budget is three and exhausting it fails the round <em>cleanly</em> rather than escalating. The expert panel votes in Python and needs a ⌈2N/3⌉ supermajority. Execution is a pure Python finite state machine with no model in it at all — submission, polling, metric extraction by regex from the training log.</div>
+  </div>
+
+  <p>Before any code is written, the agent declares a <b>policy</b>: what changes, the causal mechanism claimed, and a set of <b>expected observables</b> with names and thresholds — the paper's example reads <em>“gate activation &gt; 0.5 after step 1000 indicates a live gate; ≈ 0 indicates collapse.”</em> The verify step then checks two things: that the diff semantically matches the declared direction, and that <em>every declared observable actually appears in the code</em>.</p>
+
+  <h4>The example that justifies the whole mechanism</h4>
+  <div class="spec">
+    <h3>Round 1 — rejected at +0.0003 AUC</h3>
+    <p>A multiplicative gate, <code>x·tanh(V_o x)</code>. The code was correct and the metric improved. But the declared observable showed gate activation near zero for the entire run: Glorot initialisation made <code>V_o x ≈ 0</code>, which zeroed the tanh output and blocked gradients. The gate never fired, so the gain could not be attributed to the gate. <b>Attribution UNCLEAR — the improvement was discarded.</b></p>
+    <h3>Round 2 — accepted at +0.0022 AUC</h3>
+    <p>The residual fix, <code>x·(1 + tanh(V_o x))</code>. Activation recovered, every link in the causal chain verified. <b>Attribution CLEAR — recorded.</b></p>
+    <p style="color:var(--ink-mute); font-size:14px">Under your ε = 0.002 / N = 3 convergence rule, a +0.0003 result does not reset the counter — but a noise-driven +0.0025 would, and would then pull the search into a family that does nothing. That is the failure this brake exists to stop, and your <code>measure.py</code> already implements the consumer side of it.</p>
+  </div>
+
+  <h4>The eight-dimension code score</h4>
+  <div class="eq">
+    <span class="lbl">Q_code</span>
+    Q = .06·s₁ + .12·s₂ + <b>.22·s₃</b> + .08·s₄ + .06·s₅ + <b>.18·s₆</b> + <b>.18·s₇</b> + .10·s₈
+    <div class="gl">The three heavy terms — 58% of the weight — are attribute hallucination, correctness-loop iterations, and <em>manual operator interventions</em>. Kuaishou scores its own agent on how often a human had to step in, and so does the TechJam rubric under Impact &amp; Relevance. Your <code>intervention</code> event exists for exactly this; make sure the final report quotes the count.</div>
+  </div>
+
+  <h4>SGPO — correctly declined, worth understanding</h4>
+  <p>Two variants. <b>SGPO-I</b> samples dialogue traces, produces a natural-language loss report plus a structured <em>semantic gradient</em> (missing constraints, weak step ordering, underspecified evidence), refines one subagent's prompt, then admits the edit only if a <b>paired replay on identical tasks</b> improves the score by more than ε. Five rounds took the brainstorm agent from 75.2% to 98.0%, and the accepted edits are legible: make the task contract explicit before generating, require an explicit evidence index, standardise the candidate schema, separate novelty from duplicates. <b>SGPO-II</b> does the same for the coding agent using historical merged requests instead of traces, filtered to drop bulk reformats, reverts, diffs under 10 lines and over 5000, then replayed as requirement-only tasks against the landed patch.</p>
+  <p>It needs a trace corpus and a replay harness. You have neither and two days. Keep declining it — but note that GEPA below is the same idea at a hundredth of the cost, and is the right thing to reach for after the deadline.</p>
+</section>
+
+<!-- ============================ FIELD ============================ -->
+<section>
+  <div class="sechead"><span class="tag">Field</span><h2>Nine adjacent systems, and what each contributes</h2></div>
+
+  <p>Sorted by what they add to the blueprint above, not by fame. The first three change what you should build; the rest are the reading queue for after 1 September.</p>
+
+  <div class="spec">
+    <h3>AIRA-2 · <span class="mono" style="font-size:13px">arXiv:2603.26499</span> <span class="pill p-targ">Changes the design</span></h3>
+    <p>The single most relevant paper on this page, and it <b>overturns a result the field had accepted</b>. Earlier work found that picking the final submission by true test score instead of validation score would raise MLE-bench medal rates by 9–13% absolute, and everyone read that as the agent overfitting the validation split during search.</p>
+    <p>AIRA-2's ablations show it was mostly <em>evaluation noise</em>, not memorisation — self-reported metrics, dynamic splits, and outright evaluation bugs producing perfect validation scores regardless of input. Their fix, <b>Hidden Consistent Evaluation</b>, is three rules: one fixed split made once and reused identically across every seed; labels hidden from the agent; scoring externalised into a separate container. Then the signals are decoupled — one split steers the search, a different one selects the final submission. Removing HCE costs about 13 percentile points, the largest ablation in the paper.</p>
+    <p><b>What it means for you:</b> you already have the good version of two of these — <code>evaluate.py</code> is frozen and externally supplied, and the splits are fixed date ranges rather than resampled. The third is the one you are missing, and it is the destination: search on validation, <em>select</em> on something else. Their second finding is a scaling law where the compute-optimal number of parallel agents grows as the square root of the budget — breadth beats sequential depth. On a 40-second training run that argues for running all three candidates rather than ranking them.</p>
+  </div>
+
+  <div class="spec">
+    <h3>MLE-STAR · <span class="mono" style="font-size:13px">arXiv:2506.15692</span>, NeurIPS 2025 <span class="pill p-targ">Changes the design</span></h3>
+    <p>The mechanism your loop is missing on the <em>generation</em> side. Instead of asking the model what to try next, MLE-STAR runs an <b>ablation over the candidate's own code blocks</b> to find which pipeline component most affects the score, then concentrates the search inside that component. It is a nested loop: outer picks the target block, inner explores variants of it.</p>
+    <p>This is NOVA's <code>weak_components</code> field — the one you have no implementation of — computed cheaply and mechanically instead of being asked of a model. On a 40-second training run, ablating the four blocks of the reference pipeline costs under three minutes and tells you where the signal is. It also directly attacks your worst failure mode: three duds in a row ends the run, and an ablation-directed proposal is far less likely to be a dud than a bank-ordered one.</p>
+  </div>
+
+  <div class="spec">
+    <h3>Autonomous Research Agents: a survey of AI scientists and the verification gap · <span class="mono" style="font-size:13px">arXiv:2608.05179</span> <span class="pill p-targ">Frames the claim</span></h3>
+    <p>Where the L0–L5 ladder comes from, and the source of the destination on this page. Its headline audit: across 24 runnable systems, 83% release code but only <b>38% release seeds or execution traces</b>, and only 38% report any novelty-verification method. Its stated conclusion is that code availability is no longer the scarce thing — <em>evidence that a claim can be checked</em> is.</p>
+    <p>Your harness is unusually well positioned against that specific critique: the run <em>is</em> the trace, replayable, with seeds recorded per rung. Say so explicitly in the write-up and cite this survey for why it matters. Its failure-mode list also reads as a checklist of things to avoid claiming — novelty-proxy gap, compile-versus-reproduce gap, LLM-as-judge unreliability, and the absence of negative results in reported runs.</p>
+  </div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>System</th><th>What it is</th><th>What it contributes here</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>AIDE</b><br><span class="mono" style="font-size:12px">2502.13138</span></td>
+        <td>ML engineering as tree search over Python scripts; nodes are solutions, edges are improvement attempts</td>
+        <td>The direct ancestor of your tree. Three operators — <b>draft</b>, <b>debug</b>, <b>improve</b> — with a hard-coded policy: draft if too few solutions, debug if buggy nodes remain within the depth limit, otherwise improve the best non-buggy node. Your <code>DEBUG_DEPTH = 3</code> and <code>kind</code> literal are the same design. Final answer is plain argmax over all nodes, with no defence against validation overfit — which is precisely what AIRA-2 fixed</td>
+      </tr>
+      <tr>
+        <td><b>Self-Evolving RecSys</b><br><span class="mono" style="font-size:12px">2602.10226</span></td>
+        <td>YouTube's deployed offline/online dual loop for autonomous model optimisation</td>
+        <td>Your exact domain. A fast inner loop filters on cheap proxies before an expensive outer loop validates on delayed truth; an <em>Experiment Journal</em> serialises online outcomes back so the offline agent learns why good offline numbers failed online. Reported +0.06% to +0.14% on production metrics and roughly 100× experiment velocity. The two-loop split is the general form of what the random-exposure log buys you in miniature</td>
+      </tr>
+      <tr>
+        <td><b>GEPA</b><br><span class="mono" style="font-size:12px">2507.19457</span>, ICLR 2026 oral</td>
+        <td>Reflective prompt evolution — an LLM diagnoses its own failures in natural language, under Pareto selection over a diverse prompt population</td>
+        <td>SGPO's idea at a fraction of the cost: beats GRPO by ~6% on average and up to 20% while using up to 35× fewer rollouts. This is the realistic post-deadline route to a self-improving harness</td>
+      </tr>
+      <tr>
+        <td><b>FunSearch</b><br><span class="mono" style="font-size:12px">via the survey</span></td>
+        <td>LLM generation paired with an executable verifier that gates on functional validity</td>
+        <td>The cleanest precedent for the argument that generation is only safe when something deterministic can reject it — the principle your contract gate rests on</td>
+      </tr>
+      <tr>
+        <td><b>MLE-bench</b><br><span class="mono" style="font-size:12px">2410.07095</span></td>
+        <td>75 Kaggle competitions as an agent benchmark</td>
+        <td>The measuring stick everything above reports against; useful for one sentence of context on why a competition harness is a legitimate research artifact</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>The auto-fine-tuning branch — after the deadline</h4>
+  <p>You asked specifically about auto fine-tuning loops. That is a live and separate literature, and it is the natural continuation of this harness once the task stops being a factorization machine. I found these by title and abstract only and have not read them properly — treat this as a reading queue rather than a set of claims.</p>
+  <ul>
+    <li><b>PostTrainBench</b> <span class="mono" style="font-size:12.5px">arXiv:2603.08640</span> — can LLM agents automate post-training? The benchmark for exactly this question; the headline is partial success with premature convergence as a named failure mode, which is your convergence rule in another costume.</li>
+    <li><b>TREX</b> <span class="mono" style="font-size:12.5px">arXiv:2604.14116</span> — automating LLM fine-tuning via agent-driven tree-based exploration; a Researcher module plus an Executor wired to a GPU cluster. The closest structural match to your harness in the fine-tuning setting.</li>
+    <li><b>LLMZero</b> <span class="mono" style="font-size:12.5px">arXiv:2606.18388</span> — discovering adaptive training strategies for RL post-training via LLM agents.</li>
+    <li><b>Pioneer Agent</b> <span class="mono" style="font-size:12.5px">arXiv:2604.09791</span> — continual improvement of small models in production, using Monte-Carlo graph search where nodes are whole training pipelines.</li>
+    <li><b>AutoLLMResearch</b> <span class="mono" style="font-size:12.5px">arXiv:2605.11518</span> — learning from cheap experiments to optimise expensive ones, which is the ladder idea generalised.</li>
+    <li><b>Agentic Neural Architecture Search</b> <span class="mono" style="font-size:12.5px">arXiv:2607.07984</span> — the NAS-flavoured cousin of NOVA.</li>
+  </ul>
+  <p>Three of these — TREX, Pioneer Agent, AutoLLMResearch — are tree or graph search over training pipelines with a cheap-to-expensive rung structure. That is your harness with a different candidate type. If this project continues past September, the honest framing is not “a hackathon entry” but a task-agnostic search harness whose first task happened to be a recommender.</p>
+</section>
+
+<!-- ============================ BACKWARD ============================ -->
+<section>
+  <div class="sechead"><span class="tag">Backward</span><h2>The path, derived from the end</h2></div>
+
+  <p>Read top to bottom; it was written bottom to top. Each leg names what must already be true for the leg above it to be possible, and carries a gate you can actually check rather than a vague hour estimate.</p>
+
+  <div class="path">
+
+    <div class="leg">
+      <div class="leg-t">T−0<small>1 Sep 12:00</small></div>
+      <div class="leg-b">
+        <h3>The destination, as a submitted artifact</h3>
+        <p>A converged autonomous run whose validation-best checkpoint is submitted — that selection rule is fixed by the organizers — but where every promotion along the way had to survive an unbiased second check the logging policy never touched. Results table reporting primary score, EPR / LPR / SFR, intervention count, tokens and wall-clock; write-up led by the L4-v position, cited to the survey.</p>
+        <div class="gate"><b>Gate</b><code>submit.py --check</code> passes on the final CSV, and the log shows every promotion carrying a random-exposure delta beside its validation delta</div>
+      </div>
+    </div>
+
+    <div class="leg">
+      <div class="leg-t">T−1<small>31 Aug, evening</small></div>
+      <div class="leg-b">
+        <h3>For that to exist: the run must have produced a defensible best node</h3>
+        <p>Which means the clean autonomous run has already happened and its log contains promotions that survived both oracles — the random-exposure check and the attribution check. Write-up drafted from the log rather than from memory, because every number in it is already an event.</p>
+        <div class="gate"><b>Gate</b>at least one promoted node with <code>attribution=clear</code> and a positive delta on the unbiased split</div>
+      </div>
+    </div>
+
+    <div class="leg">
+      <div class="leg-t">T−2<small>31 Aug, daytime</small></div>
+      <div class="leg-b">
+        <h3>For the run to be clean: the loop must not wedge, and must not converge early</h3>
+        <p>Two failure modes, two fixes. Wedging is the all-rejections round — add NOVA's negative sentinel so a round where every candidate is rejected pre-training records a negative delta and continues instead of falling through. Early convergence is three duds in a row, so the opening hypotheses must be ordered by <em>probability of clearing ε</em>, not expected gain, and pointed at the organizers' untried list with the loss function first.</p>
+        <p>This is also where MLE-STAR earns its place: run the block-ablation over the reference pipeline once, and let the result choose the opening family instead of the bank's priors.</p>
+        <div class="gate"><b>Gate</b>a full dry run reaches convergence without a human touching it, and the intervention count is recorded</div>
+      </div>
+    </div>
+
+    <div class="leg">
+      <div class="leg-t">T−3<small>30 Aug</small></div>
+      <div class="leg-b">
+        <h3>For the loop to run at all: the four connections</h3>
+        <p>In dependency order, not preference order:</p>
+        <ul>
+          <li><b>Ladder recalibration</b> — measure σ on your own five-seed baseline and rederive every constant in <code>measure.py</code>. Nothing downstream means anything while the noise band is 12× too wide.</li>
+          <li><b>The external oracle</b> — add the random-exposure log as one extra <code>evaluate()</code> call per promotion, recorded as a separate metric on the verdict. It gates what the search keeps; it does not pick the submission, which the rules fix as the validation-best checkpoint. This is the destination component and the smallest of the four.</li>
+          <li><b>Attribution unpinned</b> — <code>observables</code> on <code>Hypothesis</code>, checked after the replicate rung, feeding the <code>"unclear"</code> path that <code>measure.py:398</code> already implements.</li>
+          <li><b>Trajectory memory and forbidden rules</b> — fix the <code>heading</code>/<code>text</code> mismatch, append lessons on the failure path too, and point <code>contract.py</code> at <code>rules.jsonl</code> so the rule set can grow.</li>
+        </ul>
+        <div class="gate"><b>Gate</b>a lesson written by a failed node appears, non-empty, in the next researcher prompt</div>
+      </div>
+    </div>
+
+    <div class="leg">
+      <div class="leg-t">T−4<small>30 Aug, morning</small></div>
+      <div class="leg-b">
+        <h3>For any of that to be testable: the task layer must be real</h3>
+        <p>Rewrite <code>candidate/template.py</code> around the kit's own <code>data.py</code> rather than reimplementing the split; restate <code>rules.jsonl</code> for within-user ranking on <code>long_view</code>; write <code>protocols/kuairand.yaml</code> with the values that ship in <code>baseline_scores.json</code>; delete the Ali-CCP stubs. Point the submission writer's read-back at <code>submit.py --check</code> so your definition of valid cannot drift from the organizers'.</p>
+        <div class="gate"><b>Gate</b>one hand-written hypothesis runs end to end and writes a submission that passes <code>--check</code></div>
+      </div>
+    </div>
+
+    <div class="leg">
+      <div class="leg-t">T−5<small>tonight</small></div>
+      <div class="leg-b">
+        <h3>For anything to be measured against anything: ground truth</h3>
+        <p>Merge #13 → #16 → #15 → #17, all four clean. Download KuaiRand-Pure. Reproduce the FM baseline at validation primary 0.6016, then run <code>--model random</code> and confirm 0.4753 ± 0.001 — the kit is explicit that if random misses, the harness is broken and nothing else should proceed.</p>
+        <p>Strike the unsourced “&gt;90% of loop failures were infrastructure” line from <code>Plan_delta</code> §6 while you are in there. It is not in the AgentX paper.</p>
+        <div class="gate"><b>Gate</b>one branch contains all the work, and two published numbers reproduce locally</div>
+      </div>
+    </div>
+
+  </div>
+
+  <h3>If you only do three things</h3>
+  <p>Recalibrate the ladder, wire the random-exposure log as a second promotion gate, and reseed the bank from the organizers' untried list ordered by probability of clearing ε. The first makes every measurement mean something, the second is the destination, and the third is what keeps the run alive long enough to reach it. Everything else on this page is upside.</p>
+</section>
+
+<footer class="foot">
+  <p>Read in full this session: arXiv:2606.27243 (NOVA), arXiv:2606.26859 (AgentX), arXiv:2608.05179 (verification-gap survey), arXiv:2603.26499v2 (AIRA-2), arXiv:2602.10226 (Self-Evolving RecSys), arXiv:2502.13138 (AIDE). Read by abstract and search summary only: MLE-STAR (2506.15692), GEPA (2507.19457), MLE-bench (2410.07095), GEAR (2605.13874), and the six auto-fine-tuning entries, which are flagged as a reading queue in the text.</p>
+  <p>Second-hand and worth checking against the PDFs before quoting: NOVA's per-task pass rates, where the abstract and the results table disagreed in my read — the ablation column reproduced here is from the table; and AIRA-2's ablation rows, where two different removals returned the same 56.8% figure in my read, which is more likely a parsing artefact than a coincidence. Repo state read directly at <code>3e22b28</code>. Companion pages: <em>The KuaiRand Pivot</em> and <em>The Dormant Wires</em>.</p>
+</footer>
+
+</div>

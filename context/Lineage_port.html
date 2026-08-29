@@ -1,0 +1,770 @@
+<title>The Dormant Wires</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Newsreader:opsz,wght@6..72,400;6..72,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --ground:      #FCFCFD;
+  --surface:     #FFFFFF;
+  --surface-alt: #F1F4F8;
+  --ink:         #12151B;
+  --ink-soft:    #464E5E;
+  --ink-mute:    #737C8C;
+  --rule:        #DCE1E9;
+  --rule-soft:   #EAEEF3;
+  --accent:      #22527E;
+  --accent-soft: #E2ECF4;
+  --live:        #A2552A;
+  --live-soft:   #F7EBE1;
+  --good:        #1E6851;
+  --good-soft:   #E1EFEA;
+  --shadow:      0 1px 2px rgba(18,21,27,.05), 0 10px 28px -18px rgba(18,21,27,.28);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0D1016;
+    --surface:     #141922;
+    --surface-alt: #1A202B;
+    --ink:         #E5E9EF;
+    --ink-soft:    #AEB7C4;
+    --ink-mute:    #7E8896;
+    --rule:        #29313D;
+    --rule-soft:   #1F2631;
+    --accent:      #7FB3E0;
+    --accent-soft: #14283A;
+    --live:        #D8925C;
+    --live-soft:   #2C2018;
+    --good:        #5FB394;
+    --good-soft:   #16291F;
+    --shadow:      0 1px 2px rgba(0,0,0,.45), 0 10px 28px -18px rgba(0,0,0,.85);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:      #0D1016;
+  --surface:     #141922;
+  --surface-alt: #1A202B;
+  --ink:         #E5E9EF;
+  --ink-soft:    #AEB7C4;
+  --ink-mute:    #7E8896;
+  --rule:        #29313D;
+  --rule-soft:   #1F2631;
+  --accent:      #7FB3E0;
+  --accent-soft: #14283A;
+  --live:        #D8925C;
+  --live-soft:   #2C2018;
+  --good:        #5FB394;
+  --good-soft:   #16291F;
+  --shadow:      0 1px 2px rgba(0,0,0,.45), 0 10px 28px -18px rgba(0,0,0,.85);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: Newsreader, Georgia, "Times New Roman", serif;
+  font-size: 17.5px;
+  line-height: 1.62;
+  margin: 0;
+  padding: 0 22px 88px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 800px; margin: 0 auto; }
+
+h1, h2, h3, .ui {
+  font-family: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+}
+.mono, code, .n {
+  font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- masthead ---------- */
+.masthead { padding: 60px 0 28px; border-bottom: 2px solid var(--ink); }
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; font-weight: 500;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 16px;
+}
+h1 {
+  font-size: clamp(36px, 6.4vw, 56px);
+  font-weight: 700; line-height: 1.02;
+  letter-spacing: -.03em;
+  text-wrap: balance;
+  margin: 0 0 18px;
+}
+.standfirst {
+  font-size: 20px; line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 60ch; margin: 0;
+}
+.meta {
+  display: flex; flex-wrap: wrap;
+  margin-top: 32px;
+  border-top: 1px solid var(--rule);
+}
+.meta div {
+  flex: 1 1 148px;
+  padding: 13px 18px 13px 0;
+  border-right: 1px solid var(--rule-soft);
+}
+.meta div:last-child { border-right: 0; }
+.meta dt {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--ink-mute);
+  margin: 0 0 5px;
+}
+.meta dd {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13.5px; font-weight: 500; color: var(--ink);
+}
+
+/* ---------- verdict ---------- */
+.verdict {
+  margin: 40px 0 0;
+  padding: 26px 30px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+}
+.verdict p { margin: 0 0 14px; max-width: none; }
+.verdict p:last-child { margin-bottom: 0; }
+.verdict strong { font-weight: 600; }
+
+/* ---------- sections ---------- */
+section { margin-top: 72px; }
+.sechead {
+  display: flex; align-items: baseline; gap: 14px;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 9px; margin-bottom: 28px;
+}
+.sechead .tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .13em; color: var(--accent);
+  flex: none;
+}
+h2 {
+  font-size: 28px; font-weight: 700;
+  letter-spacing: -.024em; margin: 0;
+  text-wrap: balance;
+}
+h3 {
+  font-size: 17px; font-weight: 600;
+  letter-spacing: -.006em;
+  margin: 32px 0 11px;
+}
+p { margin: 0 0 18px; max-width: 67ch; }
+ul, ol { margin: 0 0 18px; padding-left: 20px; max-width: 67ch; }
+li { margin-bottom: 8px; }
+code {
+  font-size: .86em;
+  background: var(--surface-alt);
+  padding: 1px 5px; border-radius: 2px;
+  border: 1px solid var(--rule-soft);
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; margin: 0 0 22px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td {
+  text-align: left; padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+th {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+td.n { white-space: nowrap; font-size: 13px; }
+
+/* ---------- pills ---------- */
+.pill {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 2px;
+  white-space: nowrap;
+}
+.p-ok   { background: var(--good-soft);   color: var(--good); }
+.p-live { background: var(--live-soft);   color: var(--live); }
+.p-flat { background: var(--surface-alt); color: var(--ink-mute); }
+.p-acc  { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- equation slab ---------- */
+.eq {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14px; line-height: 1.7;
+  background: var(--surface-alt);
+  border: 1px solid var(--rule-soft);
+  border-radius: 2px;
+  padding: 16px 20px;
+  margin: 0 0 20px;
+  overflow-x: auto;
+}
+.eq .lbl {
+  display: block;
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-mute); margin-bottom: 9px;
+}
+.eq .gloss {
+  font-family: Newsreader, Georgia, serif;
+  font-size: 14.5px; color: var(--ink-soft);
+  margin-top: 12px; padding-top: 11px;
+  border-top: 1px solid var(--rule);
+  white-space: normal;
+}
+
+/* ---------- stage list ---------- */
+.stages { border-top: 1px solid var(--rule); margin: 0 0 24px; }
+.stage {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 0 22px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.stage-k {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: .02em;
+  padding-top: 3px;
+}
+.stage-v { font-size: 15.5px; color: var(--ink-soft); }
+.stage-v b { color: var(--ink); font-weight: 600; }
+@media (max-width: 560px) {
+  .stage { grid-template-columns: 1fr; gap: 5px; }
+}
+
+/* ---------- wire cards ---------- */
+.wire {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--live);
+  border-radius: 0 2px 2px 0;
+  padding: 22px 26px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+.wire-head {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 10px; margin-bottom: 14px;
+}
+.wire-id {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px; font-weight: 600; color: var(--ink-mute);
+  flex: none;
+}
+.wire-title {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 17px; font-weight: 600;
+  letter-spacing: -.012em;
+  flex: 1 1 240px; margin: 0;
+}
+.wire p { font-size: 15.5px; margin: 0 0 13px; max-width: none; }
+.wire p:last-child { margin-bottom: 0; }
+.wire ul { font-size: 15.5px; max-width: none; margin-bottom: 13px; }
+
+.trace {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  background: var(--surface-alt);
+  border: 1px solid var(--rule-soft);
+  border-radius: 2px;
+  padding: 13px 16px;
+  margin: 0 0 14px;
+  overflow-x: auto;
+}
+.trace b {
+  color: var(--ink-mute); font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase;
+  font-size: 10px; padding-top: 2px;
+}
+.trace span { color: var(--ink); }
+
+.cost {
+  display: flex; flex-wrap: wrap; gap: 7px 22px;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--rule-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px; color: var(--ink-soft);
+}
+.cost b {
+  color: var(--ink-mute); font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase;
+  font-size: 10px; margin-right: 6px;
+}
+
+/* ---------- figure ---------- */
+figure {
+  margin: 28px 0 32px;
+  padding: 24px 22px 18px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  box-shadow: var(--shadow);
+}
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  font-size: 14px; line-height: 1.55;
+  color: var(--ink-soft);
+  margin-top: 15px; padding-top: 13px;
+  border-top: 1px solid var(--rule-soft);
+  max-width: none;
+}
+.sv-line  { stroke: var(--ink-soft); stroke-width: 1.4; fill: none; }
+.sv-dash  { stroke: var(--ink-mute); stroke-width: 1.4; fill: none; stroke-dasharray: 4 4; }
+.sv-break { stroke: var(--live); stroke-width: 2; fill: none; }
+.sv-jump  { fill: var(--live); }
+.sv-open  { fill: none; stroke: var(--ink-mute); stroke-width: 1.4; }
+.sv-head  { fill: var(--ink-soft); }
+.sv-lab {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; fill: var(--ink-soft);
+}
+.sv-cap {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  fill: var(--ink-mute);
+}
+.sv-tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; font-weight: 600;
+  letter-spacing: .08em; fill: var(--live);
+}
+
+/* ---------- transfer rows ---------- */
+.take { border-top: 1px solid var(--rule); margin: 0 0 24px; }
+.take-row {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 4px 26px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.take-mech {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: -.008em;
+}
+.take-src { font-size: 13.5px; color: var(--ink-mute); margin-top: 4px; }
+.take-verdict { font-size: 15px; color: var(--ink-soft); }
+.take-verdict b { color: var(--ink); font-weight: 600; }
+.take-verdict .pill { margin-bottom: 6px; }
+@media (max-width: 620px) {
+  .take-row { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* ---------- ordered plan ---------- */
+.plan { border-top: 1px solid var(--rule); margin: 0; }
+.step {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 0 20px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.step-n {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  padding-top: 2px;
+}
+.step-b h3 { margin: 0 0 6px; font-size: 16px; }
+.step-b p { font-size: 15.5px; margin: 0; max-width: none; }
+
+.foot {
+  margin-top: 68px; padding-top: 20px;
+  border-top: 2px solid var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px; color: var(--ink-mute);
+  line-height: 1.7;
+}
+.foot p { max-width: none; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Lineage read · NOVA + AgentX → beating-nise · 29 Aug</p>
+  <h1>The Dormant Wires</h1>
+  <p class="standfirst">Both papers behind <code>Plan_delta</code> §5 and §6 check out, and they are richer than the plan's summary of them. The surprise is on our side: three of the mechanisms we planned to port are already written into the harness and disconnected from the loop.</p>
+
+  <dl class="meta">
+    <div><dt>Sources</dt><dd>arXiv 2606.27243<br>arXiv 2606.26859</dd></div>
+    <div><dt>Target</dt><dd>~/beating-nise</dd></div>
+    <div><dt>Head</dt><dd>3e22b28</dd></div>
+    <div><dt>Dormant</dt><dd>3 mechanisms</dd></div>
+    <div><dt>Cost to wire</dt><dd>≈2 hours</dd></div>
+  </dl>
+</header>
+
+<div class="verdict">
+  <p><strong>Porting is the wrong verb.</strong> NOVA's trajectory memory, its accumulated forbidden patterns, and AgentX's falsifiable-attribution brake all have working implementations in this repo already. None of the three currently affects a single decision the agent makes. One is broken by a field-name mismatch between the code that writes it and the code that reads it, one is pinned open by a hardcoded constant, and one is a data file that no production module loads.</p>
+  <p><strong>Two claims in the current plan do not survive checking.</strong> The AgentX paper contains no statistic about the share of failures that were infrastructure rather than reasoning — that number should not go in a judged write-up. And NOVA's headline pass rates read differently in the abstract than in the results table, so quote the abstract and leave it there.</p>
+  <p>What the deep read does buy is the correct vocabulary for what we built, and one abstraction — NOVA's <em>architecture gradient</em> — that the queue implements exactly one third of.</p>
+</div>
+
+<!-- ============================ PAPERS ============================ -->
+<section>
+  <div class="sechead"><span class="tag">SOURCE</span><h2>What the two papers actually are</h2></div>
+
+  <p>Both were pulled from arXiv directly rather than taken from the plan's summary. Titles, authorship and abstracts match what <code>Plan_delta</code> claims, and the implementation detail below comes from the papers' own body sections.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Paper</th><th>Who</th><th>What it is</th><th>Loop unit</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>NOVA</b><br><span class="mono" style="font-size:12px">2606.27243</span></td>
+        <td>Tencent, 20 authors</td>
+        <td>A verification-aware harness that searches production recommender architectures under a fixed offline-evaluation budget</td>
+        <td>One round = K candidates → filter → verify → rank → train one</td>
+      </tr>
+      <tr>
+        <td><b>AgentX</b><br><span class="mono" style="font-size:12px">2606.26859</span></td>
+        <td>Kuaishou, 62 authors</td>
+        <td>A deployed four-stage multi-agent system that generates, implements, A/B-tests and learns from recommendation experiments, plus a layer that rewrites its own agents</td>
+        <td>One cycle = idea → code → online rollout → knowledge asset</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The size difference matters for how much of each transfers. NOVA is a search algorithm with a verification cascade bolted to it — that is structurally the same object as our tree, and most of it ports. AgentX is a production organisation: traffic buckets, guardrail vetoes, business-domain metric ownership, three worker instances running for three weeks. Only two of its ideas are separable from that scale, and they are the two we already half-built.</p>
+
+  <h3>Numbers worth quoting, and one to avoid</h3>
+  <p>NOVA reports production A/B gains of <b>+1.25%, +1.70% and +2.02% GMV</b> across three pCVR objectives at 5% traffic, with absolute pCVR bias falling 58.8%, 66.7% and 37.3%. Its offline metric is <em>effective pass rate</em>, defined as the share of generated candidates that achieve a positive AUC improvement:</p>
+
+  <div class="eq">
+    <span class="lbl">NOVA, eq. 12</span>
+    EPR = N₊ / N_g = LPR · (1 − SFR)<br>
+    <span style="color:var(--ink-mute)">N₊ = candidates with positive ΔAUC · N_g = candidates generated</span>
+    <div class="gloss">Landing pass rate times one minus semantic failure rate. The decomposition is the useful part: it separates “the agent wrote code that runs and lands” from “the code was semantically valid for a recommender”, which are the two different ways an autonomous round gets wasted. Our event log already distinguishes these — <code>failure</code> versus <code>rule_trip</code> — so EPR is computable from our own log with no new instrumentation.</div>
+  </div>
+
+  <p>The abstract gives 53.3% on ScaleUp and 51.7% on Literature-to-Production against a five-baseline field that includes a human expert loop, ReActAgent, OpenHands and Optuna-TPE. My read of the results table returned different figures for the same rows, which most likely means the table is broken out by a setting the abstract collapses. <b>Quote the abstract's numbers and don't cite the table</b> until someone reads the PDF properly.</p>
+
+  <p>AgentX reports 374 ideas producing 10 launchable rollouts over three weeks across three workers, 8× concurrency and 3.7× business value against a manual engineer, and a 0.561% user app-time gain. It does <b>not</b> report what fraction of failures were infrastructure rather than agent reasoning. <code>Plan_delta</code> §6 attributes a “&gt;90% infrastructure” finding to this paper; I could not locate it, and the paper's only failure-taxonomy content is the mechanism of its classifier, not a distribution. The design conclusion §6 draws is still right — it just has to be argued from our own log instead of borrowed.</p>
+</section>
+
+<!-- ============================ NOVA ============================ -->
+<section>
+  <div class="sechead"><span class="tag">NOVA</span><h2>The round, and the gradient</h2></div>
+
+  <p>NOVA's Algorithm 1 runs seven stages per round. Read it next to <code>Tree.step()</code> and the correspondence is close enough to be uncomfortable — we arrived at nearly the same shape independently.</p>
+
+  <div class="stages">
+    <div class="stage"><div class="stage-k">1 · Propose</div><div class="stage-v"><b>K candidates</b> conditioned on the current architecture, the gradient <code>g_t</code>, and trajectory memory <code>H</code>.</div></div>
+    <div class="stage"><div class="stage-k">2 · Filter</div><div class="stage-v">Drop anything violating hard constraints Ω or a <b>forbidden direction</b> — before building a model at all. Pure text-level rejection.</div></div>
+    <div class="stage"><div class="stage-k">3 · Verify</div><div class="stage-v">The cascade: <code>V_sem</code> (semantic) then <code>V_loc</code> (local executability). Survivors advance to training.</div></div>
+    <div class="stage"><div class="stage-k">4 · Select</div><div class="stage-v">Rank survivors <b>before training</b> by gradient alignment, history, and constraint margin. Pick one.</div></div>
+    <div class="stage"><div class="stage-k">5 · Apply</div><div class="stage-v">Apply the modification. In Copilot mode a human confirms; in autonomous mode it does not.</div></div>
+    <div class="stage"><div class="stage-k">6 · Evaluate</div><div class="stage-v">Train on the full dataset, compute ΔJ against the previous round's AUC.</div></div>
+    <div class="stage"><div class="stage-k">7 · Update</div><div class="stage-v">Append <code>(e*, V, ΔJ)</code> to <code>H</code>; recompute the gradient for the next round.</div></div>
+  </div>
+
+  <p>Termination is a budget of N rounds or a convergence test on offline AUC improvement — the same two-clause rule the TechJam organizers impose on us, arrived at for the same reason. When every candidate in a round is rejected before training, NOVA does not stall: it feeds a negative sentinel ΔJ into the gradient and continues, which is worth copying verbatim because a round of all-rejections is exactly the case where a naive loop wedges.</p>
+
+  <h3>The architecture gradient is the idea worth stealing</h3>
+
+  <div class="eq">
+    <span class="lbl">NOVA, eq. 5</span>
+    g_t = Grad(e_{t−1}, V_t, ΔJ_t, H_t)
+    <div class="gloss">A non-differentiable update signal built from the last modification, its verification diagnostics, its measured metric change, and the whole trajectory so far. It is not a number. It carries three named fields.</div>
+  </div>
+
+  <ul>
+    <li><b>Weak components</b> — which parts of the current architecture are responsible for the bottleneck.</li>
+    <li><b>Modification directions</b> — which families should be explored next.</li>
+    <li><b>Forbidden directions</b> — patterns that previously failed, were semantically invalid, or repeatedly went negative.</li>
+  </ul>
+
+  <p>Our equivalent is <code>family_stats()</code> folded over the event log and consumed by <code>Queue.score_hyp()</code> at <code>harness/tree.py:192</code>. It computes per-family mean Δ, standard deviation and mean cost, and ranks by <code>(mean_delta + sd) / cost</code>. That is a real implementation of <b>modification directions</b> and it works. The other two fields have no implementation. Nothing in the harness ever concludes “the embedding table is the bottleneck”, and nothing ever writes down “stop proposing user-side first-order features”. Both absences are cheap to close, and the second one is the single highest-value change on this page.</p>
+
+  <p>One inherited design that should <em>not</em> transfer is stage 4. NOVA ranks candidates before training because training is the expensive step; the ranking exists to avoid spending it. On KuaiRand-Pure a full training run is forty seconds on one CPU core, so pre-training ranking spends LLM tokens — which the judges score — to avoid spending something nearly free. Worse, it violates the rule we borrowed from the other paper: asking a model to rank untested candidates is asking it to be right about a numerical fact. <b>Generate three, run all three, keep the best measured.</b></p>
+</section>
+
+<!-- ============================ AGENTX ============================ -->
+<section>
+  <div class="sechead"><span class="tag">AGENTX</span><h2>Four stages, and the brake</h2></div>
+
+  <p>AgentX closes a loop that starts at an under-specified business intent and ends at a knowledge asset. Brainstorm turns intent into ranked, executable proposals; Developing turns a proposal into production code under repository-grounded verification; Evaluation runs a guarded A/B and converts the outcome — win or loss — into a structured, indexed asset; and SGPO rewrites the agents themselves from execution traces.</p>
+
+  <p>Most of that presupposes a production surface we do not have. Two pieces do not.</p>
+
+  <h3>Falsifiable attribution</h3>
+  <p>Before writing any code, AgentX's model-developing agent declares the target change, the causal mechanism it claims, and a set of <b>expected observables</b> with names and healthy-versus-pathological thresholds. After the run, a final review adjudicates each link in that causal chain. All links verified gives <code>CLEAR</code>; any broken or unclear link gives <code>UNCLEAR</code> — and an <code>UNCLEAR</code> gain <b>is not recorded at all</b>, however good the number is.</p>
+
+  <p>The paper's own example is the sharpest argument for it: a reproduced RankMixer gate delivered +0.0003 AUC, but the declared observable showed near-zero gate activation for the whole run. The mechanism had not fired, so the gain was not attributable to the change, so it was discarded. A later residual fix produced +0.0022 with every link verified, and that one was kept. This is a brake on exactly the failure our ε = 0.002 convergence rule makes dangerous: a noise-driven improvement that resets the stall counter and sends the search down a family that does nothing.</p>
+
+  <h3>The eight-dimension code score, and what it implies</h3>
+  <div class="eq">
+    <span class="lbl">AgentX, coding quality</span>
+    Q_code = 0.06·s₁ + 0.12·s₂ + <b style="color:var(--live)">0.22·s₃</b> + 0.08·s₄ + 0.06·s₅ + <b style="color:var(--live)">0.18·s₆</b> + <b style="color:var(--live)">0.18·s₇</b> + 0.10·s₈
+    <div class="gloss">The three copper terms are attribute hallucination, correctness-loop iterations, and manual operator interventions — 58% of the weight on the three failure modes that most threaten autonomous operation. Note the third: Kuaishou scores its own agent on human intervention count, and so does the TechJam rubric under Impact &amp; Relevance. Our <code>intervention</code> event already exists in the log for exactly this.</div>
+  </div>
+
+  <p>The rule the plan already quotes — “an LLM is permitted to be wrong only on judgment; every objective fact is produced by deterministic code” — is load-bearing throughout the paper, not a slogan. Feature attributes are queried from a schema tool rather than recalled. Metrics are regex-parsed out of raw training logs rather than read by a model. Failure classification is a pure function over the log head and tail. Causal attribution is deterministic link-checking. That is four separate places where they refused to let a model produce a fact, and it is the strongest single thing we can say under a criterion judged on reasoning.</p>
+
+  <p>SGPO — evolving the agent prompts from execution traces, admitting an edit only when a paired replay on identical tasks improves the score by more than ε — is genuinely elegant and genuinely out of scope. It needs a corpus of past traces we do not have and five evolution rounds we cannot afford in two days. <code>Plan_delta</code> declines it and should keep declining it.</p>
+</section>
+
+<!-- ============================ WIRES ============================ -->
+<section>
+  <div class="sechead"><span class="tag">PORT</span><h2>Three wires already in the wall</h2></div>
+
+  <p>Reading the papers against the code rather than against the plan turns up three mechanisms that exist, are tested, and are disconnected from every decision the loop makes. None of them is a rewrite. Together they are about two hours.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 258" role="img" aria-label="Three diagrams showing how each mechanism is disconnected: a break, a pinned constant, and a missing consumer.">
+      <text class="sv-cap" x="250" y="20" text-anchor="end">PRODUCER</text>
+      <text class="sv-cap" x="470" y="20" text-anchor="start">CONSUMER</text>
+
+      <!-- wire 1: break -->
+      <text class="sv-lab" x="250" y="64" text-anchor="end">tree.py:447 writes</text>
+      <text class="sv-lab" x="250" y="80" text-anchor="end">node · family · delta · diff_summary</text>
+      <path class="sv-line" d="M262 68 H340"/>
+      <path class="sv-break" d="M348 58 L356 78"/>
+      <path class="sv-break" d="M364 58 L372 78"/>
+      <text class="sv-tag" x="360" y="46" text-anchor="middle">BREAK</text>
+      <path class="sv-line" d="M380 68 H456"/>
+      <path class="sv-head" d="M456 63 L468 68 L456 73 Z"/>
+      <text class="sv-lab" x="474" y="64" text-anchor="start">researcher.py:166 reads</text>
+      <text class="sv-lab" x="474" y="80" text-anchor="start">heading · text → renders empty</text>
+
+      <!-- wire 2: pinned -->
+      <text class="sv-lab" x="250" y="140" text-anchor="end">tree.py:51</text>
+      <text class="sv-lab" x="250" y="156" text-anchor="end">ATTRIBUTION_HAND = "clear"</text>
+      <path class="sv-line" d="M262 144 H456"/>
+      <rect class="sv-jump" x="350" y="137" width="20" height="14" rx="1"/>
+      <text class="sv-tag" x="360" y="124" text-anchor="middle">PINNED</text>
+      <path class="sv-head" d="M456 139 L468 144 L456 149 Z"/>
+      <text class="sv-lab" x="474" y="140" text-anchor="start">measure.py:398 blocks</text>
+      <text class="sv-lab" x="474" y="156" text-anchor="start">promotion on "unclear" — never fires</text>
+
+      <!-- wire 3: absent -->
+      <text class="sv-lab" x="250" y="216" text-anchor="end">candidate/rules.jsonl</text>
+      <text class="sv-lab" x="250" y="232" text-anchor="end">7 rules, each source:"seed"</text>
+      <path class="sv-line" d="M262 220 H336"/>
+      <path class="sv-dash" d="M336 220 H432"/>
+      <circle class="sv-open" cx="440" cy="220" r="5"/>
+      <text class="sv-tag" x="366" y="200" text-anchor="middle">NO CONSUMER</text>
+      <text class="sv-lab" x="474" y="216" text-anchor="start">contract.py hardcodes its own</text>
+      <text class="sv-lab" x="474" y="232" text-anchor="start">patterns; nothing loads the file</text>
+    </svg>
+    <figcaption>Three different disconnections, three different repairs. A <b>break</b> is a schema mismatch between two modules that were written to the same spec at different times. A <b>pinned</b> wire is a live mechanism whose input is a constant. <b>No consumer</b> is a data file with a growth-ready schema that no production module reads.</figcaption>
+  </figure>
+
+  <div class="wire">
+    <div class="wire-head">
+      <span class="wire-id">W1</span>
+      <h3 class="wire-title">Trajectory memory reaches the proposer blank</h3>
+      <span class="pill p-live">Break</span>
+    </div>
+    <p>This is NOVA's <code>H</code>, and we built it. <code>Tree._append_lesson</code> writes one JSONL row per full-rung seed with the node id, the family, the measured delta, the cost and a diff summary. <code>__main__.py</code> loads the last thirty rows and hands them to <code>propose()</code>. The proposer then renders each row as <code>l.get('heading', 'lesson')</code> and <code>l.get('text', '')</code> — two keys that <code>_append_lesson</code> never writes.</p>
+    <div class="trace">
+      <b>Writes</b><span>harness/tree.py:432–448 → {node, family, delta, gpu_min, diff_summary}</span>
+      <b>Reads</b><span>harness/agents/researcher.py:165–167 → {heading, text}</span>
+      <b>Effect</b><span>every lesson renders as the literal string "- lesson: " with no content</span>
+    </div>
+    <p>So the entire Lessons block of the researcher prompt is thirty identical empty bullets. Family stats reach the prompt correctly and do real work; the lessons channel carries nothing. Second defect on the same wire: <code>_append_lesson</code> is only reached after the <code>if not res.ok</code> early return at <code>tree.py:678</code>, so <b>failed runs never produce a lesson at all</b> — which is precisely the half NOVA uses to build forbidden directions.</p>
+    <p>Fix both together. Have <code>_append_lesson</code> emit a <code>heading</code> and <code>text</code> alongside the structured fields, and call it on the failure path with the failure class as the heading.</p>
+    <div class="cost"><span><b>Cost</b>~20 minutes</span><span><b>Buys</b>the mechanism §5 already claims we have</span></div>
+  </div>
+
+  <div class="wire">
+    <div class="wire-head">
+      <span class="wire-id">W2</span>
+      <h3 class="wire-title">The attribution brake is built and pinned open</h3>
+      <span class="pill p-live">Pinned</span>
+    </div>
+    <p>AgentX's <code>CLEAR</code>/<code>UNCLEAR</code> adjudication is fully implemented in <code>measure.py</code>. The ladder accepts an <code>attribution</code> argument, and at line 398 an <code>"unclear"</code> value refuses promotion with the reason <em>“replicate pass but attribution unclear”</em>, writing the value into the verdict payload for the log. The brake works.</p>
+    <div class="trace">
+      <b>Consumer</b><span>harness/measure.py:341, 398–402, 438 — refuses promotion, records the reason</span>
+      <b>Producer</b><span>harness/tree.py:51 — ATTRIBUTION_HAND = "clear", passed as the default at :356</span>
+      <b>Effect</b><span>every node in every run is CLEAR by construction; the branch at :398 is dead</span>
+    </div>
+    <p>The constant was right for hand-written patches in phase 6, where the mechanism was known because a human wrote it. It is wrong for an autonomous run, and the artifact that makes it computable is already specified: the plan's own “declare the observables a change should move, then refuse to credit a gain that did not move them.” For the top-ranked KuaiRand hypothesis this is nearly free — swapping pointwise log-loss for a pairwise or listwise objective predicts that GAUC moves more than nDCG@5 and that training log-loss gets <em>worse</em> while primary improves. Both quantities are already computed.</p>
+    <p>Add an optional <code>observables</code> field to <code>Hypothesis</code>, have the coder declare it, check it after the replicate rung, and pass <code>"unclear"</code> when a declared observable did not move. The consumer needs no change whatsoever.</p>
+    <div class="cost"><span><b>Cost</b>~1 hour</span><span><b>Buys</b>the strongest available answer to “why did that work?”</span></div>
+  </div>
+
+  <div class="wire">
+    <div class="wire-head">
+      <span class="wire-id">W3</span>
+      <h3 class="wire-title">Forbidden patterns have a schema and no reader</h3>
+      <span class="pill p-live">No consumer</span>
+    </div>
+    <p><code>candidate/rules.jsonl</code> holds seven contract rules, each with an <code>id</code>, a natural-language <code>statement</code>, a <code>check</code> mode of <code>static</code> or <code>llm</code>, a regex <code>pattern</code>, a <code>severity</code>, and — the telling field — <code>"source": "seed"</code>. That last key only makes sense if something was meant to append rules with a different source. Nothing does. The only module that reads the file is a test.</p>
+    <div class="trace">
+      <b>File</b><span>candidate/rules.jsonl — 7 rules, all source:"seed", growth-ready schema</span>
+      <b>Checker</b><span>harness/agents/contract.py — hardcodes FORBIDDEN_PATH_FRAGMENTS and 5 regexes</span>
+      <b>Readers</b><span>tests/test_03_synthetic.py:207 only</span>
+    </div>
+    <p>NOVA earns its forbidden list the hard way, over thousands of production rounds. We get to skip that: the organizers published theirs before iteration zero — static features are flat, capacity is flat, and anything constant within a user contributes exactly zero. That is a populated trajectory memory sitting in a README, and it belongs in this file as seed rules, not in a prompt paragraph where the agent can talk itself past it.</p>
+    <p>Two changes, in order. Have <code>contract.py</code> load <code>rules.jsonl</code> instead of hardcoding, so the checker can grow. Then append the organizers' dead ends as rules and let confirmed contract violations append themselves with <code>source: "learned"</code>. The second half is the mechanism §5 rates as gaining value under a tight iteration budget — with three failures of runway there is no time to rediscover a failure twice.</p>
+    <div class="cost"><span><b>Cost</b>~40 minutes</span><span><b>Buys</b>a checker that grows, and NOVA's best story told with our own file</span></div>
+  </div>
+</section>
+
+<!-- ============================ TRANSFER ============================ -->
+<section>
+  <div class="sechead"><span class="tag">SCORE</span><h2>Re-scoring every transfer against the papers</h2></div>
+
+  <p>The plan's §5 table was written from the abstracts. Here is the same list re-judged against the body sections, with the KuaiRand cost structure applied.</p>
+
+  <div class="take">
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Verification cascade</div>
+        <div class="take-src">NOVA stage 3 — V_sem then V_loc</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-ok">Keep · restated</span><br>
+        <b>The paper's own design defends ours.</b> NOVA's semantic gate is explicitly a hybrid of seed rules, accumulated forbidden patterns and LLM-assisted checks — the same static-plus-<code>llm</code> split <code>rules.jsonl</code> already encodes. It also declines to reject when a case is uncovered, deferring to evaluation rather than guessing. Copy that restraint. The justification changes though: it no longer saves compute, it saves an <em>iteration</em>, and iterations are the budget.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Trajectory memory</div>
+        <div class="take-src">NOVA H, eq. 5 — three fields</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-live">Keep · one third built</span><br>
+        <b>Modification directions</b> work — that is <code>family_stats</code> into <code>score_hyp</code>. <b>Forbidden directions</b> are W3. <b>Weak components</b> are absent and probably should stay absent: identifying the bottleneck component is meaningful when the architecture is a large production graph, and near-meaningless for a hand-written factorization machine with five feature fields.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Negative-sentinel gradient</div>
+        <div class="take-src">NOVA — all-K-rejected rounds</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-acc">Add · new</span><br>
+        <b>Not in the plan and it should be.</b> When every candidate is rejected before training, NOVA writes a negative sentinel ΔJ and keeps going. Our loop has never been run end-to-end against real data, and an all-rejections round is the most likely way it wedges on the night of the 31st.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">K candidates, ranked pre-training</div>
+        <div class="take-src">NOVA stage 4</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-flat">Cut · confirmed</span><br>
+        <b>The pivot breaks this one, and the paper explains why.</b> Stage 4 exists to avoid spending a training run. Ours costs forty seconds and is not scored; tokens are. Generate three, evaluate all three, keep the measured winner — and note that pre-training ranking would also violate the AgentX rule below.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Deterministic facts only</div>
+        <div class="take-src">AgentX §5.2 — four separate refusals</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-ok">Keep absolute</span><br>
+        <b>Stronger than the plan states.</b> It is not one principle but four enforcement points: schema query instead of recall, regex log parsing instead of interpretation, pure-function failure classification, deterministic link-checking for attribution. We implement three. The fourth is W2.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Falsifiable attribution</div>
+        <div class="take-src">AgentX — declared observables, CLEAR/UNCLEAR</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-live">Promote · half built</span><br>
+        <b>Parked as optional in §5; it is W2 and the consumer is finished.</b> Under a convergence rule that a single noise-driven win can reset, refusing to credit an unexplained gain is not a nicety — it is what stops the search committing to a family that does nothing.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">Failure classifier and retry table</div>
+        <div class="take-src">AgentX — pure-function classifier</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-ok">Keep · re-argue</span><br>
+        <b>Transfers intact, but not on the borrowed statistic.</b> The paper gives the mechanism, including the nice detail that infrastructure symptoms are evaluated <em>last</em> so they cannot mask a schema bug. It does not give the 90% figure §6 cites. Our own log measures our own rate — report that instead.
+      </div>
+    </div>
+    <div class="take-row">
+      <div>
+        <div class="take-mech">SGPO harness evolution</div>
+        <div class="take-src">AgentX — semantic gradients on prompts</div>
+      </div>
+      <div class="take-verdict">
+        <span class="pill p-flat">Decline · confirmed</span><br>
+        <b>Right call, and the paper shows why it is expensive.</b> Five evolution rounds on the brainstorm agent alone, each gated by a paired replay on identical tasks. It needs a trace corpus and a replay harness we would be building from zero.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PLAN ============================ -->
+<section>
+  <div class="sechead"><span class="tag">DO</span><h2>What this changes in the plan</h2></div>
+
+  <p>Ordered by value per minute, and all of it sits inside the 30 August slot the pivot read already reserved for re-pointing the task layer. Nothing here competes with merging the four open PRs or reproducing the baseline — those still come first.</p>
+
+  <div class="plan">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div class="step-b">
+        <h3>Strike the unsourced statistic</h3>
+        <p>Remove the “&gt;90% of loop failures were infrastructure” attribution from <code>Plan_delta</code> §6 and from any draft of the write-up. Replace it with the rate measured from our own <code>failure</code> events during the real run — which is a better claim anyway, because it is ours. Two minutes, and it is the only item here with downside risk if skipped.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div class="step-b">
+        <h3>Reconnect the lessons wire (W1)</h3>
+        <p>Emit <code>heading</code> and <code>text</code> from <code>_append_lesson</code>, and call it on the failure path. Twenty minutes, and it activates the one mechanism the plan most confidently claims to have.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div class="step-b">
+        <h3>Make the contract checker load its own rules (W3)</h3>
+        <p>Point <code>contract.py</code> at <code>rules.jsonl</code>, restate the seven rules for within-user ranking on <code>long_view</code>, and add the organizers' three published dead ends as seed rules. This merges with the <code>rules.jsonl</code> rewrite the pivot read already scheduled, so the marginal cost is small.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div class="step-b">
+        <h3>Unpin attribution (W2)</h3>
+        <p>Add <code>observables</code> to <code>Hypothesis</code>, check them after the replicate rung, pass <code>"unclear"</code> when a declared observable did not move. One hour, no change to <code>measure.py</code>, and it is the page's best Innovation material.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div class="step-b">
+        <h3>Add the negative sentinel</h3>
+        <p>When a round rejects every candidate before training, record a negative-sentinel delta and continue rather than falling through. Cheap insurance against the loop wedging on its first real run.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>The sentence to lead the write-up with</h3>
+  <p>Not “we implemented NOVA and AgentX”. The honest and stronger claim is that both systems spend their machinery buying back an evaluation that costs GPU-hours and, eventually, live traffic — and that on this task an evaluation costs forty seconds, so every mechanism had to be re-argued against a budget denominated in iterations and tokens instead. Some survived with new justifications, one was cut outright, and one was promoted from optional to load-bearing. <b>That reasoning is the deliverable for a criterion judged on reasoning.</b></p>
+</section>
+
+<footer class="foot">
+  <p>Sources · arXiv:2606.27243 (NOVA, Tencent) and arXiv:2606.26859 (AgentX, Kuaishou) — abstracts and body sections fetched from arXiv 29 Aug 2026; titles, authorship and abstracts confirmed against the listing pages. Repo <code>cmengu/TikTok-TechJam</code> at <code>3e22b28</code>, working tree read directly. Companion read: <em>The KuaiRand Pivot</em>, rev. 29 Aug.</p>
+  <p>Every file:line reference was read in this session. Two figures are second-hand and flagged as such: NOVA's per-task pass rates, where abstract and results table disagreed in my read, and AgentX's failure distribution, which I could not locate at all.</p>
+</footer>
+
+</div>
