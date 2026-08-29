@@ -46,6 +46,8 @@ IMPLEMENTED = {
     "harness.agents.tuner",
     "harness.agents.contract",
     "harness.agents._util",
+    "data.kuairand",
+    "harness.kit",
 }
 
 PRODUCT_STATES = {

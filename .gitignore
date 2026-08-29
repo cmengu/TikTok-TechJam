@@ -18,6 +18,8 @@ runs/*
 
 # Data caches (parquet, raw Ali-CCP) — never committed
 data/cache/
+data/raw/
+data/kuairand/
 *.parquet
 *.csv
 
