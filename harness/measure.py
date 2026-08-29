@@ -30,7 +30,7 @@ LEAK_SINGLE_FEATURE_AUC = 0.90
 # Redline §6 Ladder: holdout — report a new number only if ≥ best + eta
 LADDER_ETA = 0.005
 # Redline §6 Ladder: holdout visits per run
-HOLDOUT_VISITS_MAX = 2
+HOLDOUT_VISITS_MAX = 12
 # Redline §6 Ladder: candidate-side holdout seeds; incumbent from cache
 HOLDOUT_SEEDS = 3
 # Redline §6 Ladder: third inconclusive → retired
@@ -350,6 +350,7 @@ class Measure:
         attribution: Literal["clear", "unclear", None] = None,
         single_feature_aucs: dict[str, float] | None = None,
         gpu_min: float | None = None,
+        oracle_delta: float | None = None,
     ) -> Verdict:
         if self.band is None:
             raise CalibrationError("Measure.verdict requires a calibrated Band")
@@ -449,6 +450,8 @@ class Measure:
             payload["attribution"] = attribution
         if gpu_min is not None:
             payload["gpu_min"] = float(gpu_min)
+        if oracle_delta is not None:
+            payload["oracle_delta"] = float(oracle_delta)
         if rule_trips:
             payload["rule_trips"] = rule_trips
         self.events.emit("verdict", **payload)

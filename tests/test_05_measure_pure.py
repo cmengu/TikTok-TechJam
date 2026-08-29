@@ -13,6 +13,7 @@ from helpers import placeholder_protocol
 from harness.events import EventLog
 from harness.measure import (
     HOLDOUT_SEEDS,
+    HOLDOUT_VISITS_MAX,
     LEAK_RULE_FEATURE,
     LEAK_RULE_GAIN,
     PROMOTE_FLOOR,
@@ -306,9 +307,9 @@ def test_holdout_budget(tmp_path: Path):
     measure = Measure(events, proto, _band(), metric="cvr_auc")
     inc = SeedCache({s: 0.55 for s in range(1, HOLDOUT_SEEDS + 1)})
     try:
-        r1 = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
-        r2 = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
-        assert r1.visit == 1 and r2.visit == 2
+        for visit in range(1, HOLDOUT_VISITS_MAX + 1):
+            report = measure.holdout_report(_node(), runner, inc, best_reported=0.50)
+            assert report.visit == visit
         calls_before = len(runner.calls or [])
         with pytest.raises(HoldoutBudgetExceeded):
             measure.holdout_report(_node(), runner, inc, best_reported=0.50)
@@ -321,7 +322,7 @@ def test_holdout_budget(tmp_path: Path):
         for e in rows
         if e["type"] == "measurement" and e.get("rung") == "holdout"
     ]
-    assert visits == [1, 2]
+    assert visits == list(range(1, HOLDOUT_VISITS_MAX + 1))
 
 
 def test_holdout_candidate_side_only(tmp_path: Path):

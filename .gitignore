@@ -35,3 +35,4 @@ starter_kit/*.tar.gz
 # One-shot codemods (applied locally; delete after branch merges)
 scripts/patch_*.py
 scripts/apply_*.py
+data/raw

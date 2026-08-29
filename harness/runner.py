@@ -574,7 +574,7 @@ class Runner:
             "FEATURES": str(self.run_cfg.get("features", "base")),
         }
         resolved = self._resolve_paths(paths)
-        candidate_paths = self.task.candidate_env(resolved)
+        candidate_paths = self.task.candidate_env(resolved, rung=rung)
         base.update(candidate_paths)
         base.update({k: str(v) for k, v in overrides.items()})
         if max_rows is not None:
@@ -589,7 +589,7 @@ class Runner:
 
         # Capability: never pass holdout or protocol paths.
         env.pop("HOLDOUT", None)
-        assert set(candidate_paths) <= {"TRAIN", "VALID"}
+        assert set(candidate_paths) <= {"TRAIN", "VALID", "ORACLE"}
         return env
 
     @staticmethod

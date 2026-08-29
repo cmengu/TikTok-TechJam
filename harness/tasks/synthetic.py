@@ -247,7 +247,8 @@ class SyntheticTask:
         )
         return self._paths
 
-    def candidate_env(self, paths: TaskPaths) -> dict:
+    def candidate_env(self, paths: TaskPaths, *, rung: str = "screen") -> dict[str, str]:
+        del rung
         return {
             "TRAIN": str(paths.train),
             "VALID": str(paths.search_validation),

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from harness.events import EventLog
-from harness.measure import SeedCache
+from harness.measure import HOLDOUT_VISITS_MAX, SeedCache
 from harness.outputs import Convergence, write_submission
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
 
@@ -619,7 +619,7 @@ class Tree:
 
     def _holdout_if_needed(self, node: Node, *, at_end: bool = False) -> None:
         if at_end:
-            if self.measure.holdout_visits >= 2:
+            if self.measure.holdout_visits >= HOLDOUT_VISITS_MAX:
                 return
             if self._promotions == 0:
                 return
@@ -705,10 +705,30 @@ class Tree:
             if len(results) != len(FULL_SEEDS):
                 return
             total_gpu_min = sum(float(r.wall_s) for r in results) / 60.0
+            oracle_delta = None
+            if getattr(self.task, "name", None) == "kuairand" and self.attribution != "unclear":
+                deltas = [
+                    float(r.metrics[self.measure.metric]) - self.full_inc.get(r.seed)
+                    for r in results
+                ]
+                from harness.measure import Delta, replicate_verdict
+
+                decision = replicate_verdict(
+                    [Delta(value=d, rung="replicate") for d in deltas], self.measure.band
+                )
+                if decision == "pass":
+                    report = self.measure.holdout_report(
+                        node, self.runner, self.holdout_inc, self._best_reported
+                    )
+                    self._best_reported = report.best_reported
+                    self._roll_holdout_cache(report)
+                    self._holdout_done_first = True
+                    oracle_delta = report.delta_mean
             v_rep = self.measure.verdict(
                 node, results, self.full_inc, "replicate",
                 attribution=self.attribution,  # type: ignore[arg-type]
                 gpu_min=total_gpu_min,
+                oracle_delta=oracle_delta,
             )
             self._set_state(node, v_rep.state)
             if v_rep.state == "promoted":
@@ -718,7 +738,8 @@ class Tree:
                 self.screen_inc = SeedCache(screen_roll)
                 self.full_inc = SeedCache({r.seed: float(r.metrics[self.measure.metric]) for r in results})
                 self.incumbent = node
-                self._holdout_if_needed(node, at_end=False)
+                if getattr(self.task, "name", None) != "kuairand":
+                    self._holdout_if_needed(node, at_end=False)
                 if results[-1].result_path is not None:
                     preds = self.runner._preds_from_result(results[-1].result_path)
                     write_submission(
