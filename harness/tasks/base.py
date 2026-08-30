@@ -1,4 +1,4 @@
-"""Phase 3: Task adapter interface shared by synthetic and Ali-CCP."""
+"""Task adapter interface shared by synthetic and KuaiRand."""
 
 from __future__ import annotations
 
@@ -19,6 +19,10 @@ class TaskPaths:
 
 class Task(Protocol):
     name: str
+    metric: str
+    prediction_columns: tuple[str, ...]
+    include_oracle_delta: bool
+    candidate_dir: Path
 
     def prepare(self, protocol: HarnessProtocol, root: Path) -> TaskPaths:
         ...
@@ -32,4 +36,11 @@ class Task(Protocol):
         ...
 
     def rows(self, split: str) -> int:
+        ...
+
+    def submission_features(self) -> Path | None:
+        """VALID path for the promotion re-run, or None to copy existing preds."""
+        ...
+
+    def readback_submission(self, path: Path) -> dict:
         ...

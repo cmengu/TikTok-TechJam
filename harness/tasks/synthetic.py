@@ -176,6 +176,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 class SyntheticTask:
     name = "synthetic"
     metric = "cvr_auc"
+    prediction_columns = ("sample_id", "p_click", "p_conversion_given_click")
+    include_oracle_delta = False
     candidate_dir = REPO_ROOT / "candidate" / "synthetic"
 
     def __init__(self, n_impressions: int = 1_000_000) -> None:
@@ -303,6 +305,47 @@ class SyntheticTask:
             raise ValueError("no clicked rows to score cvr_auc")
         cvr_auc = float(roc_auc_score(y_conv[clicked], p_cvr[clicked]))
         return {"ctr_auc": ctr_auc, "cvr_auc": cvr_auc}
+
+    def submission_features(self) -> Path | None:
+        return None
+
+    def readback_submission(self, path: Path) -> dict:
+        import csv
+
+        from harness.outputs import SubmissionError
+
+        expected_rows = self.rows("test")
+        with path.open(newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames is None:
+                raise SubmissionError("empty submission file")
+            cols = list(reader.fieldnames)
+            if "p_conversion_given_click" not in cols:
+                raise SubmissionError(
+                    "submission must include p_conversion_given_click head"
+                )
+            if "p_click_and_conversion" in cols:
+                raise SubmissionError("wrong head: p_click_and_conversion")
+            missing = set(self.prediction_columns) - set(cols)
+            if missing:
+                raise SubmissionError(f"missing columns: {sorted(missing)}")
+            rows = list(reader)
+        if len(rows) != expected_rows:
+            raise SubmissionError(
+                f"row count {len(rows)} != expected {expected_rows}"
+            )
+        for i, row in enumerate(rows):
+            for col in self.prediction_columns:
+                val = row.get(col)
+                if val is None or val == "":
+                    raise SubmissionError(f"row {i}: missing {col}")
+                try:
+                    fval = float(val)
+                except ValueError as exc:
+                    raise SubmissionError(f"row {i}: non-numeric {col}") from exc
+                if fval < 0.0 or fval > 1.0:
+                    raise SubmissionError(f"row {i}: {col}={fval} out of [0,1]")
+        return {"ok": True, "rows": len(rows), "columns": cols}
 
     def rows(self, split: str) -> int:
         if split == "test":

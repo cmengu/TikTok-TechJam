@@ -77,6 +77,7 @@ VOCAB_EVENT_TYPES = (
     "cache_lookup",
     "hypothesis_queued",
     "queue_reordered",
+    "submission_run",
     "submission_written",
     "intervention",
     "run_ended",
@@ -221,7 +222,7 @@ def test_types_round_trip():
 
 def test_state_vocabulary():
     assert set(STATES) == PRODUCT_STATES
-    assert len(EVENT_TYPES) == 18
+    assert len(EVENT_TYPES) == 19
     assert EVENT_TYPES == VOCAB_EVENT_TYPES
 
 

@@ -155,3 +155,78 @@ def test_report_renders(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     for heading in ("FP", "FN-strong", "marginal rate", "leak", "recovery"):
         assert heading in text
+
+
+def test_task_blind_layer_has_no_task_name():
+    outputs = (ROOT / "harness" / "outputs.py").read_text(encoding="utf-8")
+    tree = (ROOT / "harness" / "tree.py").read_text(encoding="utf-8")
+    assert '"kuairand"' not in outputs
+    assert "'kuairand'" not in outputs
+    assert '"kuairand"' not in tree
+    assert "'kuairand'" not in tree
+    assert "cvr_auc" not in outputs
+
+
+@pytest.mark.skipif(
+    not (ROOT / "data" / "kuairand" / "train.csv").exists(),
+    reason="KuaiRand splits not built",
+)
+def test_kuairand_submission_reruns_on_test_features(tmp_path: Path):
+    from harness.protocol import load as load_protocol
+    from harness.tasks.kuairand import KuaiRandTask
+
+    proto = load_protocol(ROOT / "protocols" / "kuairand.yaml")
+    task = KuaiRandTask()
+    task.prepare(proto, tmp_path / "data")
+    features = task.submission_features()
+    assert features is not None
+    n_test = task.rows("test")
+    assert n_test == 170588
+
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    (stub / "template.py").write_text(
+        "import csv, os\n"
+        "from pathlib import Path\n"
+        "import report\n"
+        "valid = Path(os.environ['VALID'])\n"
+        "ws = Path(os.environ['WORKSPACE'])\n"
+        "rows = list(csv.DictReader(valid.open()))\n"
+        "out = ws / 'preds.csv'\n"
+        "with out.open('w', newline='') as fh:\n"
+        "    w = csv.writer(fh)\n"
+        "    w.writerow(['row_id', 'user_id', 'video_id', 'score'])\n"
+        "    for i, row in enumerate(rows):\n"
+        "        w.writerow([i, row['user_id'], row['video_id'], '0.5'])\n"
+        "report.result({'primary': 0.0}, out)\n",
+        encoding="utf-8",
+    )
+
+    events = EventLog(tmp_path / "run", "sub-test", proto)
+    dest = write_submission(
+        _node(),
+        task,
+        proto,
+        "predictions",
+        tmp_path / "run",
+        events=events,
+        seed=0,
+        candidate_src=stub,
+        timeout_s=60.0,
+    )
+    events.close()
+    assert dest.is_file()
+    readback = task.readback_submission(dest)
+    assert readback["rows"] == n_test
+
+    log = [
+        json.loads(line)
+        for line in (tmp_path / "run" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    run_ev = next(e for e in log if e["type"] == "submission_run")
+    written = next(e for e in log if e["type"] == "submission_written")
+    assert run_ev["node"] == 3
+    assert run_ev["rows"] == n_test
+    assert run_ev["digest"]
+    assert written["seq"] > run_ev["seq"]

@@ -14,7 +14,7 @@ from typing import Any
 from harness.protocol import Protocol
 from harness.types import EVENT_TYPES, STATES
 
-_FSYNC_TYPES = frozenset({"verdict", "submission_written", "run_ended"})
+_FSYNC_TYPES = frozenset({"verdict", "submission_run", "submission_written", "run_ended"})
 _JSON_DUMP_KW = {
     "separators": (",", ":"),
     "sort_keys": False,

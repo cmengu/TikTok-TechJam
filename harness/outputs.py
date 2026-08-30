@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import csv
+import hashlib
 import json
 import os
 import shutil
@@ -14,7 +14,7 @@ from typing import Literal
 from harness.audit import assert_single_protocol, cost_by_slice, reliability
 from harness.audit import replication_pairs as audit_replication_pairs
 
-PREDICTION_COLUMNS = ("sample_id", "p_click", "p_conversion_given_click")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SubmissionError(ValueError):
@@ -40,46 +40,92 @@ class Convergence:
         return self._stale >= self._n_rounds
 
 
-def _readback_predictions(path: Path, task, expected_rows: int) -> dict:
-    if getattr(task, "name", None) == "kuairand":
-        result = task.readback_submission(path)
-        if result["rows"] != expected_rows:
-            raise SubmissionError(
-                f"row count {result['rows']} != expected {expected_rows}"
-            )
-        return result
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-    with path.open(newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        if reader.fieldnames is None:
-            raise SubmissionError("empty submission file")
-        cols = list(reader.fieldnames)
-        if "p_conversion_given_click" not in cols:
-            raise SubmissionError(
-                "submission must include p_conversion_given_click head"
-            )
-        if "p_click_and_conversion" in cols:
-            raise SubmissionError("wrong head: p_click_and_conversion")
-        missing = set(PREDICTION_COLUMNS) - set(cols)
-        if missing:
-            raise SubmissionError(f"missing columns: {sorted(missing)}")
-        rows = list(reader)
-    if len(rows) != expected_rows:
+
+def _readback_predictions(path: Path, task) -> dict:
+    try:
+        result = task.readback_submission(path)
+    except SubmissionError:
+        raise
+    except Exception as exc:
+        raise SubmissionError(str(exc)) from exc
+    expected = task.rows("test")
+    if result["rows"] != expected:
         raise SubmissionError(
-            f"row count {len(rows)} != expected {expected_rows}"
+            f"row count {result['rows']} != expected {expected}"
         )
-    for i, row in enumerate(rows):
-        for col in PREDICTION_COLUMNS:
-            val = row.get(col)
-            if val is None or val == "":
-                raise SubmissionError(f"row {i}: missing {col}")
-            try:
-                fval = float(val)
-            except ValueError as exc:
-                raise SubmissionError(f"row {i}: non-numeric {col}") from exc
-            if fval < 0.0 or fval > 1.0:
-                raise SubmissionError(f"row {i}: {col}={fval} out of [0,1]")
-    return {"ok": True, "rows": len(rows), "columns": cols}
+    return result
+
+
+def _rerun_on_submission_features(
+    node,
+    task,
+    out_dir: Path,
+    *,
+    seed: int,
+    candidate_src: Path,
+    timeout_s: float,
+    events,
+) -> Path:
+    features = task.submission_features()
+    if features is None:
+        raise SubmissionError("submission re-run requires task.submission_features()")
+    features = Path(features)
+    if not features.is_file():
+        raise SubmissionError(f"submission features missing: {features}")
+
+    sub_dir = out_dir / "submission"
+    workspace = sub_dir / "rerun"
+    workspace.mkdir(parents=True, exist_ok=True)
+    src = Path(candidate_src)
+    shutil.copy2(src / "template.py", workspace / "template.py")
+    shutil.copy2(REPO_ROOT / "candidate" / "report.py", workspace / "report.py")
+
+    paths = task._paths  # type: ignore[attr-defined]
+    env = {**dict(os.environ), **{k: str(v) for k, v in task.candidate_env(paths).items()}}
+    env["VALID"] = str(features)
+    env.pop("ORACLE", None)
+    env["WORKSPACE"] = str(workspace)
+    env["SEED"] = str(seed)
+    env.setdefault("DEVICE", "cpu")
+    env.setdefault("BATCH", "8192")
+    env.setdefault("LR", "0.001")
+    env.setdefault("EPOCHS", "11")
+    env.setdefault("FEATURES", "base")
+
+    proc = subprocess.run(
+        [sys.executable, "template.py"],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout_s,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise SubmissionError(f"submission re-run failed: {proc.stderr[-500:]}")
+    result_path = workspace / "result.json"
+    if not result_path.is_file():
+        raise SubmissionError("submission re-run produced no result.json")
+    preds = Path(json.loads(result_path.read_text(encoding="utf-8"))["preds"])
+    dest = sub_dir / "pred.csv"
+    shutil.copy2(preds, dest)
+    if events is not None:
+        events.emit(
+            "submission_run",
+            node=node.id,
+            path=str(dest.relative_to(out_dir)),
+            digest=_sha256_file(features),
+            rows=task.rows("test"),
+            summary=f"submission re-run for node {node.id} scored test features",
+        )
+    return dest
 
 
 def write_submission(
@@ -92,17 +138,32 @@ def write_submission(
     events=None,
     preds_path: Path | None = None,
     checkpoint_path: Path | None = None,
+    seed: int = 0,
+    candidate_src: Path | None = None,
+    timeout_s: float = 600.0,
 ) -> Path:
     out_dir = Path(out_dir)
     sub_dir = out_dir / "submission"
     sub_dir.mkdir(parents=True, exist_ok=True)
 
     if mode == "predictions":
-        if preds_path is None:
-            raise SubmissionError("predictions mode requires preds_path")
-        dest = sub_dir / "pred.csv"
-        shutil.copy2(preds_path, dest)
-        readback = _readback_predictions(dest, task, task.rows("test"))
+        features = task.submission_features()
+        if features is not None:
+            dest = _rerun_on_submission_features(
+                node,
+                task,
+                out_dir,
+                seed=seed,
+                candidate_src=Path(candidate_src or task.candidate_dir),
+                timeout_s=timeout_s,
+                events=events,
+            )
+        else:
+            if preds_path is None:
+                raise SubmissionError("predictions mode requires preds_path")
+            dest = sub_dir / "pred.csv"
+            shutil.copy2(preds_path, dest)
+        readback = _readback_predictions(dest, task)
     elif mode == "checkpoint":
         if checkpoint_path is None:
             raise SubmissionError("checkpoint mode requires checkpoint_path")
@@ -132,7 +193,7 @@ def write_submission(
         data = json.loads(result_path.read_text(encoding="utf-8"))
         preds = Path(data["preds"])
         scores = task.score(preds, "search")
-        metric = getattr(task, "metric", "cvr_auc")
+        metric = task.metric
         node_score = float(node.scores.get(metric, [0.0])[-1])
         if abs(scores[metric] - node_score) > 1e-4:
             raise SubmissionError(
