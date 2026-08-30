@@ -334,6 +334,7 @@ class Measure:
             stage="calibrate",
             metric=self.metric,
             band=_band_payload(band),
+            producer="measure",
             summary=(
                 f"calibrated band bar={band.bar:.4f} "
                 f"σ_full={band.sigma_full:.4f} ρ={band.rho}"
@@ -461,6 +462,7 @@ class Measure:
             payload["oracle_delta"] = float(oracle_delta)
         if rule_trips:
             payload["rule_trips"] = rule_trips
+        payload["producer"] = "measure"
         self.events.emit("verdict", **payload)
 
         if state == "promoted":
@@ -523,6 +525,7 @@ class Measure:
             value=new_holdout,
             delta_mean=delta_mean,
             seeds=seeds,
+            producer="measure",
             summary=f"holdout visit={visit} mean={new_holdout:.4f}",
         )
         if accepted:
@@ -533,6 +536,7 @@ class Measure:
                 value=new_holdout,
                 best_reported=next_best,
                 band=_band_payload(self.band) if self.band else None,
+                producer="measure",
                 summary=f"prediction {new_holdout:.4f} (η ladder accepted)",
             )
         return HoldoutReport(
@@ -565,6 +569,7 @@ class Measure:
             refreshed=True,
             metric=self.metric,
             band=_band_payload(refreshed),
+            producer="measure",
             summary=(
                 f"refreshed ρ={refreshed.rho:.3f} bar={refreshed.bar:.4f} "
                 f"after {RHO_REFRESH_AFTER} replicated"

@@ -182,6 +182,7 @@ class FakeMeasure:
             delta_per_seed=v.delta_per_seed,
             attribution=attribution,
             gpu_min=0.1,
+            producer="measure",
             summary=v.reason,
         )
         if v.state == "promoted":
@@ -304,6 +305,7 @@ def test_rerank_after_rejection(tmp_path: Path):
         state="rejected",
         delta_mean=-0.05,
         gpu_min=1.0,
+        producer="measure",
         summary="rej",
     )
     events.emit(
@@ -320,6 +322,7 @@ def test_rerank_after_rejection(tmp_path: Path):
         state="promoted",
         delta_mean=0.05,
         gpu_min=1.0,
+        producer="measure",
         summary="ok",
     )
     events.close()
