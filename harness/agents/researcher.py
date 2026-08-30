@@ -149,10 +149,12 @@ def _refuse_forbidden(events, hyp: Hypothesis, lessons: list[dict]) -> None:
     if events is None:
         return
     events.emit(
-        "rule_trip",
-        rule="forbidden_pattern",
-        pattern=hyp.pattern or hyp.mechanism,
+        "proposal_rejected",
         round=rnd,
+        pattern=hyp.pattern or hyp.mechanism,
+        first_round=rnd,
+        reason="forbidden",
+        tokens_in=0,
         summary=f"forbidden pattern {hyp.pattern or hyp.mechanism} first seen round {rnd}",
     )
 
