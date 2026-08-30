@@ -92,6 +92,7 @@ def _build_script() -> list[dict]:
             "seeds": [1],
             "band": [0.50, 0.52],
             "gpu_min": 2.5,
+            "producer": "measure",
             "summary": _s("node 1 inconclusive: +0.012 cvr_auc inside band"),
         }
     )
@@ -172,6 +173,7 @@ def _build_script() -> list[dict]:
             "seeds": [1],
             "band": [0.50, 0.52],
             "gpu_min": 1.2,
+            "producer": "measure",
             "summary": _s("node 2 rejected: −0.002 cvr_auc below band"),
         }
     )
@@ -300,6 +302,7 @@ def _build_script() -> list[dict]:
             "seeds": [1],
             "band": [0.52, 0.54],
             "gpu_min": 3.0,
+            "producer": "measure",
             "summary": _s("node 3 replicating: +0.031 cvr_auc cleared screen"),
         }
     )
@@ -328,6 +331,7 @@ def _build_script() -> list[dict]:
             "delta_mean": 0.031,
             "oracle_delta": 0.004,
             "gpu_min": 4.5,
+            "producer": "measure",
             "summary": _s("node 3 promoted: replicate held within band"),
         }
     )

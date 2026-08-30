@@ -14,6 +14,23 @@ from typing import Any
 from harness.protocol import Protocol
 from harness.types import EVENT_TYPES, STATES
 
+MEASURED = frozenset({
+    "delta_mean",
+    "delta_per_seed",
+    "band",
+    "score",
+    "gauc",
+    "ndcg_at_5",
+    "primary",
+    "holdout_score",
+    "oracle_score",
+    "oracle_delta",
+})
+
+
+class NumericProvenanceError(Exception):
+    """A MEASURED field was emitted by something other than the measurement layer."""
+
 _FSYNC_TYPES = frozenset({"verdict", "submission_run", "submission_written", "run_ended"})
 _JSON_DUMP_KW = {
     "separators": (",", ":"),
@@ -78,6 +95,14 @@ class EventLog:
         state = fields.get("state")
         if state is not None and state not in STATES:
             raise ValueError(f"unknown state: {state!r}")
+
+        leaked = MEASURED & fields.keys()
+        if leaked and fields.get("producer") != "measure":
+            raise NumericProvenanceError(sorted(leaked))
+        if type != "hypothesis_queued":
+            assert not any(k.startswith("expected_") for k in fields), (
+                "a forecast may not enter a verdict"
+            )
 
         with self._close_lock:
             if self._closed:
