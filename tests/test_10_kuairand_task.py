@@ -307,6 +307,7 @@ def test_reproduced_valid_is_measured():
 
 
 def test_prepare_merges_label_and_test_digests(task: KuaiRandTask):
+    task.prepare(load_protocol(PROTOCOL_PATH), ROOT / "runs" / "test-data")
     path = DATA_ROOT / "harness_only" / "digests.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     for key in (
@@ -318,6 +319,45 @@ def test_prepare_merges_label_and_test_digests(task: KuaiRandTask):
         "search_labels",
         "oracle_labels",
         "test_features",
+        "submit",
     ):
         assert key in data, key
         assert len(data[key]) == 64
+
+
+def test_placeholder_digests_only_for_synthetic():
+    from harness.__main__ import _placeholder_ruler_if_demo
+
+    kr = load_protocol(PROTOCOL_PATH)
+    out = _placeholder_ruler_if_demo(kr, 50_000)
+    assert out.protocol_hash == kr.protocol_hash
+    assert out.ruler["data"]["train"]["sha256"] == kr.ruler["data"]["train"]["sha256"]
+
+
+def test_mutated_train_csv_raises_sha256(task: KuaiRandTask):
+    path = DATA_ROOT / "train.csv"
+    orig = path.read_bytes()
+    try:
+        path.write_bytes(orig + b"\n")
+        fresh = KuaiRandTask()
+        with pytest.raises(ValueError, match="sha256 mismatch"):
+            fresh.prepare(load_protocol(PROTOCOL_PATH), ROOT / "runs" / "mut-train")
+    finally:
+        path.write_bytes(orig)
+
+
+def test_unmodified_data_starts(task: KuaiRandTask):
+    fresh = KuaiRandTask()
+    fresh.prepare(load_protocol(PROTOCOL_PATH), ROOT / "runs" / "unmutated")
+
+
+def test_mutated_oracle_labels_raises(task: KuaiRandTask):
+    path = DATA_ROOT / "harness_only" / "oracle_labels.csv"
+    orig = path.read_bytes()
+    try:
+        path.write_bytes(orig + b"\n")
+        fresh = KuaiRandTask()
+        with pytest.raises(ValueError, match="sha256 mismatch"):
+            fresh.prepare(load_protocol(PROTOCOL_PATH), ROOT / "runs" / "mut-oracle")
+    finally:
+        path.write_bytes(orig)

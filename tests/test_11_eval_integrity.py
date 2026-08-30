@@ -100,16 +100,13 @@ def _paths(tmp_path: Path) -> TaskPaths:
     holdout.parent.mkdir(parents=True, exist_ok=True)
     for p in (train, search, holdout, oracle):
         p.write_text("x\n")
-    kwargs = dict(
+    return TaskPaths(
         train=train,
         search_validation=search,
         holdout_validation=holdout,
         scoring_script=None,
+        oracle_features=oracle,
     )
-    try:
-        return TaskPaths(**kwargs, oracle_features=oracle)
-    except TypeError:
-        return TaskPaths(**kwargs)
 
 
 def test_holdout_rung_scores_holdout(tmp_path: Path):
@@ -328,3 +325,127 @@ def test_holdout_runs_only_after_passing_verdict(tmp_path: Path):
         events.close()
     assert v.state == "rejected"
     assert measure.holdout_visits == visits_before
+
+
+def _runner_for_env(tmp_path: Path, task: RecordingTask) -> Runner:
+    proto = placeholder_protocol(tmp_path)
+    events = EventLog(tmp_path / "run", "t11", proto)
+    return Runner(
+        events,
+        task,
+        {"paths": _paths(tmp_path), "run_dir": tmp_path / "run", "device": "cpu"},
+        backend=_OkBackend(),
+        heartbeat_s=60.0,
+    )
+
+
+def test_oracle_present_on_holdout_absent_on_screen(tmp_path: Path):
+    runner = _runner_for_env(tmp_path, RecordingTask())
+    paths = runner.run_cfg["paths"]
+    ws = tmp_path / "ws"
+    common = dict(workspace=ws, paths=paths, seed=1, overrides={}, epochs=1, max_rows=None)
+    screen = runner._build_env(**common, rung="screen")
+    holdout = runner._build_env(**common, rung="holdout")
+    runner.events.close()
+    assert "ORACLE" not in screen
+    assert "ORACLE" in holdout
+    assert Path(holdout["ORACLE"]).resolve() == Path(paths.oracle_features).resolve()
+    assert "HOLDOUT" not in screen
+    assert "HOLDOUT" not in holdout
+
+
+def test_holdout_injected_env_refused(tmp_path: Path):
+    runner = _runner_for_env(
+        tmp_path, RecordingTask(extra_env={"HOLDOUT": str(tmp_path / "leak.csv")})
+    )
+    paths = runner.run_cfg["paths"]
+    try:
+        with pytest.raises(AssertionError):
+            runner._build_env(
+                workspace=tmp_path / "ws",
+                paths=paths,
+                seed=1,
+                rung="screen",
+                overrides={},
+                epochs=1,
+                max_rows=None,
+            )
+    finally:
+        runner.events.close()
+
+
+def test_thirteenth_promotion_omits_oracle_delta(tmp_path: Path):
+    proto = placeholder_protocol(tmp_path)
+    events = EventLog(tmp_path / "run", "t11", proto)
+
+    class FakeRunner:
+        run_cfg = {"timeout_s": 5.0}
+
+        def run(self, node, rung, seed, timeout_s, **kwargs):
+            return RunResult(
+                node=node.id,
+                attempt=1,
+                seed=seed,
+                rung=rung,
+                ok=True,
+                metrics={"cvr_auc": 0.56},
+                failure_class=None,
+                stderr_tail="",
+                gpu_s=0.0,
+                wall_s=0.1,
+                result_path=None,
+                checkpoint_path=None,
+            )
+
+    measure = Measure(events, proto, _band(), metric="cvr_auc")
+    from harness.measure import SeedCache
+
+    inc = SeedCache({s: 0.55 for s in range(1, HOLDOUT_SEEDS + 1)})
+    runner = FakeRunner()
+    results = [
+        RunResult(
+            node=1,
+            attempt=1,
+            seed=s,
+            rung="full",
+            ok=True,
+            metrics={"cvr_auc": 0.57},
+            failure_class=None,
+            stderr_tail="",
+            gpu_s=0.0,
+            wall_s=0.1,
+            result_path=None,
+            checkpoint_path=None,
+        )
+        for s in (1, 2, 3)
+    ]
+    node = _node()
+
+    def oracle():
+        return measure.holdout_report(node, runner, inc, 0.5).delta_mean
+
+    try:
+        for _ in range(13):
+            v = measure.verdict(
+                node, results, inc, "replicate",
+                attribution="clear",
+                on_promote_oracle=oracle,
+            )
+            assert v.state == "promoted"
+    finally:
+        events.close()
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "run" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    promoted = [
+        e for e in rows if e.get("type") == "verdict" and e.get("state") == "promoted"
+    ]
+    assert len(promoted) == 13
+    for ev in promoted[:12]:
+        assert ev.get("oracle_delta") is not None
+    assert "oracle_delta" not in promoted[12]
+    failures = [e for e in rows if e.get("type") == "failure"]
+    assert failures
+    assert "oracle" in failures[-1]["summary"].lower()

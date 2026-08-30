@@ -182,7 +182,7 @@ def main() -> None:
 
     preds_path = workspace / "preds.csv"
     _write_preds(preds_path, valid_rows, model.predict(xva))
-    report.result({"primary": 0.0}, preds_path)
+    report.result({}, preds_path)
 
 
 if __name__ == "__main__":

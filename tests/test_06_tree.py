@@ -206,6 +206,7 @@ class FakeMeasure:
             visit=self._holdout_visits,
             metric="cvr_auc",
             value=best_reported,
+            producer="measure",
             summary=f"holdout visit={self._holdout_visits}",
         )
         from harness.measure import HoldoutReport
