@@ -40,6 +40,12 @@ def _node(
     )
 
 
+def test_crashed_draft_yields_debug_move():
+    crashed = _node(1, state="failed", kind="draft")
+    move = select([crashed], 100.0)
+    assert move == Move("debug", 1, "repair before extend")
+
+
 def test_select_drafts_until_min():
     nodes = [_node(1, state="inconclusive", kind="draft")]
     move = select(nodes, 100.0)

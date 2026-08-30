@@ -619,14 +619,20 @@ def test_max_live_branches(tmp_path: Path):
 
 
 def test_debug_depth(tmp_path: Path):
-    """Three debug retries on the same node; the fourth crash retires."""
+    """Crash leaves the node failed; select() then debugs up to DEBUG_DEPTH."""
+    from harness.tree import select
+
     measure = FakeMeasure(script=[])
     runner = FakeRunner(scores={("smoke", 1): 0.5}, fail_on={("smoke", 1)}, fail_class="crash")
     tree, events, run_dir, _ws = _make_tree(tmp_path, measure, runner, [_hyp("d0", patch=ROOT / "hypotheses/patches/base.diff")])
     try:
-        tree.step()
+        assert tree.step() is True
         node = max(tree.nodes.values(), key=lambda n: n.id)
-        assert node.state == "retired"
+        assert node.state == "failed"
+        nxt = select(list(tree.nodes.values()), 100.0)
+        assert nxt.kind == "debug" and nxt.parent == node.id
+        while node.state != "retired":
+            assert tree.step() is True
         assert tree._debug_depth.get(node.id) == 3
         failures = [e for e in _read_events(run_dir) if e["type"] == "failure"]
         assert len(failures) == 4
