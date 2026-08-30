@@ -525,6 +525,11 @@ class Runner:
                 if paths.scoring_script is not None
                 else None
             ),
+            oracle_features=(
+                Path(paths.oracle_features).resolve()
+                if paths.oracle_features is not None
+                else None
+            ),
         )
 
     def _build_env(

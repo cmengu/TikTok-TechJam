@@ -351,6 +351,7 @@ class Measure:
         single_feature_aucs: dict[str, float] | None = None,
         gpu_min: float | None = None,
         oracle_delta: float | None = None,
+        on_promote_oracle: Any = None,
     ) -> Verdict:
         if self.band is None:
             raise CalibrationError("Measure.verdict requires a calibrated Band")
@@ -450,6 +451,12 @@ class Measure:
             payload["attribution"] = attribution
         if gpu_min is not None:
             payload["gpu_min"] = float(gpu_min)
+        if (
+            state == "promoted"
+            and oracle_delta is None
+            and on_promote_oracle is not None
+        ):
+            oracle_delta = on_promote_oracle()
         if oracle_delta is not None:
             payload["oracle_delta"] = float(oracle_delta)
         if rule_trips:

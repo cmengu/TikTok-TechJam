@@ -97,6 +97,7 @@ class KuaiRandTask:
             search_validation=data_dir / "search_validation.csv",
             holdout_validation=data_dir / "oracle_features.csv",
             scoring_script=Path(__file__),
+            oracle_features=data_dir / "oracle_features.csv",
         )
         self._labels = {
             "search": self._read_labels(harness_only / "search_labels.csv"),
@@ -123,7 +124,10 @@ class KuaiRandTask:
             "VALID": str(paths.search_validation),
         }
         if rung == "holdout":
-            env["ORACLE"] = str(paths.holdout_validation)
+            feat = paths.oracle_features
+            if feat is None:
+                raise FileNotFoundError("oracle_features is not set")
+            env["ORACLE"] = str(feat)
         return env
 
     def _labels_for(self, split: Literal["search", "holdout"]) -> list[dict[str, str]]:
