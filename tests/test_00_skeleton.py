@@ -48,6 +48,7 @@ IMPLEMENTED = {
     "harness.agents._util",
     "harness.feedback",
     "harness.attribute",
+    "harness.overfit",
     "data.kuairand",
     "harness.kit",
     "harness.tasks.kuairand",
