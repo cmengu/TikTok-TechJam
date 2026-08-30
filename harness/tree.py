@@ -25,6 +25,7 @@ from harness.attribute import (
     observable_rows,
 )
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
+from harness.verify import cascade, load_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE_DIR = REPO_ROOT / "candidate"
@@ -749,6 +750,45 @@ class Tree:
             attempt = self._node_attempt.get(node.id, 1)
             if node.state != "running":
                 self._set_state(node, "running", f"node {node.id} smoke")
+            src = ""
+            if self.workspace is not None:
+                tmpl = self.workspace.path / "template.py"
+                if tmpl.is_file():
+                    src = tmpl.read_text(encoding="utf-8")
+            # The contract is the task's, not the tree's: a task that declares
+            # no rules file is verified by its runner's smoke rung alone.
+            rules_path = getattr(self.task, "rules_path", None)
+            if src and rules_path is not None and Path(rules_path).is_file():
+                ok, _level, trips = cascade(
+                    src,
+                    load_rules(rules_path),
+                    getattr(self.coder, "llm", None),
+                    None,
+                    node,
+                    events=self.events,
+                    round_=self._nodes_done,
+                    scope="source",
+                )
+                if not ok:
+                    result = RunResult(
+                        node=node.id,
+                        attempt=attempt,
+                        seed=SCREEN_SEED,
+                        rung="smoke",
+                        ok=False,
+                        metrics={},
+                        failure_class="contract_violation",
+                        stderr_tail="; ".join(
+                            f"{t.rule_id}: {t.statement}" for t in trips
+                        ),
+                        gpu_s=0.0,
+                        wall_s=0.0,
+                        result_path=None,
+                        checkpoint_path=None,
+                    )
+                    if self._handle_failure(node, hyp, result):
+                        continue
+                    return
             smoke = self.runner.run(
                 node, "smoke", seed=SCREEN_SEED,
                 timeout_s=self.smoke_timeout_s, attempt=attempt,

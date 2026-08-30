@@ -49,6 +49,7 @@ IMPLEMENTED = {
     "harness.feedback",
     "harness.attribute",
     "harness.overfit",
+    "harness.verify",
     "data.kuairand",
     "harness.kit",
     "harness.tasks.kuairand",
@@ -91,6 +92,7 @@ VOCAB_EVENT_TYPES = (
     "proposal_rejected",
     "attribution_checked",
     "move_selected",
+    "verify_level",
 )
 
 # Harness Decisions §1 — the seven fields that stay null until the webinar.
@@ -230,7 +232,7 @@ def test_types_round_trip():
 
 def test_state_vocabulary():
     assert set(STATES) == PRODUCT_STATES
-    assert len(EVENT_TYPES) == 23
+    assert len(EVENT_TYPES) == 24
     assert EVENT_TYPES == VOCAB_EVENT_TYPES
 
 

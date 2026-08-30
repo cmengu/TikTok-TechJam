@@ -24,6 +24,7 @@ class Task(Protocol):
     prediction_columns: tuple[str, ...]
     include_oracle_delta: bool
     candidate_dir: Path
+    rules_path: Path | None
 
     def prepare(self, protocol: HarnessProtocol, root: Path) -> TaskPaths:
         ...

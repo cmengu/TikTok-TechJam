@@ -50,6 +50,22 @@ class FakeLLM:
         self._cursor[role] = idx + 1
         return bucket[idx]
 
+    def judge(self, diff: str, statements: list[str]) -> dict[str, Any]:
+        """One boolean per statement. Defaults to all-true when unscripted."""
+        prompt = "judge\n" + "\n".join(statements) + "\n\n" + diff
+        bucket = self._scripts.get("judge", [])
+        idx = self._cursor.get("judge", 0)
+        self.prompts.setdefault("judge", []).append(prompt)
+        if idx < len(bucket):
+            self._cursor["judge"] = idx + 1
+            payload, _usage = bucket[idx]
+            self.calls += 1
+            if isinstance(payload, dict):
+                return payload
+            return {s: bool(payload) for s in statements}
+        self.calls += 1
+        return {s: True for s in statements}
+
 
 class AnthropicLLM:
     """Thin Anthropic Messages API adapter."""
@@ -103,6 +119,19 @@ class AnthropicLLM:
         if schema is not None:
             return json.loads(text.strip()), usage
         return text.strip(), usage
+
+    def judge(self, diff: str, statements: list[str]) -> dict[str, Any]:
+        prompt = (
+            "For each statement, return JSON mapping the statement to a boolean "
+            "and the line you relied on. Booleans only — no numbers.\n"
+            + json.dumps(statements)
+            + "\n\nDiff:\n"
+            + diff
+        )
+        data, _usage = self.complete("judge", prompt, {"type": "object"})
+        if not isinstance(data, dict):
+            raise ValueError("semantic judge returned a number")
+        return data
 
 
 class OpenAILLM:

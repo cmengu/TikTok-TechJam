@@ -206,7 +206,7 @@ def test_score_hand_computed(tmp_path: Path):
 
 def test_seed_rules_parse():
     lines = [ln for ln in RULES.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(lines) == 9
+    assert len(lines) == 18
     ids = []
     required = {"id", "statement", "check", "pattern", "severity", "source", "mode"}
     for ln in lines:
@@ -218,7 +218,7 @@ def test_seed_rules_parse():
         assert obj["source"] == "seed"
         assert obj["pattern"] is None or isinstance(obj["pattern"], str)
         ids.append(obj["id"])
-    assert ids == [f"C{i}" for i in range(1, 10)]
+    assert ids == [f"C{i}" for i in range(1, 19)]
     c1 = json.loads(lines[0])
     assert c1["id"] == "C1" and c1["mode"] == "forbid"
 

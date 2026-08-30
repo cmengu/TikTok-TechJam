@@ -179,6 +179,7 @@ class SyntheticTask:
     prediction_columns = ("sample_id", "p_click", "p_conversion_given_click")
     include_oracle_delta = False
     candidate_dir = REPO_ROOT / "candidate" / "synthetic"
+    rules_path = None
 
     def __init__(self, n_impressions: int = 1_000_000) -> None:
         self.n_impressions = int(n_impressions)
