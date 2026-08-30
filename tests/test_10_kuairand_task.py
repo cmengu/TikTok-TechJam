@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import csv
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -293,3 +294,30 @@ def _band():
 def test_script_sha_recorded_in_protocol():
     proto = yaml.safe_load(PROTOCOL_PATH.read_text(encoding="utf-8"))
     assert proto["ruler"]["scoring"]["script_sha"] == _score_script_sha()
+
+
+def test_reproduced_valid_is_measured():
+    proto = yaml.safe_load(PROTOCOL_PATH.read_text(encoding="utf-8"))
+    reproduced = proto["ruler"]["baseline"]["reproduced"]["valid"]
+    published = proto["ruler"]["baseline"]["published"]
+    assert reproduced
+    assert abs(reproduced["random"]["primary"] - 0.4834) < TOL
+    assert abs(reproduced["popularity"]["primary"] - 0.5807) < TOL
+    assert abs(reproduced["fm"]["primary"] - published["valid"]["primary"]) < TOL
+
+
+def test_prepare_merges_label_and_test_digests(task: KuaiRandTask):
+    path = DATA_ROOT / "harness_only" / "digests.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for key in (
+        "train",
+        "test",
+        "search",
+        "holdout",
+        "script",
+        "search_labels",
+        "oracle_labels",
+        "test_features",
+    ):
+        assert key in data, key
+        assert len(data[key]) == 64

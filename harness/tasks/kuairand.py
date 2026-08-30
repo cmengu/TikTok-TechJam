@@ -112,8 +112,20 @@ class KuaiRandTask:
 
             self._test_rows = kit_data.load(str(KIT_DIR / "KuaiRand-Pure" / "data"))["test"]
 
-        (harness_only / "digests.json").write_text(
-            json.dumps({**digests, "script": digests["script"]}, indent=2) + "\n",
+        digest_path = harness_only / "digests.json"
+        existing: dict = {}
+        if digest_path.is_file():
+            existing = json.loads(digest_path.read_text(encoding="utf-8"))
+        merged = {
+            **existing,
+            **digests,
+            "script": digests["script"],
+            "search_labels": _sha256_file(harness_only / "search_labels.csv"),
+            "oracle_labels": _sha256_file(harness_only / "oracle_labels.csv"),
+            "test_features": _sha256_file(harness_only / "test_features.csv"),
+        }
+        digest_path.write_text(
+            json.dumps(merged, indent=2) + "\n",
             encoding="utf-8",
         )
         return self._paths

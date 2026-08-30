@@ -83,7 +83,19 @@ ruler:
         valid: 0.8484
         test: 0.8645
     reproduced:
-      valid: []
+      valid:
+        random:
+          gauc: 0.499031
+          ndcg_at_5: 0.466289
+          primary: 0.482660
+        popularity:
+          gauc: 0.638726
+          ndcg_at_5: 0.522718
+          primary: 0.580722
+        fm:
+          gauc: 0.667133
+          ndcg_at_5: 0.535805
+          primary: 0.601469
   composition:
     test:
       no_positive_pct: 27.1

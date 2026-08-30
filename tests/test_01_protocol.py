@@ -84,3 +84,26 @@ def test_nulls_allowed():
     assert p.ruler["calibration"]["sigma"] is None
     assert p.protocol_hash.startswith("sha256:")
     assert len(p.protocol_hash) == len("sha256:") + 64
+
+
+def test_epsilon_and_n_are_not_derived():
+    p = proto.load(KUAIRAND)
+    conv = p.ruler["convergence"]
+    assert conv["epsilon"] == 0.002
+    assert conv["n_rounds"] == 3
+    tree = (ROOT / "harness" / "tree.py").read_text(encoding="utf-8")
+    assert 'or 0.001' not in tree
+    assert 'get("n_rounds") or 3' not in tree
+
+
+def test_missing_convergence_raises(tmp_path: Path):
+    data = yaml.safe_load(KUAIRAND.read_text())
+    del data["ruler"]["convergence"]
+    path = tmp_path / "no_conv.yaml"
+    path.write_text(yaml.dump(data))
+    with pytest.raises(ValueError, match="convergence"):
+        proto.load(path)
+    data["ruler"]["convergence"] = {"epsilon": None, "n_rounds": 3}
+    path.write_text(yaml.dump(data))
+    with pytest.raises(ValueError, match="convergence"):
+        proto.load(path)

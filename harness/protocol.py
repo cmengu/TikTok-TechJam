@@ -34,6 +34,11 @@ def load(path: Path | str) -> Protocol:
     ruler = data["ruler"]
     if not isinstance(ruler, dict) or not ruler:
         raise ValueError("ruler must be a non-empty dict")
+    conv = ruler.get("convergence")
+    if not isinstance(conv, dict):
+        raise ValueError("ruler.convergence is required")
+    if conv.get("epsilon") is None or conv.get("n_rounds") is None:
+        raise ValueError("ruler.convergence.{epsilon,n_rounds} must not be null")
     return Protocol(
         task=data["task"],
         schema_version=data["schema_version"],
