@@ -34,6 +34,7 @@ EVENT_TYPES = (
     "cache_lookup",
     "hypothesis_queued",
     "queue_reordered",
+    "submission_run",
     "submission_written",
     "intervention",
     "run_ended",

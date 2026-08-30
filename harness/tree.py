@@ -706,7 +706,8 @@ class Tree:
                 return
             total_gpu_min = sum(float(r.wall_s) for r in results) / 60.0
             oracle_delta = None
-            if getattr(self.task, "name", None) == "kuairand" and self.attribution != "unclear":
+            oracle_on = bool(getattr(self.task, "include_oracle_delta", False))
+            if oracle_on and self.attribution != "unclear":
                 deltas = [
                     float(r.metrics[self.measure.metric]) - self.full_inc.get(r.seed)
                     for r in results
@@ -738,19 +739,34 @@ class Tree:
                 self.screen_inc = SeedCache(screen_roll)
                 self.full_inc = SeedCache({r.seed: float(r.metrics[self.measure.metric]) for r in results})
                 self.incumbent = node
-                if getattr(self.task, "name", None) != "kuairand":
+                if not oracle_on:
                     self._holdout_if_needed(node, at_end=False)
-                if results[-1].result_path is not None:
-                    preds = self.runner._preds_from_result(results[-1].result_path)
-                    write_submission(
-                        node,
-                        self.task,
-                        self.protocol,
-                        "predictions",
-                        self.events.run_dir,
-                        events=self.events,
-                        preds_path=preds,
-                    )
+                if self.workspace is not None and node.commit:
+                    self.workspace.checkout(node.commit)
+                if self.task is not None:
+                    features = self.task.submission_features()
+                    preds_path = None
+                    if features is None and results[-1].result_path is not None:
+                        preds_path = self.runner._preds_from_result(
+                            results[-1].result_path
+                        )
+                    if features is not None or preds_path is not None:
+                        write_submission(
+                            node,
+                            self.task,
+                            self.protocol,
+                            "predictions",
+                            self.events.run_dir,
+                            events=self.events,
+                            preds_path=preds_path,
+                            seed=results[-1].seed,
+                            candidate_src=(
+                                self.workspace.path
+                                if self.workspace is not None
+                                else self.task.candidate_dir
+                            ),
+                            timeout_s=self.full_timeout_s,
+                        )
             elif self.workspace and self.incumbent and self.incumbent.commit:
                 self.workspace.checkout(self.incumbent.commit)
             rep_mean = statistics.mean(float(r.metrics[self.measure.metric]) for r in results)

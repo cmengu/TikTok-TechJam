@@ -29,6 +29,8 @@ def _score_script_sha() -> str:
 class KuaiRandTask:
     name = "kuairand"
     metric = "primary"
+    prediction_columns = ("row_id", "user_id", "video_id", "score")
+    include_oracle_delta = True
     candidate_dir = REPO_ROOT / "candidate" / "kuairand"
 
     def __init__(self) -> None:
@@ -201,6 +203,9 @@ class KuaiRandTask:
         if self._test_rows is None:
             raise RuntimeError("prepare() must be called before test_rows()")
         return self._test_rows
+
+    def submission_features(self) -> Path | None:
+        return self._data_dir() / "harness_only" / "test_features.csv"
 
     def readback_submission(self, path: Path) -> dict:
         """Delegate to the kit's submit.read_submission contract."""

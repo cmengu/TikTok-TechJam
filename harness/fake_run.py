@@ -361,6 +361,16 @@ def _build_script() -> list[dict]:
     )
     events.append(
         {
+            "type": "submission_run",
+            "node": 3,
+            "path": "submission/pred.csv",
+            "digest": "sha256:fixture",
+            "rows": 1000,
+            "summary": _s("submission re-run for node 3 scored test features"),
+        }
+    )
+    events.append(
+        {
             "type": "submission_written",
             "node": 3,
             "path": "submission/pred.csv",
