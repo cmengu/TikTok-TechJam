@@ -12,6 +12,12 @@ from typing import Literal
 
 from harness.audit import assert_single_protocol, cost_by_slice, reliability
 from harness.audit import replication_pairs as audit_replication_pairs
+from harness.overfit import (
+    _promotions,
+    headline,
+    ladder_queries,
+    oracle_gap,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -253,7 +259,16 @@ def register(
         fh.write(json.dumps(line, separators=(",", ":")) + "\n")
 
 
-def report(events: list[dict], out_path: Path) -> Path:
+def claim_level(events: list[dict]) -> str:
+    promos = _promotions(events)
+    if not promos:
+        return "L3"
+    if not all("oracle_delta" in e for e in promos):
+        return "L4-m"
+    return "L4-v"
+
+
+def report(events: list[dict], out_path: Path) -> dict:
     assert_single_protocol(events)
     rep = audit_replication_pairs(events)
     costs = cost_by_slice(events)
@@ -267,6 +282,20 @@ def report(events: list[dict], out_path: Path) -> Path:
     )
     recovered = rel["recoveries"]["ok"]
 
+    primary, spread = headline(events)
+    gaps = oracle_gap(events)
+    queries = ladder_queries(events)
+    numbers = {
+        "primary": primary,
+        "spread": spread,
+        "oracle_gap": gaps,
+        "ladder_queries": queries,
+    }
+    print(
+        f"primary={primary} spread={spread} "
+        f"oracle_gap={gaps} ladder_queries={queries}"
+    )
+
     lines = [
         "# Run report",
         "",
@@ -276,6 +305,13 @@ def report(events: list[dict], out_path: Path) -> Path:
         f"- marginal rate: {inconclusive}",
         f"- leak: {leaked}",
         f"- recovery: {recovered}",
+        "",
+        "## Monitors",
+        f"- primary: {primary}",
+        f"- spread: {spread}",
+        f"- oracle_gap: {gaps}",
+        f"- ladder_queries: {queries}",
+        f"- claim_level: {claim_level(events)}",
         "",
         "## Tree summary",
         f"- promoted nodes: {promoted}",
@@ -300,4 +336,4 @@ def report(events: list[dict], out_path: Path) -> Path:
     )
     out_path = Path(out_path)
     out_path.write_text("\n".join(lines), encoding="utf-8")
-    return out_path
+    return numbers
