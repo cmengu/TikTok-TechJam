@@ -239,7 +239,8 @@ def test_protocol_files_parse():
     kuairand = yaml.safe_load((ROOT / "protocols" / "kuairand.yaml").read_text())
     assert _nulls_under(synthetic["ruler"]) == set()
     assert kuairand["task"] == "kuairand"
-    assert kuairand["ruler"]["calibration"]["sigma"] is None
+    assert kuairand["ruler"]["calibration"]["sigma"] is not None
+    assert kuairand["ruler"]["calibration"]["sigma"] < 0.005
 
 
 def _stub_callables():

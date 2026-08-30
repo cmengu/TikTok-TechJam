@@ -378,6 +378,23 @@ def _cmd_run_one(argv: list[str]) -> None:
         result = runner.run(
             node, "screen", args.seed, args.timeout, env_overrides=overrides
         )
+        if result.ok and result.metrics:
+            payload = {
+                "producer": "measure",
+                "metric": getattr(task, "metric", None) or "primary",
+                "seed": args.seed,
+                "rung": "screen",
+                "summary": (
+                    f"run-one seed={args.seed} "
+                    f"primary={result.metrics.get('primary', result.metrics)}"
+                ),
+            }
+            for key in ("primary", "gauc", "ndcg_at_5"):
+                if key in result.metrics:
+                    payload[key] = float(result.metrics[key])
+            if "primary" in result.metrics:
+                payload["value"] = float(result.metrics["primary"])
+            events.emit("measurement", **payload)
     finally:
         events.close()
 
