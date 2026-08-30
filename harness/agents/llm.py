@@ -36,10 +36,12 @@ class FakeLLM:
         self._scripts: dict[str, list[tuple[Any, Usage]]] = dict(scripts or {})
         self._cursor: dict[str, int] = {}
         self.prompts: dict[str, list[str]] = {}
+        self.calls = 0
 
     def complete(
         self, role: str, prompt: str, schema: dict | None
     ) -> tuple[Any, Usage]:
+        self.calls += 1
         self.prompts.setdefault(role, []).append(prompt)
         bucket = self._scripts.get(role, [])
         idx = self._cursor.get(role, 0)

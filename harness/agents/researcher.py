@@ -12,6 +12,14 @@ import yaml
 
 from harness.agents.cache import ResearchCache
 from harness.agents._util import cost_dict
+from harness.feedback import (
+    admissible,
+    feedback_from,
+    first_round,
+    forbidden,
+    format_lesson,
+    render,
+)
 from harness.types import Cost, Hypothesis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +41,7 @@ HYPOTHESIS_SCHEMA = {
     "citation": "str or no prior",
     "expected_gain": "number",
     "expected_gpu_h": "number",
+    "pattern": "slug",
 }
 
 
@@ -45,6 +54,9 @@ def load_bank(path: Path | None = None) -> list[dict[str, Any]]:
 def _queued_families(cache: ResearchCache) -> set[str]:
     if cache.events is None:
         return set()
+    drain = getattr(cache.events, "drain", None)
+    if callable(drain):
+        drain()
     path = Path(cache.events._run_dir) / "events.jsonl"  # noqa: SLF001
     if not path.is_file():
         return set()
@@ -69,6 +81,8 @@ def _bank_to_hypothesis(row: dict[str, Any]) -> Hypothesis:
         expected_gpu_h=float(row.get("expected_gpu_h") or 0.1),
         parent_node=row.get("parent_node"),
         patch=None,
+        pattern=str(row.get("pattern") or row["mechanism"]),
+        p_win=float(row.get("p_win") or row.get("expected_gain") or 0.0),
     )
 
 
@@ -105,6 +119,10 @@ def _payload_to_hypothesis(data: dict[str, Any]) -> Hypothesis:
         expected_gpu_h=float(data.get("expected_gpu_h") or 0.1),
         parent_node=data.get("parent_node"),
         patch=None,
+        pattern=str(data.get("pattern") or data["mechanism"]),
+        p_win=float(data.get("p_win") or data.get("expected_gain") or 0.0),
+        tokens_in=0,
+        tokens_out=0,
     )
 
 
@@ -126,6 +144,19 @@ def _emit_citations(events, node_id: int | None, citations: list[str], usage_sli
         events.emit("research_source", **payload)
 
 
+def _refuse_forbidden(events, hyp: Hypothesis, lessons: list[dict]) -> None:
+    rnd = first_round(lessons, hyp.pattern or hyp.mechanism)
+    if events is None:
+        return
+    events.emit(
+        "rule_trip",
+        rule="forbidden_pattern",
+        pattern=hyp.pattern or hyp.mechanism,
+        round=rnd,
+        summary=f"forbidden pattern {hyp.pattern or hyp.mechanism} first seen round {rnd}",
+    )
+
+
 def propose(
     llm,
     brief: str,
@@ -133,12 +164,21 @@ def propose(
     family_stats,
     lessons: list[dict],
     cache: ResearchCache,
+    candidate: Hypothesis | None = None,
 ) -> Hypothesis | None:
     events = cache.events
     node_id = cache.node_id
     tried = _queued_families(cache)
+    forb = forbidden(lessons)
 
-    # Empty log: seed from bank (feature-side first).
+    if candidate is not None:
+        if not admissible(candidate, forb):
+            _refuse_forbidden(events, candidate, lessons)
+            return None
+        cache.get(f"{candidate.stage}/{candidate.mechanism}")
+        return candidate
+
+    # Empty log: seed from bank (feature-side first), skipping forbidden patterns.
     if not tried:
         for row in load_bank():
             if row.get("stage") != "features":
@@ -146,6 +186,9 @@ def propose(
             fam = f"{row['stage']}/{row['mechanism']}"
             if fam not in tried:
                 hyp = _bank_to_hypothesis(row)
+                if not admissible(hyp, forb):
+                    _refuse_forbidden(events, hyp, lessons)
+                    continue
                 cache.get(f"{hyp.stage}/{hyp.mechanism}")
                 return hyp
 
@@ -162,15 +205,15 @@ def propose(
         f"  {fam}: n={row.get('n', 0)} mean_delta={row.get('mean_delta', 0):.4f}"
         for fam, row in sorted(family_stats.items())
     ]
-    lesson_lines = [
-        f"- {l.get('heading', 'lesson')}: {l.get('text', '')}" for l in lessons[-30:]
-    ]
+    lesson_lines = [format_lesson(l) for l in lessons[-30:] if "defect" in l and "pattern" in l]
+    fb = render(feedback_from(lessons))
 
     prompt = (
         f"{brief}\n\n"
         f"Incumbent:\n{incumbent_summary}\n\n"
         f"Family stats:\n" + ("\n".join(stats_lines) or "  (none)") + "\n\n"
         f"Lessons:\n" + ("\n".join(lesson_lines) or "  (none)") + "\n\n"
+        f"{fb}\n\n"
         f"Bank (not yet tried):\n" + ("\n".join(bank_lines) or "  (none)") + "\n\n"
         "Propose one hypothesis as JSON matching the schema."
     )
@@ -191,6 +234,11 @@ def propose(
         return None
 
     hyp = _payload_to_hypothesis(data)  # type: ignore[arg-type]
+    hyp.tokens_in = int(usage.tokens_in)
+    hyp.tokens_out = int(usage.tokens_out)
+    if not admissible(hyp, forb):
+        _refuse_forbidden(events, hyp, lessons)
+        return None
     citations = data.get("citations") or []
     if isinstance(citations, str):
         citations = [citations]
@@ -199,4 +247,6 @@ def propose(
     elif str(hyp.citation) != "no prior":
         _emit_citations(events, node_id, [hyp.citation], "researching", usage)
 
+    if events is not None:
+        events.drain()
     return hyp

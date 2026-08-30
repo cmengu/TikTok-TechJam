@@ -74,6 +74,10 @@ class Hypothesis:
     expected_gpu_h: float
     parent_node: int | None
     patch: Path | None  # hand-written patches only (phase 6)
+    pattern: str = ""
+    p_win: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 @dataclass

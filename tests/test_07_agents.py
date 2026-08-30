@@ -98,6 +98,7 @@ def _queue_all_bank(events: EventLog) -> None:
 
 
 def _read_events(events: EventLog) -> list[dict]:
+    events.drain()
     path = Path(events._run_dir) / "events.jsonl"  # noqa: SLF001
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 

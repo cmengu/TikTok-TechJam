@@ -13,6 +13,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from harness.events import EventLog
+from harness.feedback import DEFECTS, write_lesson
 from harness.measure import SeedCache
 from harness.outputs import Convergence, write_submission
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
@@ -186,6 +187,8 @@ class Queue:
             expected_gain=hyp.expected_gain,
             expected_gpu_h=hyp.expected_gpu_h,
             parent_node=hyp.parent_node,
+            tokens_in=int(getattr(hyp, "tokens_in", 0) or 0),
+            tokens_out=int(getattr(hyp, "tokens_out", 0) or 0),
             summary=f"queued {hyp.id} ({hyp.stage}/{hyp.mechanism})",
         )
         return True
@@ -202,11 +205,11 @@ class Queue:
         if row and row.get("n", 0) > 0:
             mean_d = float(row["mean_delta"])
             sd = float(row["sd_delta"])
-            gpu = max(float(row["mean_gpu_min"]), 1e-9)
-            return (mean_d + sd) / gpu
-        # Cold-start: expected_gain / expected_gpu_h (hours → minutes-ish scale).
-        gpu_h = max(float(hyp.expected_gpu_h), 1e-9)
-        return float(hyp.expected_gain) / (gpu_h * 60.0)
+            wall_s = float(row.get("mean_wall_s") or 0.0)
+            if wall_s <= 0:
+                wall_s = float(row.get("mean_gpu_min", 0.0)) * 60.0
+            return (mean_d + sd) / max(wall_s, 1.0)
+        return float(getattr(hyp, "p_win", 0.0) or 0.0)
 
     def rerank(self, stats: dict[str, dict]) -> list[str]:
         self._items.sort(
@@ -267,11 +270,13 @@ def family_stats(events: list[dict]) -> dict[str, dict]:
         n = len(deltas)
         mean_d = statistics.mean(deltas) if deltas else 0.0
         sd = statistics.stdev(deltas) if n >= 2 else 0.0
+        mean_gpu = statistics.mean(gpus) if gpus else 1.0
         out[fam] = {
             "mean_delta": mean_d,
             "sd_delta": sd,
             "n": n,
-            "mean_gpu_min": statistics.mean(gpus) if gpus else 1.0,
+            "mean_gpu_min": mean_gpu,
+            "mean_wall_s": mean_gpu * 60.0,
         }
     return out
 
@@ -446,19 +451,23 @@ class Tree:
         self,
         node: Node,
         family: str,
+        pattern: str,
+        defect: str,
         delta: float | None,
-        gpu_min: float,
-        diff_summary: str,
+        verdict: str,
     ) -> None:
-        row = {
-            "node": node.id,
-            "family": family,
-            "delta": delta,
-            "gpu_min": gpu_min,
-            "diff_summary": diff_summary,
-        }
-        with self._lessons_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, separators=(",", ":")) + "\n")
+        write_lesson(
+            self._lessons_path,
+            {
+                "round": self._nodes_done,
+                "node": node.id,
+                "family": family,
+                "pattern": pattern,
+                "defect": defect,
+                "delta": delta,
+                "verdict": verdict,
+            },
+        )
 
     def calibrate_baseline(self, baseline: Node) -> SeedCache:
         """Calibrate measure + seed caches on seeds 1,2,3 (locked)."""
@@ -638,7 +647,6 @@ class Tree:
 
     def _run_ladder(self, node: Node, hyp: Hypothesis) -> None:
         family = self._family_of(hyp)
-        diff_summary = hyp.description[:80]
         while True:
             attempt = self._node_attempt.get(node.id, 1)
             if node.state != "running":
@@ -668,6 +676,14 @@ class Tree:
             )
             if v_screen.state != "replicating":
                 self._set_state(node, v_screen.state)
+                self._append_lesson(
+                    node,
+                    family,
+                    hyp.pattern or hyp.mechanism,
+                    "no_gain",
+                    v_screen.delta_mean,
+                    v_screen.state,
+                )
                 if self.workspace and self.incumbent and self.incumbent.commit:
                     self.workspace.checkout(self.incumbent.commit)
                 return
@@ -694,7 +710,7 @@ class Tree:
                     d = float(res.metrics[self.measure.metric]) - self.full_inc.get(seed)
                 except Exception:
                     d = None
-                self._append_lesson(node, family, d, gpu_min, diff_summary)
+                del d, gpu_min
             if retry:
                 continue
             if len(results) != len(FULL_SEEDS):
@@ -722,6 +738,15 @@ class Tree:
                 ),
             )
             self._set_state(node, v_rep.state)
+            defect = "leak_suspected" if v_rep.state == "leaked" else "no_gain"
+            self._append_lesson(
+                node,
+                family,
+                hyp.pattern or hyp.mechanism,
+                defect,
+                v_rep.delta_mean,
+                v_rep.state,
+            )
             if v_rep.state == "promoted":
                 self._promotions += 1
                 screen_roll = dict(self.screen_inc.as_dict())
@@ -802,6 +827,15 @@ class Tree:
             self._set_state(node, "retired")
         elif node.state in ("running", "replicating", "screening"):
             self._set_state(node, "retired")
+        defect = fc if fc in DEFECTS else "crash"
+        self._append_lesson(
+            node,
+            self._family_of(hyp),
+            hyp.pattern or hyp.mechanism,
+            defect,
+            None,
+            "rejected",
+        )
         if self.workspace and self.incumbent and self.incumbent.commit:
             self.workspace.checkout(self.incumbent.commit)
         return False
