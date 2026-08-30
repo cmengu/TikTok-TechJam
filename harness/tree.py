@@ -16,6 +16,14 @@ from harness.events import EventLog
 from harness.feedback import DEFECTS, write_lesson
 from harness.measure import SeedCache
 from harness.outputs import Convergence, write_submission
+from harness.attribute import (
+    Claim,
+    attribute,
+    bundle_metrics,
+    claim_payload,
+    emit_valid_pair_baseline,
+    observable_rows,
+)
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +58,6 @@ FULL_SEEDS = (1, 2, 3)
 SCREEN_SEEDS_CAL = (1, 2, 3, 4, 5)
 HOLDOUT_RUN_SEEDS = (1, 2, 3)
 SMOKE_TIMEOUT_S = 60.0
-ATTRIBUTION_HAND = "clear"
 
 
 class IllegalTransition(Exception):
@@ -190,6 +197,7 @@ class Queue:
             tokens_in=int(getattr(hyp, "tokens_in", 0) or 0),
             tokens_out=int(getattr(hyp, "tokens_out", 0) or 0),
             pattern=hyp.pattern or hyp.mechanism,
+            claim=claim_payload(getattr(hyp, "claim", None), hyp.mechanism),
             summary=f"queued {hyp.id} ({hyp.stage}/{hyp.mechanism})",
         )
         return True
@@ -373,7 +381,6 @@ class Tree:
         screen_timeout_s: float = 300.0,
         full_timeout_s: float = 600.0,
         smoke_timeout_s: float = SMOKE_TIMEOUT_S,
-        attribution: str = ATTRIBUTION_HAND,
         refill_queue: Callable[[], None] | None = None,
     ) -> None:
         self.events = events
@@ -390,8 +397,8 @@ class Tree:
         self.screen_timeout_s = float(screen_timeout_s)
         self.full_timeout_s = float(full_timeout_s)
         self.smoke_timeout_s = float(smoke_timeout_s)
-        self.attribution = attribution
         self.refill_queue = refill_queue
+        self._inc_obs: dict[str, float] = {}
         self._initial_commit = workspace.head() if workspace is not None else None
 
         self.nodes: dict[int, Node] = {}
@@ -476,6 +483,9 @@ class Tree:
     def calibrate_baseline(self, baseline: Node) -> SeedCache:
         """Calibrate measure + seed caches on seeds 1,2,3 (locked)."""
 
+        metric = self.measure.metric
+        full_results: list[RunResult] = []
+
         class _Recording:
             def __init__(self, inner: Any) -> None:
                 self._inner = inner
@@ -484,10 +494,12 @@ class Tree:
 
             def run(self, node, rung, seed, timeout_s, **kwargs):  # noqa: ANN001
                 res = self._inner.run(node, rung, seed, timeout_s, **kwargs)
-                if res.ok and self.measure.metric in res.metrics:
+                if res.ok and metric in res.metrics:
                     self.by_rung_seed[(str(rung), int(seed))] = float(
-                        res.metrics[self.measure.metric]
+                        res.metrics[metric]
                     )
+                    if str(rung) == "full":
+                        full_results.append(res)
                 return res
 
         recorder = _Recording(self.runner)
@@ -520,6 +532,9 @@ class Tree:
 
         self.incumbent = baseline
         self.nodes[baseline.id] = baseline
+        if full_results:
+            self._inc_obs = bundle_metrics(full_results)
+        emit_valid_pair_baseline(self.events, self.protocol)
         self.events.emit(
             "incumbent_changed", node=baseline.id, reason="baseline",
             summary=f"node {baseline.id} became incumbent (baseline calibration)",
@@ -601,6 +616,9 @@ class Tree:
                 expected_gpu_h=draft.expected_gpu_h,
                 parent_node=parent,
                 patch=draft.patch,
+                pattern=draft.pattern,
+                p_win=draft.p_win,
+                claim=draft.claim,
             )
             if not self.queue.push(fork_hyp):
                 continue
@@ -649,6 +667,24 @@ class Tree:
         self._holdout_done_first = True
         self._roll_holdout_cache(report)
 
+    def _check_attribution(self, node: Node, hyp: Hypothesis, results: list[RunResult]) -> str:
+        claim = getattr(hyp, "claim", None)
+        if not isinstance(claim, Claim):
+            claim = Claim(mechanism=hyp.mechanism, observables=[])
+        after = bundle_metrics(results)
+        before = dict(self._inc_obs)
+        result = attribute(claim, before, after)
+        self.events.emit(
+            "attribution_checked",
+            node=node.id,
+            round=self._nodes_done,
+            mechanism=claim.mechanism,
+            result=result,
+            observables=observable_rows(claim, before, after),
+            summary=f"node {node.id} attribution {result} ({claim.mechanism})",
+        )
+        return result
+
     def _run_ladder(self, node: Node, hyp: Hypothesis) -> None:
         family = self._family_of(hyp)
         while True:
@@ -673,9 +709,10 @@ class Tree:
                 if self._handle_failure(node, hyp, screen):
                     continue
                 return
+            attr_screen = self._check_attribution(node, hyp, [screen])
             v_screen = self.measure.verdict(
                 node, [screen], self.screen_inc, "screen",
-                attribution=self.attribution,  # type: ignore[arg-type]
+                attribution=attr_screen,  # type: ignore[arg-type]
                 gpu_min=float(screen.wall_s) / 60.0,
             )
             if v_screen.state != "replicating":
@@ -731,13 +768,14 @@ class Tree:
                 self._holdout_done_first = True
                 return report.delta_mean
 
+            attr_rep = self._check_attribution(node, hyp, results)
             v_rep = self.measure.verdict(
                 node, results, self.full_inc, "replicate",
-                attribution=self.attribution,  # type: ignore[arg-type]
+                attribution=attr_rep,  # type: ignore[arg-type]
                 gpu_min=total_gpu_min,
                 on_promote_oracle=(
                     _oracle_after_pass
-                    if oracle_on and self.attribution != "unclear"
+                    if oracle_on and attr_rep != "unclear"
                     else None
                 ),
             )
@@ -757,6 +795,7 @@ class Tree:
                 screen_roll[SCREEN_SEED] = float(screen.metrics[self.measure.metric])
                 self.screen_inc = SeedCache(screen_roll)
                 self.full_inc = SeedCache({r.seed: float(r.metrics[self.measure.metric]) for r in results})
+                self._inc_obs = bundle_metrics(results)
                 self.incumbent = node
                 if not oracle_on:
                     self._holdout_if_needed(node, at_end=False)

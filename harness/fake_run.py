@@ -31,6 +31,12 @@ def _hyp(hid: str, stage: str, mechanism: str, parent: int | None = None) -> dic
         "tokens_in": 0,
         "tokens_out": 0,
         "parent_node": parent,
+        "claim": {
+            "mechanism": mechanism,
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
         "summary": _s(f"queued {hid} ({stage}/{mechanism})"),
     }
 
@@ -319,6 +325,26 @@ def _build_script() -> list[dict]:
             "value": 0.529,
             "seed": 2,
             "summary": _s("node 3 replicate seed=2 cvr_auc=0.529"),
+        }
+    )
+    events.append(
+        {
+            "type": "attribution_checked",
+            "node": 3,
+            "round": 1,
+            "mechanism": "lr-schedule",
+            "result": "unclear",
+            "observables": [
+                {
+                    "name": "gauc",
+                    "source": "harness",
+                    "direction": "positive",
+                    "before": 0.50,
+                    "after": 0.50,
+                    "moved": False,
+                }
+            ],
+            "summary": _s("node 3 attribution unclear (lr-schedule)"),
         }
     )
     events.append(

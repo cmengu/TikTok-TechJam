@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from harness.attribute import Claim
 
 Stage = Literal["data", "features", "objective", "architecture", "training", "ensemble"]
 State = Literal[
@@ -42,6 +45,7 @@ EVENT_TYPES = (
     "prediction",
     "lesson_written",
     "proposal_rejected",
+    "attribution_checked",
 )
 # Phase 5 added incumbent_changed + prediction (Plan_delta §1; no schema bump).
 STATES = (
@@ -80,6 +84,7 @@ class Hypothesis:
     p_win: float = 0.0
     tokens_in: int = 0
     tokens_out: int = 0
+    claim: Claim | None = None
 
 
 @dataclass
