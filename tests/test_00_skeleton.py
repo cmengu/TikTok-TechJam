@@ -46,6 +46,7 @@ IMPLEMENTED = {
     "harness.agents.tuner",
     "harness.agents.contract",
     "harness.agents._util",
+    "harness.feedback",
     "data.kuairand",
     "harness.kit",
     "harness.tasks.kuairand",
