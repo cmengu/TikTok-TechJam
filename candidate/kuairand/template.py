@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
 import sys
 from pathlib import Path
@@ -20,7 +21,25 @@ def _env_int(name: str, default: int) -> int:
     return int(raw) if raw else default
 
 
+def _active_fields() -> tuple[str, ...]:
+    raw = os.environ.get("FEATURES", "base")
+    if raw.strip() in ("", "base"):
+        return FIELDS
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+    tokens = []
+    for name in fields:
+        if name == "dur_bucket":
+            tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
+        else:
+            tokens.append(row[name])
+    return tokens
+
+
 def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+    del with_label
     with path.open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
@@ -35,37 +54,26 @@ def _encode_rows(
     unk: list[int],
     offsets: np.ndarray,
     edges: np.ndarray,
+    fields: tuple[str, ...],
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    x = np.empty((len(rows), len(FIELDS)), dtype=np.int32)
+    x = np.empty((len(rows), len(fields)), dtype=np.int32)
     y = None
     if rows and "long_view" in rows[0]:
         y = np.empty(len(rows), dtype=np.float32)
     for n, row in enumerate(rows):
-        raw = [
-            row["user_id"],
-            row["video_id"],
-            row["author_id"],
-            row["tab"],
-            str(int(np.searchsorted(edges, float(row["duration_ms"])))),
-        ]
-        for i, v in enumerate(raw):
+        for i, v in enumerate(_row_tokens(row, fields, edges)):
             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
         if y is not None:
             y[n] = float(row["long_view"])
     return x, y
 
 
-def _build_vocabs(train_rows: list[dict[str, str]], edges: np.ndarray):
-    vocabs = [dict() for _ in FIELDS]
+def _build_vocabs(
+    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+):
+    vocabs = [dict() for _ in fields]
     for row in train_rows:
-        raw = [
-            row["user_id"],
-            row["video_id"],
-            row["author_id"],
-            row["tab"],
-            str(int(np.searchsorted(edges, float(row["duration_ms"])))),
-        ]
-        for i, v in enumerate(raw):
+        for i, v in enumerate(_row_tokens(row, fields, edges)):
             if v not in vocabs[i]:
                 vocabs[i][v] = len(vocabs[i])
     unk = [len(v) for v in vocabs]
@@ -132,23 +140,35 @@ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> 
             writer.writerow([i, row["user_id"], row["video_id"], f"{float(score):.6g}"])
 
 
+def _checkpoint_blob(model: FM) -> bytes:
+    buf = io.BytesIO()
+    np.savez(buf, V=model.V, W=model.W, b=np.asarray(model.b))
+    return buf.getvalue()
+
+
 def main() -> None:
     train_path = Path(os.environ["TRAIN"])
     valid_path = Path(os.environ.get("ORACLE") or os.environ["VALID"])
-    seed = _env_int("SEED", 0)
+    seed = int(os.environ["SEED"])
+    device = os.environ.get("DEVICE")
+    del device
     epochs = _env_int("EPOCHS", DEFAULT_EPOCHS)
     batch = _env_int("BATCH", 8192)
     lr = float(os.environ.get("LR", "0.001"))
     workspace = Path(os.environ["WORKSPACE"])
+    fields = _active_fields()
+    max_rows = os.environ.get("MAX_ROWS")
 
     train_rows = _read_rows(train_path, with_label=True)
     valid_rows = _read_rows(valid_path, with_label=False)
+    if max_rows:
+        train_rows = train_rows[: int(max_rows)]
     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
-    vocabs, unk, offsets = _build_vocabs(train_rows, edges)
+    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
 
-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges)
-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges)
+    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
 
     model = FM(dim, k=16, lr=lr, seed=seed)
     rng = np.random.default_rng(seed)
@@ -158,7 +178,7 @@ def main() -> None:
         for i in range(0, len(idx), batch):
             losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
         report.progress(ep, epochs, float(np.mean(losses)))
-        report.checkpoint.save(ep, f"epoch-{ep}".encode())
+        report.checkpoint.save(ep, _checkpoint_blob(model))
 
     preds_path = workspace / "preds.csv"
     _write_preds(preds_path, valid_rows, model.predict(xva))
