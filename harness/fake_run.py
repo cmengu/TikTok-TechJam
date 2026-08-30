@@ -59,7 +59,18 @@ def _build_script() -> list[dict]:
     ]
     events.extend(hyps)
 
+    def _move(kind: str | None, parent: int | None, reason: str, rnd: int) -> dict:
+        return {
+            "type": "move_selected",
+            "round": rnd,
+            "kind": kind,
+            "parent": parent,
+            "reason": reason,
+            "summary": _s(f"move {kind or 'none'}: {reason}"),
+        }
+
     # Node 1: draft → running → heartbeats → measurement → inconclusive.
+    events.append(_move("draft", None, "breadth floor", 0))
     events.append(
         {
             "type": "node_created",
@@ -107,6 +118,7 @@ def _build_script() -> list[dict]:
     )
 
     # Node 2: child of 1 → running → cuda_oom → recovery → rejected.
+    events.append(_move("draft", None, "breadth floor", 1))
     events.append(
         {
             "type": "node_created",
@@ -259,6 +271,7 @@ def _build_script() -> list[dict]:
     )
 
     # Node 3: draft → running → replicating → promoted → submission.
+    events.append(_move("draft", None, "breadth floor", 2))
     events.append(
         {
             "type": "node_created",

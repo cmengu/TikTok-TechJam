@@ -50,6 +50,7 @@ TRANSITIONS: dict[str, set[str]] = {
 STALL_STEPS = 4
 MAX_LIVE_BRANCHES = 3
 DEBUG_DEPTH = 3
+DRAFTS_MIN = 3
 LESSONS_WINDOW = 30
 
 # Locked: Phase-5 calibrate / SeedCache / scorecard keys (not #p6's stale 0,1,2).
@@ -58,6 +59,61 @@ FULL_SEEDS = (1, 2, 3)
 SCREEN_SEEDS_CAL = (1, 2, 3, 4, 5)
 HOLDOUT_RUN_SEEDS = (1, 2, 3)
 SMOKE_TIMEOUT_S = 60.0
+
+
+@dataclass(frozen=True)
+class Move:
+    kind: str | None
+    parent: int | None
+    reason: str
+
+
+def _debug_depth(node: Node, nodes: list[Node]) -> int:
+    by_id = {n.id: n for n in nodes}
+    depth = 0
+    cur: Node | None = node
+    seen: set[int] = set()
+    while cur is not None and cur.id not in seen:
+        seen.add(cur.id)
+        if cur.kind in ("debug",):
+            depth += 1
+        if cur.parent is None:
+            break
+        cur = by_id.get(cur.parent)
+    return depth
+
+
+def _best(nodes: list[Node]) -> Node:
+    return max(nodes, key=lambda n: (n.created_seq, n.id))
+
+
+def _argmax_promoted(nodes: list[Node]) -> Node:
+    promo = [n for n in nodes if n.state in ("promoted",)]
+    if not promo:
+        return _best(nodes)
+
+    def _score(n: Node) -> float:
+        return float(sum(sum(vs) for vs in n.scores.values()))
+
+    return max(promo, key=lambda n: (_score(n), n.id))
+
+
+def select(nodes: list[Node], budget_left_s: float) -> Move:
+    del budget_left_s
+    live = [n for n in nodes if n.state in ("running", "replicating")]
+    if len(live) >= MAX_LIVE_BRANCHES:
+        return Move(None, None, "at branch cap")
+    drafts = [n for n in nodes if n.kind == "draft" and n.state == "promoted"]
+    if len(drafts) < DRAFTS_MIN:
+        return Move("draft", None, "breadth floor")
+    broken = [
+        n
+        for n in nodes
+        if n.state == "failed" and _debug_depth(n, nodes) < DEBUG_DEPTH
+    ]
+    if broken:
+        return Move("debug", _best(broken).id, "repair before extend")
+    return Move("improve", _argmax_promoted(nodes).id, "extend best")
 
 
 class IllegalTransition(Exception):
@@ -554,7 +610,7 @@ class Tree:
     def _maybe_fork(self, just_finished: Node) -> None:
         if just_finished.kind != "improve":
             return
-        if just_finished.state == "promoted":
+        if just_finished.state in ("promoted",):
             self._stall = 0
             return
         self._stall += 1
@@ -780,7 +836,7 @@ class Tree:
                 ),
             )
             self._set_state(node, v_rep.state)
-            defect = "leak_suspected" if v_rep.state == "leaked" else "no_gain"
+            defect = "leak_suspected" if v_rep.state in ("leaked",) else "no_gain"
             self._append_lesson(
                 node,
                 family,
@@ -789,7 +845,7 @@ class Tree:
                 v_rep.delta_mean,
                 v_rep.state,
             )
-            if v_rep.state == "promoted":
+            if v_rep.state in ("promoted",):
                 self._promotions += 1
                 screen_roll = dict(self.screen_inc.as_dict())
                 screen_roll[SCREEN_SEED] = float(screen.metrics[self.measure.metric])
@@ -866,7 +922,7 @@ class Tree:
             if node.state != "running":
                 self._set_state(node, "running", f"node {node.id} debug retry {debug_k}")
             return True
-        if node.state == "debugging":
+        if node.state in ("debugging",):
             self._set_state(node, "retired")
         elif node.state in ("running", "replicating", "screening"):
             self._set_state(node, "retired")
@@ -903,7 +959,22 @@ class Tree:
             if len(self.queue) == 0:
                 self._finish("empty_queue")
                 return False
-        if self._live_count() >= MAX_LIVE_BRANCHES:
+        budget_left = 1.0
+        if self.budget is not None:
+            try:
+                budget_left = max(0.0, float(self.budget) * 3600.0 - self._gpu_spent_s)
+            except (TypeError, ValueError):
+                budget_left = 1.0
+        move = select(list(self.nodes.values()), budget_left)
+        self.events.emit(
+            "move_selected",
+            round=self._nodes_done,
+            kind=move.kind,
+            parent=move.parent,
+            reason=move.reason,
+            summary=f"move {move.kind or 'none'}: {move.reason}",
+        )
+        if move.kind is None:
             self._finish("max_live_branches")
             return False
         hyp = self.queue.pop()
