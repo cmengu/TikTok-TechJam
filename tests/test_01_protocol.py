@@ -81,7 +81,8 @@ def test_missing_ruler_raises(tmp_path: Path):
 def test_nulls_allowed():
     p = proto.load(KUAIRAND)
     assert p.task == "kuairand"
-    assert p.ruler["calibration"]["sigma"] is None
+    assert p.ruler["calibration"]["sigma"] is not None
+    assert p.ruler["calibration"]["sigma"] < 0.005
     assert p.protocol_hash.startswith("sha256:")
     assert len(p.protocol_hash) == len("sha256:") + 64
 

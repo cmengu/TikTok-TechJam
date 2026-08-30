@@ -114,19 +114,27 @@ ruler:
     epsilon: 0.002
     n_rounds: 3
   calibration:
-    sigma: null
+    sigma: 0.0004045117766631494
     sigma_seeds:
     - 1
     - 2
     - 3
     - 4
     - 5
+    sigma_values:
+    - 0.5963927238510041
+    - 0.5970357097675736
+    - 0.5973312982869705
+    - 0.596791303526061
+    - 0.5964113935517419
     multipliers:
       sigma_unstable: 6
       screen_reject: -2
       promote_floor: 2
     ladder_eta: eps
-    measured_on: null
+    measured_on: "2026-08-30"
+    machine: Ngs-Laptop.local
+    template_commit: 8ce003ec5831a8b39779f2672ae72b346a77bee2
   seeds:
     pinned:
     - data_shuffle

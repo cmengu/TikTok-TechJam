@@ -11,14 +11,16 @@ from harness.events import EventLog
 from harness.protocol import Protocol
 from harness.types import Node, Rung, RunResult, State, Verdict
 
-# Redline §6 Ladder: refuse to search if sigma_full exceeds this
-SIGMA_UNSTABLE = 0.020
-# Redline §6 Ladder: screen — delta at or below this → rejected
-SCREEN_REJECT_DELTA = -0.010
+# Fallback Ali-CCP literals — overwritten in Measure.__init__ from protocol σ.
+_UNSTABLE_DEFAULT = 0.020
+_SCREEN_REJECT_DEFAULT = -0.010
+_PROMOTE_FLOOR_DEFAULT = 0.010
+_LADDER_ETA_DEFAULT = 0.005
+SIGMA_UNSTABLE = _UNSTABLE_DEFAULT
+SCREEN_REJECT_DELTA = _SCREEN_REJECT_DEFAULT
 # Redline §6 Ladder: screen — delta ≥ this × sd_delta_screen → replicating
 SCREEN_ADVANCE_SD = 1.0
-# Redline §6 Ladder: replicate — bar never below this
-PROMOTE_FLOOR = 0.010
+PROMOTE_FLOOR = _PROMOTE_FLOOR_DEFAULT
 # Redline §6 Ladder: replicate — 1.645 / √3 — one-sided known-σ test, α = 0.05, k = 3
 PROMOTE_Z_OVER_SQRT_K = 0.95
 # Redline §6 Ladder: seeds on the full rung; all three must be > 0
@@ -28,7 +30,7 @@ LEAK_TRIGGER_BANDS = 5.0
 # Redline §6 Ladder: single-feature AUC above this trips R3
 LEAK_SINGLE_FEATURE_AUC = 0.90
 # Redline §6 Ladder: holdout — report a new number only if ≥ best + eta
-LADDER_ETA = 0.005
+LADDER_ETA = _LADDER_ETA_DEFAULT
 # Redline §6 Ladder: holdout visits per run
 HOLDOUT_VISITS_MAX = 12
 # Redline §6 Ladder: candidate-side holdout seeds; incumbent from cache
@@ -270,6 +272,22 @@ class Measure:
             if hasattr(protocol, "run")
             else 600.0
         )
+        self._apply_calibration()
+
+    def _apply_calibration(self) -> None:
+        global SIGMA_UNSTABLE, SCREEN_REJECT_DELTA, PROMOTE_FLOOR, LADDER_ETA
+        cal = (self.protocol.ruler or {}).get("calibration") or {}
+        conv = (self.protocol.ruler or {}).get("convergence") or {}
+        sigma = cal.get("sigma")
+        eps = conv.get("epsilon")
+        if sigma is None:
+            return
+        SIGMA = float(sigma)
+        EPS = float(eps) if eps is not None else LADDER_ETA
+        SIGMA_UNSTABLE = 6.0 * SIGMA
+        SCREEN_REJECT_DELTA = -2.0 * SIGMA
+        PROMOTE_FLOOR = 2.0 * SIGMA
+        LADDER_ETA = EPS
 
     @property
     def holdout_visits(self) -> int:
