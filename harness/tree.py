@@ -756,6 +756,7 @@ class Tree:
                                 else self.task.candidate_dir
                             ),
                             timeout_s=self.full_timeout_s,
+                            run_env=results[-1].env,
                         )
             elif self.workspace and self.incumbent and self.incumbent.commit:
                 self.workspace.checkout(self.incumbent.commit)
@@ -875,6 +876,7 @@ class Tree:
                 self.events.emit(
                     "prediction", node=self.incumbent.id, metric=self.measure.metric,
                     value=self._best_reported, best_reported=self._best_reported,
+                    producer="measure",
                     summary=(
                         f"prediction {self._best_reported:.4f} "
                         "(baseline holdout cache, no promotion)"

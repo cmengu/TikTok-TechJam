@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -68,7 +67,7 @@ def _rerun_on_submission_features(
     task,
     out_dir: Path,
     *,
-    seed: int,
+    run_env: dict,
     candidate_src: Path,
     timeout_s: float,
     events,
@@ -79,25 +78,19 @@ def _rerun_on_submission_features(
     features = Path(features)
     if not features.is_file():
         raise SubmissionError(f"submission features missing: {features}")
+    if not run_env:
+        raise SubmissionError("submission re-run requires the promoted run's env")
 
-    sub_dir = out_dir / "submission"
-    workspace = sub_dir / "rerun"
+    env = {k: str(v) for k, v in run_env.items()}
+    env["VALID"] = str(features)
+    env.pop("ORACLE", None)
+    if "WORKSPACE" not in env:
+        raise SubmissionError("promoted run env is missing WORKSPACE")
+    workspace = Path(env["WORKSPACE"])
     workspace.mkdir(parents=True, exist_ok=True)
     src = Path(candidate_src)
     shutil.copy2(src / "template.py", workspace / "template.py")
     shutil.copy2(REPO_ROOT / "candidate" / "report.py", workspace / "report.py")
-
-    paths = task._paths  # type: ignore[attr-defined]
-    env = {**dict(os.environ), **{k: str(v) for k, v in task.candidate_env(paths).items()}}
-    env["VALID"] = str(features)
-    env.pop("ORACLE", None)
-    env["WORKSPACE"] = str(workspace)
-    env["SEED"] = str(seed)
-    env.setdefault("DEVICE", "cpu")
-    env.setdefault("BATCH", "8192")
-    env.setdefault("LR", "0.001")
-    env.setdefault("EPOCHS", "11")
-    env.setdefault("FEATURES", "base")
 
     proc = subprocess.run(
         [sys.executable, "template.py"],
@@ -114,7 +107,8 @@ def _rerun_on_submission_features(
     if not result_path.is_file():
         raise SubmissionError("submission re-run produced no result.json")
     preds = Path(json.loads(result_path.read_text(encoding="utf-8"))["preds"])
-    dest = sub_dir / "pred.csv"
+    dest = out_dir / "submission" / "pred.csv"
+    dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(preds, dest)
     if events is not None:
         events.emit(
@@ -123,6 +117,13 @@ def _rerun_on_submission_features(
             path=str(dest.relative_to(out_dir)),
             digest=_sha256_file(features),
             rows=task.rows("test"),
+            seed=env.get("SEED"),
+            commit=getattr(node, "commit", None),
+            env={
+                k: env[k]
+                for k in ("SEED", "EPOCHS", "BATCH", "LR", "FEATURES", "DEVICE")
+                if k in env
+            },
             summary=f"submission re-run for node {node.id} scored test features",
         )
     return dest
@@ -141,6 +142,7 @@ def write_submission(
     seed: int = 0,
     candidate_src: Path | None = None,
     timeout_s: float = 600.0,
+    run_env: dict | None = None,
 ) -> Path:
     out_dir = Path(out_dir)
     sub_dir = out_dir / "submission"
@@ -153,7 +155,7 @@ def write_submission(
                 node,
                 task,
                 out_dir,
-                seed=seed,
+                run_env=run_env or {},
                 candidate_src=Path(candidate_src or task.candidate_dir),
                 timeout_s=timeout_s,
                 events=events,
@@ -174,12 +176,12 @@ def write_submission(
         if not src_script.is_file():
             raise SubmissionError("checkpoint dry-run needs template.py beside ckpt")
         shutil.copy2(src_script, script_dest)
-        env = dict(task.candidate_env(task._paths))  # type: ignore[attr-defined]
+        env = {k: str(v) for k, v in dict(task.candidate_env(task._paths)).items()}
         env["WORKSPACE"] = str(sub_dir)
         proc = subprocess.run(
             [sys.executable, "template.py"],
             cwd=sub_dir,
-            env={**dict(os.environ), **{k: str(v) for k, v in env.items()}},
+            env=env,
             capture_output=True,
             text=True,
             timeout=120,

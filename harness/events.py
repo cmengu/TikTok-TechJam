@@ -25,6 +25,9 @@ MEASURED = frozenset({
     "holdout_score",
     "oracle_score",
     "oracle_delta",
+    "value",
+    "best_reported",
+    "scores",
 })
 
 
