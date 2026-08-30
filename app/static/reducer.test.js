@@ -26,6 +26,9 @@ const HEARTBEAT_FIXTURE = join(
   "fake-heartbeats.jsonl",
 );
 const TYPES_PY = join(__dirname, "..", "..", "harness", "types.py");
+// Hand-written to the event contract: one valid line per Phase 2 event plus
+// one malformed line per type. Used until the golden fixture carries them all.
+const PHASE2_FIXTURE = join(__dirname, "fixtures", "phase2-events.jsonl");
 
 function loadJsonl(path) {
   const text = readFileSync(path, "utf8");
@@ -458,5 +461,120 @@ describe("reducer — Checkpoint C: heartbeat isolation", () => {
     assert.ok(state.log.every((e) => e.type !== "heartbeat"));
     assert.ok(state.feed.every((e) => e.type !== "heartbeat"));
     assert.equal(state.log.length, loadFixture().length);
+  });
+});
+
+describe("reducer — Phase 2 (F1: vocabulary and slices)", () => {
+  const loadPhase2 = () => loadJsonl(PHASE2_FIXTURE);
+  const foldPhase2 = () => loadPhase2().reduce(reduce, initial());
+
+  it("test_phase2_fixture_reduces_with_no_unknown_types", () => {
+    const state = foldPhase2();
+    const unknownTypes = Object.keys(state.unknown).filter(
+      (k) => !k.startsWith("malformed:"),
+    );
+    deepEqual(unknownTypes, []);
+  });
+
+  it("test_move_selected_collected_in_order", () => {
+    const moves = foldPhase2().moves;
+    deepEqual(
+      moves.map((m) => [m.round, m.kind]),
+      [
+        [0, "draft"],
+        [1, "debug"],
+        [2, null],
+      ],
+    );
+    // A null kind is the at-cap move, not a malformed one.
+    assert.equal(moves[2].reason, "at branch cap");
+  });
+
+  it("test_cascade_history_is_per_node", () => {
+    const cascade = foldPhase2().cascade;
+    deepEqual(
+      cascade.byNode[1].map((e) => e.level),
+      ["omega", "v_sem", "smoke"],
+    );
+    deepEqual(
+      cascade.byNode[2].map((e) => e.level),
+      ["omega"],
+    );
+  });
+
+  it("test_cascade_counts_where_nodes_died_and_what_it_spent", () => {
+    const cascade = foldPhase2().cascade;
+    // Node 2 died at omega — before any LLM call or run. That is the
+    // "rejected for free" number the dashboard puts on screen.
+    deepEqual(cascade.rejected, { omega: 1, v_sem: 0, smoke: 0 });
+    deepEqual(cascade.counters, { llmCalls: 1, runs: 1 });
+  });
+
+  it("test_lessons_collected", () => {
+    const lessons = foldPhase2().lessons;
+    assert.equal(lessons.length, 1);
+    assert.equal(lessons[0].family, "features/target-encoding");
+    assert.equal(lessons[0].verdict, "inconclusive");
+  });
+
+  it("test_forbidden_keeps_the_first_sighting", () => {
+    const forbidden = foldPhase2().forbidden;
+    deepEqual(Object.keys(forbidden), ["crossed-ids"]);
+    // Seen again in round 3, but first_round and the original round stand.
+    assert.equal(forbidden["crossed-ids"].round, 2);
+    assert.equal(forbidden["crossed-ids"].first_round, 1);
+  });
+
+  it("test_attribution_keyed_by_node", () => {
+    const attribution = foldPhase2().attribution;
+    assert.equal(attribution.byNode[1].result, "unclear");
+    assert.equal(attribution.byNode[1].observables[0].moved, false);
+  });
+
+  it("test_submission_run_collected", () => {
+    const runs = foldPhase2().submissionRuns;
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].commit, "8ce003e");
+    assert.equal(runs[0].env.SEED, "1");
+  });
+
+  it("test_rule_trip_keyed_on_rule_id", () => {
+    const state = foldPhase2();
+    deepEqual(state.reliability.ruleTripsByRule, { C1: 1 });
+  });
+
+  it("test_malformed_lines_are_skipped_not_thrown", () => {
+    const state = foldPhase2();
+    // One malformed line per type, each counted and each leaving its slice alone.
+    deepEqual(state.unknown, {
+      "malformed:move_selected": 1,
+      "malformed:verify_level": 1,
+      "malformed:lesson_written": 1,
+      "malformed:proposal_rejected": 1,
+      "malformed:attribution_checked": 1,
+      "malformed:submission_run": 1,
+    });
+    assert.equal(state.moves.length, 3);
+    assert.equal(state.lessons.length, 1);
+    assert.equal(state.submissionRuns.length, 1);
+    assert.equal(Object.keys(state.attribution.byNode).length, 1);
+    assert.equal(Object.keys(state.forbidden).length, 1);
+  });
+
+  it("test_reduce_stays_pure_over_the_phase2_fixture", () => {
+    let state = initial();
+    for (const ev of loadPhase2()) {
+      deepFreeze(state);
+      state = reduce(state, ev);
+    }
+    assert.equal(state.run.status, "ended");
+  });
+
+  it("test_old_fixture_still_reduces_identically_in_the_untouched_slices", () => {
+    // The orders' F1 gate: adding Phase 2 types must not move the old state.
+    const state = fold(loadFixture());
+    assert.equal(state.nodeOrder.length, 3);
+    assert.equal(state.run.status, "ended");
+    deepEqual(Object.keys(state.unknown), []);
   });
 });
