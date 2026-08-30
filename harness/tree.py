@@ -404,11 +404,8 @@ class Tree:
         self._lessons_path = events.run_dir / "lessons.jsonl"
         self._gpu_spent_s = 0.0
         self._ended = False
-        conv = protocol.ruler.get("convergence") or {}
-        self._convergence = Convergence(
-            float(conv.get("epsilon") or 0.001),
-            int(conv.get("n_rounds") or 3),
-        )
+        conv = protocol.ruler["convergence"]
+        self._convergence = Convergence(float(conv["epsilon"]), int(conv["n_rounds"]))
 
         # Point runner at the git workspace working tree when present.
         if self.workspace is not None:
