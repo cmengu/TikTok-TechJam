@@ -50,6 +50,7 @@ def run_candidate(
     batch: int = 1024,
     timeout: float | None = None,
     candidate_dir: Path | None = None,
+    max_rows: int | None = None,
 ) -> subprocess.CompletedProcess:
     if candidate_dir is not None:
         workspace = ws
@@ -74,6 +75,8 @@ def run_candidate(
         env["SYNTHETIC_FAIL"] = fail
     else:
         env.pop("SYNTHETIC_FAIL", None)
+    if max_rows is not None:
+        env["MAX_ROWS"] = str(max_rows)
     return subprocess.run(
         [sys.executable, "template.py"],
         cwd=str(ws),
