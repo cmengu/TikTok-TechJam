@@ -113,7 +113,29 @@ export const initial = () => ({
   },
 
   submissions: [],
+  submissionRuns: [],
   interventions: [],
+
+  // --- Phase 2 (context/Phase2_event_contract.md) ---------------------------
+  /** move_selected, in order: the topology decision taken each round. */
+  moves: [],
+  /**
+   * The verification cascade. `byNode[id]` is that node's level history;
+   * `rejected` counts where a node died, so "rejected for free" (omega, before
+   * any LLM call or run) is a number on screen; `counters` totals what the
+   * cascade actually spent.
+   */
+  cascade: {
+    byNode: {},
+    rejected: { omega: 0, v_sem: 0, smoke: 0 },
+    counters: { llmCalls: 0, runs: 0 },
+  },
+  /** lesson_written rows, same shape as lessons.jsonl. */
+  lessons: [],
+  /** proposal_rejected keyed by pattern — the forbidden set, first sighting wins. */
+  forbidden: {},
+  /** attribution_checked keyed by node — the observables behind clear/unclear. */
+  attribution: { byNode: {} },
 
   /** Current incumbent node id (null until first promotion / incumbent_changed). */
   incumbent: null,
@@ -125,6 +147,14 @@ export const initial = () => ({
 
 function capPush(arr, item, cap) {
   return [...arr, item].slice(-cap);
+}
+
+function isNum(x) {
+  return typeof x === "number" && Number.isFinite(x);
+}
+
+function numOr0(x) {
+  return isNum(x) ? x : 0;
 }
 
 function bump(map, key) {
@@ -402,6 +432,85 @@ export function reduce(state, ev) {
       if (ev.incumbent != null) {
         next.incumbent = ev.incumbent;
       }
+      break;
+    }
+
+    // --- Phase 2 -------------------------------------------------------------
+    // Each case skips an event missing its identifying field rather than
+    // throwing: a malformed line must never take the stream down.
+
+    case "submission_run": {
+      if (!isNum(ev.node)) {
+        next.unknown = bump(next.unknown, "malformed:submission_run");
+        break;
+      }
+      next.submissionRuns = capPush(state.submissionRuns, ev, LOG_CAP);
+      break;
+    }
+
+    case "move_selected": {
+      if (!isNum(ev.round)) {
+        next.unknown = bump(next.unknown, "malformed:move_selected");
+        break;
+      }
+      next.moves = capPush(state.moves, ev, LOG_CAP);
+      break;
+    }
+
+    case "verify_level": {
+      if (!isNum(ev.node) || typeof ev.level !== "string") {
+        next.unknown = bump(next.unknown, "malformed:verify_level");
+        break;
+      }
+      const prior = state.cascade.byNode[ev.node] || [];
+      const rejected = { ...state.cascade.rejected };
+      // `passed === false` is the only rejection; a missing flag is not one.
+      if (ev.passed === false && rejected[ev.level] !== undefined) {
+        rejected[ev.level] = rejected[ev.level] + 1;
+      }
+      next.cascade = {
+        ...state.cascade,
+        byNode: { ...state.cascade.byNode, [ev.node]: [...prior, ev] },
+        rejected,
+        counters: {
+          llmCalls: state.cascade.counters.llmCalls + numOr0(ev.llm_calls),
+          runs: state.cascade.counters.runs + numOr0(ev.runs),
+        },
+      };
+      break;
+    }
+
+    case "lesson_written": {
+      if (!isNum(ev.node)) {
+        next.unknown = bump(next.unknown, "malformed:lesson_written");
+        break;
+      }
+      next.lessons = capPush(state.lessons, ev, LOG_CAP);
+      break;
+    }
+
+    case "proposal_rejected": {
+      if (typeof ev.pattern !== "string" || ev.pattern === "") {
+        next.unknown = bump(next.unknown, "malformed:proposal_rejected");
+        break;
+      }
+      // First sighting wins: `first_round` is the round the pattern was banned,
+      // and a later rejection must not overwrite it.
+      next.forbidden = state.forbidden[ev.pattern]
+        ? state.forbidden
+        : { ...state.forbidden, [ev.pattern]: ev };
+      break;
+    }
+
+    case "attribution_checked": {
+      if (!isNum(ev.node) || typeof ev.result !== "string") {
+        next.unknown = bump(next.unknown, "malformed:attribution_checked");
+        break;
+      }
+      next.attribution = {
+        ...state.attribution,
+        byNode: { ...state.attribution.byNode, [ev.node]: ev },
+      };
       break;
     }
 
