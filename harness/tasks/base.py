@@ -15,6 +15,7 @@ class TaskPaths:
     search_validation: Path
     holdout_validation: Path
     scoring_script: Path | None
+    oracle_features: Path | None = None
 
 
 class Task(Protocol):
