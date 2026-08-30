@@ -60,23 +60,37 @@ class KuaiRandTask:
 
             raw = KIT_DIR / "KuaiRand-Pure" / "data"
 
+        from harness.kit import KIT_DIR
+
         digests = {
             "train": _sha256_file(raw / "log_standard_4_08_to_4_21_pure.csv"),
             "test": _sha256_file(raw / "log_standard_4_22_to_5_08_pure.csv"),
+            "split_train": _sha256_file(data_dir / "train.csv"),
             "search": _sha256_file(data_dir / "search_validation.csv"),
             "holdout": _sha256_file(data_dir / "oracle_features.csv"),
             "script": _score_script_sha(),
+            "search_labels": _sha256_file(harness_only / "search_labels.csv"),
+            "oracle_labels": _sha256_file(harness_only / "oracle_labels.csv"),
+            "test_features": _sha256_file(harness_only / "test_features.csv"),
+            "submit": _sha256_file(KIT_DIR / "submit.py"),
         }
 
         ruler = protocol.ruler
         expected = {
             "train": ruler["data"]["train"]["sha256"],
             "test": ruler["data"]["test"]["sha256"],
+            "split_train": ruler["splits"]["train"]["sha256"],
             "search": ruler["splits"]["search_validation"]["sha256"],
             "holdout": ruler["splits"]["holdout_validation"]["sha256"],
             "script": ruler["scoring"]["script_sha"],
+            "search_labels": ruler["splits"]["search_validation"].get("labels_sha256"),
+            "oracle_labels": ruler["splits"]["holdout_validation"].get("labels_sha256"),
+            "test_features": ruler["splits"]["test"].get("sha256"),
+            "submit": ruler["scoring"].get("submit_sha"),
         }
         for key, exp in expected.items():
+            if exp is None:
+                raise ValueError(f"missing sha256 for {key} in protocol")
             if _is_placeholder(str(exp)):
                 continue
             if str(exp) != digests[key]:
@@ -86,8 +100,6 @@ class KuaiRandTask:
 
         evaluate_sha = ruler["scoring"].get("evaluate_sha")
         if evaluate_sha and not _is_placeholder(str(evaluate_sha)):
-            from harness.kit import KIT_DIR
-
             actual = _sha256_file(KIT_DIR / "evaluate.py")
             if str(evaluate_sha) != actual:
                 raise ValueError(f"evaluate_sha mismatch: yaml={evaluate_sha} disk={actual}")
@@ -120,9 +132,10 @@ class KuaiRandTask:
             **existing,
             **digests,
             "script": digests["script"],
-            "search_labels": _sha256_file(harness_only / "search_labels.csv"),
-            "oracle_labels": _sha256_file(harness_only / "oracle_labels.csv"),
-            "test_features": _sha256_file(harness_only / "test_features.csv"),
+            "search_labels": digests["search_labels"],
+            "oracle_labels": digests["oracle_labels"],
+            "test_features": digests["test_features"],
+            "submit": digests["submit"],
         }
         digest_path.write_text(
             json.dumps(merged, indent=2) + "\n",

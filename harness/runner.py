@@ -427,6 +427,7 @@ class Runner:
                 wall_s=completed.wall_s,
                 result_path=result_path,
                 checkpoint_path=self._latest_checkpoint(workspace),
+                env=env,
             )
 
         event_returncode = completed.returncode
@@ -490,6 +491,7 @@ class Runner:
             wall_s=completed.wall_s,
             result_path=result_path if result_path.is_file() else None,
             checkpoint_path=self._latest_checkpoint(workspace),
+            env=env,
         )
 
     def _stage_candidate(self, workspace: Path) -> None:

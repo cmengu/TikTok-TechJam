@@ -4,6 +4,7 @@ phase 6 adds ``run`` (resume deferred — Tree.rebuild only)."""
 from __future__ import annotations
 
 import argparse
+import copy
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,26 @@ from harness.attribute import claim_from_bank_row
 from harness.types import Hypothesis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _placeholder_ruler_if_demo(protocol: Protocol, rows: int) -> Protocol:
+    """Synthetic demo only: swap ruler digests for placeholders when rows != 1e6."""
+    if protocol.task != "synthetic" or rows == 1_000_000:
+        return protocol
+    ruler = copy.deepcopy(protocol.ruler)
+    ruler["data"]["train"]["sha256"] = "0" * 63 + "1"
+    ruler["data"]["test"]["sha256"] = "0" * 63 + "2"
+    ruler["splits"]["search_validation"]["sha256"] = "0" * 63 + "3"
+    ruler["splits"]["holdout_validation"]["sha256"] = "0" * 63 + "4"
+    ruler["scoring"]["script_sha"] = "0" * 63 + "5"
+    return Protocol(
+        task=protocol.task,
+        schema_version=protocol.schema_version,
+        ruler=ruler,
+        run=protocol.run,
+        protocol_hash=protocol_hash(ruler),
+        path=protocol.path,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -131,22 +152,7 @@ def _cmd_run(argv: list[str]) -> None:
     parser.add_argument("--budget", type=float, default=None, help="GPU-hours cap")
     args = parser.parse_args(argv)
 
-    protocol = load(args.protocol)
-    if args.rows != 1_000_000:
-        ruler = copy.deepcopy(protocol.ruler)
-        ruler["data"]["train"]["sha256"] = "0" * 63 + "1"
-        ruler["data"]["test"]["sha256"] = "0" * 63 + "2"
-        ruler["splits"]["search_validation"]["sha256"] = "0" * 63 + "3"
-        ruler["splits"]["holdout_validation"]["sha256"] = "0" * 63 + "4"
-        ruler["scoring"]["script_sha"] = "0" * 63 + "5"
-        protocol = Protocol(
-            task=protocol.task,
-            schema_version=protocol.schema_version,
-            ruler=ruler,
-            run=protocol.run,
-            protocol_hash=protocol_hash(ruler),
-            path=protocol.path,
-        )
+    protocol = _placeholder_ruler_if_demo(load(args.protocol), args.rows)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     run_id = f"{protocol.task}-{stamp}"
@@ -314,22 +320,9 @@ def _cmd_run_one(argv: list[str]) -> None:
     parser.add_argument("--heartbeat", type=float, default=2.0)
     args = parser.parse_args(argv)
 
-    protocol = load(args.protocol)
-    if args.rows != 1_000_000:
-        ruler = copy.deepcopy(protocol.ruler)
-        ruler["data"]["train"]["sha256"] = "0" * 63 + "1"
-        ruler["data"]["test"]["sha256"] = "0" * 63 + "2"
-        ruler["splits"]["search_validation"]["sha256"] = "0" * 63 + "3"
-        ruler["splits"]["holdout_validation"]["sha256"] = "0" * 63 + "4"
-        ruler["scoring"]["script_sha"] = "0" * 63 + "5"
-        protocol = Protocol(
-            task=protocol.task,
-            schema_version=protocol.schema_version,
-            ruler=ruler,
-            run=protocol.run,
-            protocol_hash=protocol_hash(ruler),
-            path=protocol.path,
-        )
+    loaded = load(args.protocol)
+    protocol = _placeholder_ruler_if_demo(loaded, args.rows)
+    if protocol is not loaded:
         print(
             f"note: rows={args.rows} -> demo protocol with placeholder hashes",
             file=sys.stderr,

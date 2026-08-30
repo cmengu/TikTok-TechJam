@@ -30,6 +30,7 @@ ruler:
       rows: 124909
       file: search_validation.csv
       labels: harness_only/search_labels.csv
+      labels_sha256: b40c1bb6c911a1873e0c4c0e814b166fe0e2d6b46d77d959005fb6f72ec4b8ac
       sha256: e983c35c2c4edaf32fec171e65ae912cb88135ac609fceab87fd71b456c38da9
     holdout_validation:
       from: random_log
@@ -37,6 +38,7 @@ ruler:
         order; every label column stripped candidate-side
       file: oracle_features.csv
       labels: harness_only/oracle_labels.csv
+      labels_sha256: 9ac39a99e1748d610b40f778dcf13508b193c3b8a84fa34188a565bf61f95b21
       sha256: 895ec3241e0a04b0b77c2818e98a91ca0504028cb62448035c873b7b10e89df3
       rows: 288338
     test:
@@ -44,6 +46,7 @@ ruler:
         submission run; labels never written, never scored by the harness
       file: harness_only/test_features.csv
       labels: null
+      sha256: 627667f4f7d0d734f6ab7383fa01cd23ffd1830c5f04d3636c8b179198643809
       rows: 170588
   metrics:
     primary:

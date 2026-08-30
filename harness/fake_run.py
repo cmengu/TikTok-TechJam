@@ -6,7 +6,7 @@ import shutil
 import time
 from pathlib import Path
 
-from harness.events import EventLog
+from harness.events import MEASURED, EventLog
 from harness.protocol import load
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -472,6 +472,8 @@ def write(run_dir: Path | str, speed: float = 20.0, instant: bool = False) -> st
                 time.sleep(delay)
             payload = dict(ev)
             etype = payload.pop("type")
+            if MEASURED & payload.keys():
+                payload.setdefault("producer", "measure")
             if etype == "heartbeat":
                 worker = payload.pop("worker")
                 log.heartbeat(worker, **payload)

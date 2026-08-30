@@ -457,7 +457,16 @@ class Measure:
             and oracle_delta is None
             and on_promote_oracle is not None
         ):
-            oracle_delta = on_promote_oracle()
+            try:
+                oracle_delta = on_promote_oracle()
+            except (HoldoutBudgetExceeded, RuntimeError) as exc:
+                self.events.emit(
+                    "failure",
+                    node=node.id,
+                    summary=f"oracle failed: {exc}",
+                    **{"class": "oracle_failed"},
+                )
+                oracle_delta = None
         if oracle_delta is not None:
             payload["oracle_delta"] = float(oracle_delta)
         if rule_trips:

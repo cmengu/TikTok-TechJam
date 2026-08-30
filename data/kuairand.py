@@ -193,9 +193,12 @@ def build(raw_dir: Path, out_dir: Path, protocol_path: Path) -> dict[str, str]:
     ruler["splits"]["train"]["sha256"] = digests["split_train"]
     ruler["splits"]["train"]["rows"] = len(train_rows)
     ruler["splits"]["search_validation"]["sha256"] = digests["split_search"]
+    ruler["splits"]["search_validation"]["labels_sha256"] = digests["labels_search"]
     ruler["splits"]["search_validation"]["rows"] = len(valid_rows)
     ruler["splits"]["holdout_validation"]["sha256"] = digests["split_holdout"]
+    ruler["splits"]["holdout_validation"]["labels_sha256"] = digests["labels_holdout"]
     ruler["splits"]["holdout_validation"]["rows"] = len(oracle_rows)
+    ruler["splits"]["test"]["sha256"] = digests["split_test"]
     ruler["splits"]["test"]["rows"] = len(test_rows)
     ruler["scoring"]["evaluate_sha"] = digests["evaluate"]
     ruler["scoring"]["submit_sha"] = digests["submit"]

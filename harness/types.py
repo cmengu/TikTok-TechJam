@@ -116,6 +116,7 @@ class RunResult:
     wall_s: float
     result_path: Path | None
     checkpoint_path: Path | None
+    env: dict[str, str] | None = None
 
 
 @dataclass

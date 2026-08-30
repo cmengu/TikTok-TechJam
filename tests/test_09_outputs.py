@@ -18,12 +18,12 @@ from harness.types import Cost, Node
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _node(node_id: int = 3) -> Node:
+def _node(node_id: int = 3, commit: str = "abc") -> Node:
     return Node(
         id=node_id,
         parent=1,
         hypothesis_id="h-train-1",
-        commit="abc",
+        commit=commit,
         state="promoted",
         rung="replicate",
         kind="draft",
@@ -203,6 +203,17 @@ def test_kuairand_submission_reruns_on_test_features(tmp_path: Path):
     )
 
     events = EventLog(tmp_path / "run", "sub-test", proto)
+    run_env = {
+        "TRAIN": str(task._paths.train),
+        "VALID": str(task._paths.search_validation),
+        "WORKSPACE": str(tmp_path / "run" / "rerun"),
+        "SEED": "0",
+        "EPOCHS": "12",
+        "BATCH": "2048",
+        "LR": "0.001",
+        "DEVICE": "cpu",
+        "FEATURES": "base",
+    }
     dest = write_submission(
         _node(),
         task,
@@ -213,6 +224,7 @@ def test_kuairand_submission_reruns_on_test_features(tmp_path: Path):
         seed=0,
         candidate_src=stub,
         timeout_s=60.0,
+        run_env=run_env,
     )
     events.close()
     assert dest.is_file()
@@ -229,4 +241,80 @@ def test_kuairand_submission_reruns_on_test_features(tmp_path: Path):
     assert run_ev["node"] == 3
     assert run_ev["rows"] == n_test
     assert run_ev["digest"]
+    assert run_ev["seed"] == "0"
+    assert run_ev["env"]["EPOCHS"] == "12"
+    assert run_ev["env"]["BATCH"] == "2048"
     assert written["seq"] > run_ev["seq"]
+
+
+@pytest.mark.skipif(
+    not (ROOT / "data" / "kuairand" / "train.csv").exists(),
+    reason="KuaiRand splits not built",
+)
+def test_submission_rerun_uses_promoted_env_not_shell(tmp_path: Path, monkeypatch):
+    from harness.protocol import load as load_protocol
+    from harness.tasks.kuairand import KuaiRandTask
+
+    monkeypatch.setenv("EPOCHS", "1")
+    proto = load_protocol(ROOT / "protocols" / "kuairand.yaml")
+    task = KuaiRandTask()
+    task.prepare(proto, tmp_path / "data")
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    (stub / "template.py").write_text(
+        "import csv, json, os\n"
+        "from pathlib import Path\n"
+        "import report\n"
+        "ws = Path(os.environ['WORKSPACE'])\n"
+        "(ws / 'captured.json').write_text(json.dumps({"
+        "'EPOCHS': os.environ.get('EPOCHS'), 'BATCH': os.environ.get('BATCH')"
+        "}))\n"
+        "valid = Path(os.environ['VALID'])\n"
+        "rows = list(csv.DictReader(valid.open()))\n"
+        "out = ws / 'preds.csv'\n"
+        "with out.open('w', newline='') as fh:\n"
+        "    w = csv.writer(fh)\n"
+        "    w.writerow(['row_id', 'user_id', 'video_id', 'score'])\n"
+        "    for i, row in enumerate(rows):\n"
+        "        w.writerow([i, row['user_id'], row['video_id'], '0.5'])\n"
+        "report.result({}, out)\n",
+        encoding="utf-8",
+    )
+    events = EventLog(tmp_path / "run", "env-test", proto)
+    ws = tmp_path / "run" / "rerun"
+    dest = write_submission(
+        _node(commit="abc123"),
+        task,
+        proto,
+        "predictions",
+        tmp_path / "run",
+        events=events,
+        candidate_src=stub,
+        timeout_s=60.0,
+        run_env={
+            "TRAIN": str(task._paths.train),
+            "VALID": str(task._paths.search_validation),
+            "WORKSPACE": str(ws),
+            "SEED": "7",
+            "EPOCHS": "12",
+            "BATCH": "2048",
+            "LR": "0.001",
+            "DEVICE": "cpu",
+            "FEATURES": "base",
+        },
+    )
+    events.close()
+    captured = json.loads((ws / "captured.json").read_text())
+    assert captured["EPOCHS"] == "12"
+    assert captured["BATCH"] == "2048"
+    log = [
+        json.loads(line)
+        for line in (tmp_path / "run" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    run_ev = next(e for e in log if e["type"] == "submission_run")
+    assert run_ev["env"]["EPOCHS"] == "12"
+    assert run_ev["env"]["BATCH"] == "2048"
+    assert run_ev["env"]["SEED"] == "7"
+    assert run_ev["commit"] == "abc123"
+    assert dest.is_file()
