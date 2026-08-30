@@ -48,6 +48,7 @@ EVENT_TYPES = (
     "proposal_rejected",
     "attribution_checked",
     "move_selected",
+    "verify_level",
 )
 # Phase 5 added incumbent_changed + prediction (Plan_delta §1; no schema bump).
 STATES = (

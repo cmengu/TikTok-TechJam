@@ -1,41 +1,38 @@
-"""Phase 7: static contract checks on generated diffs (no LLM review)."""
+"""Phase 7 capability checks — every pattern now lives in candidate/rules.jsonl.
+
+This module used to carry its own copy of the constraints (a tuple of forbidden
+path fragments and a list of compiled diff patterns), which meant the contract a
+candidate was handed and the contract it was actually held to were two different
+documents. Both are now `check: static` rules with `applies_to` scopes, and this
+module is a thin adapter over `harness.verify.omega`.
+"""
 
 from __future__ import annotations
 
-import re
+from functools import lru_cache
 
-# Capability: forbidden paths in prompts and diffs.
-FORBIDDEN_PATH_FRAGMENTS = (
-    "protocols/",
-    "measure.py",
-    "rulebook",
-    "holdout",
-)
+from harness.verify import Trip, load_rules, omega
 
-# Diff-only patterns: candidate-side leakage guards (not OOF encoding heuristics).
-_DIFF_PATTERNS = (
-    re.compile(r"train_test_split\s*\("),
-    re.compile(r"""valid_cols\[\s*['"]click['"]\s*\]"""),
-    re.compile(r"""valid_cols\[\s*['"]conversion['"]\s*\]"""),
-    re.compile(r"""holdout_cols\[\s*['"]click['"]\s*\]"""),
-    re.compile(r"""holdout_cols\[\s*['"]conversion['"]\s*\]"""),
-)
+
+@lru_cache(maxsize=1)
+def _rules() -> tuple[dict, ...]:
+    return tuple(load_rules())
+
+
+def _messages(trips: list[Trip], where: str) -> list[str]:
+    return [f"{t.rule_id} in {where}: {t.statement}" for t in trips]
 
 
 def check_prompt_capability(prompt: str) -> list[str]:
-    errors: list[str] = []
-    for frag in FORBIDDEN_PATH_FRAGMENTS:
-        if frag in prompt:
-            errors.append(f"forbidden path fragment in prompt: {frag!r}")
-    return errors
+    """Rules scoped to `prompt` — the harness-only paths a coder may never see."""
+    return _messages(omega(prompt, _rules(), scope="prompt"), "prompt")
 
 
 def check_diff_contract(diff: str) -> list[str]:
-    errors: list[str] = []
-    for frag in FORBIDDEN_PATH_FRAGMENTS:
-        if frag in diff:
-            errors.append(f"forbidden path fragment in diff: {frag!r}")
-    for pat in _DIFF_PATTERNS:
-        if pat.search(diff):
-            errors.append(f"forbidden pattern in diff: {pat.pattern}")
-    return errors
+    """Rules scoped to `diff` — every `forbid` rule, plus the paths.
+
+    `require` rules are deliberately absent: a diff hunk is a fragment, and the
+    line a `require` rule wants may simply sit outside it. Those are checked
+    against the whole post-patch source by `harness.verify.cascade`.
+    """
+    return _messages(omega(diff, _rules(), scope="diff"), "diff")

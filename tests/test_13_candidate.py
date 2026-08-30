@@ -69,7 +69,7 @@ def test_baseline_reproduces_fm_score(kuairand_paths, tmp_path: Path):
 
 def test_rules_jsonl_valid():
     lines = (ROOT / "candidate" / "rules.jsonl").read_text().strip().splitlines()
-    assert len(lines) == 9
+    assert len(lines) == 18
     for line in lines:
         json.loads(line)
 

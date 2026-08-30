@@ -83,6 +83,19 @@ def _build_script() -> list[dict]:
     )
     events.append(
         {
+            "type": "verify_level",
+            "node": 1,
+            "round": 0,
+            "level": "omega",
+            "passed": True,
+            "trips": [],
+            "llm_calls": 0,
+            "runs": 0,
+            "summary": _s("node 1 omega passed with 0 trips (0 llm, 0 runs)"),
+        }
+    )
+    events.append(
+        {
             "type": "state_changed",
             "node": 1,
             "state": "running",
@@ -199,6 +212,35 @@ def _build_script() -> list[dict]:
         }
     )
 
+    # A cascade that stops at the semantic level: the trip, then the level.
+    events.append(
+        {
+            "type": "rule_trip",
+            "node": 2,
+            "round": 1,
+            "level": "v_sem",
+            "rule_id": "C7",
+            "statement": (
+                "No label-derived feature uses the row's own label "
+                "(no self-label leakage)."
+            ),
+            "severity": "fail",
+            "summary": _s("node 2 v_sem trip C7: self-label leakage"),
+        }
+    )
+    events.append(
+        {
+            "type": "verify_level",
+            "node": 2,
+            "round": 1,
+            "level": "v_sem",
+            "passed": False,
+            "trips": ["C7"],
+            "llm_calls": 1,
+            "runs": 0,
+            "summary": _s("node 2 v_sem failed (1 llm, 0 runs)"),
+        }
+    )
     events.append(
         {
             "type": "rule_trip",

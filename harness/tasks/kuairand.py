@@ -32,6 +32,7 @@ class KuaiRandTask:
     prediction_columns = ("row_id", "user_id", "video_id", "score")
     include_oracle_delta = True
     candidate_dir = REPO_ROOT / "candidate" / "kuairand"
+    rules_path = REPO_ROOT / "candidate" / "rules.jsonl"
 
     def __init__(self) -> None:
         self._paths: TaskPaths | None = None
