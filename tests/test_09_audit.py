@@ -58,7 +58,7 @@ def test_reliability_counts(fake_events: list[dict]):
     rel = reliability(fake_events)
     assert rel["failures_by_class"] == {"cuda_oom": 1, "stall": 1}
     assert rel["recoveries"] == {"ok": 2, "failed": 0}
-    assert rel["rule_trips"] == 1
+    assert rel["rule_trips"] == 2
 
 
 def test_longest_unattended(fake_events: list[dict]):
