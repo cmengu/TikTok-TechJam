@@ -145,7 +145,7 @@ def test_missing_expected_gain_rejected(tmp_path: Path):
     llm = FakeLLM({"researcher": [(payload, _usage())]})
     assert propose(llm, "brief", "incumbent", {}, [], cache) is None
     rows = [e for e in _read_events(events) if e["type"] == "rule_trip"]
-    assert rows and rows[-1]["rule"] == "hypothesis_schema"
+    assert rows and rows[-1]["rule_id"] == "hypothesis_schema"
 
 
 def test_bad_stage_rejected(tmp_path: Path):

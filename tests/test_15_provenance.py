@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.events import EventLog, MEASURED, NumericProvenanceError
+from harness.events import EventLog, MEASURED, NumericProvenanceError, ForecastProvenanceError
 from harness.protocol import load
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,13 +51,20 @@ def test_measure_can_emit_a_metric(log, tmp_path):
 
 
 def test_expected_gain_never_enters_a_verdict(log):
-    with pytest.raises(AssertionError, match="forecast"):
+    with pytest.raises(ForecastProvenanceError) as exc:
         log.emit(
             "verdict",
             summary="forecast leaked into verdict",
             expected_gain=0.01,
             producer="measure",
         )
+    assert "expected_gain" in exc.value.args[0]
+
+
+def test_fake_run_does_not_exempt_provenance():
+    src = (ROOT / "harness" / "fake_run.py").read_text(encoding="utf-8")
+    assert "setdefault" not in src
+    assert "producer" in src
 
 
 def test_every_number_in_a_run_has_a_producer(tmp_path: Path):

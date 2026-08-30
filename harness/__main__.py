@@ -380,7 +380,7 @@ def _cmd_run_one(argv: list[str]) -> None:
         )
         if result.ok and result.metrics:
             payload = {
-                "producer": "measure",
+                "producer": result.producer,
                 "metric": getattr(task, "metric", None) or "primary",
                 "seed": args.seed,
                 "rung": "screen",

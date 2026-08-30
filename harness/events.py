@@ -34,6 +34,10 @@ MEASURED = frozenset({
 class NumericProvenanceError(Exception):
     """A MEASURED field was emitted by something other than the measurement layer."""
 
+
+class ForecastProvenanceError(Exception):
+    """A forecast (expected_*) entered an event that is not hypothesis_queued."""
+
 _FSYNC_TYPES = frozenset({"verdict", "submission_run", "submission_written", "run_ended"})
 _JSON_DUMP_KW = {
     "separators": (",", ":"),
@@ -103,9 +107,9 @@ class EventLog:
         if leaked and fields.get("producer") != "measure":
             raise NumericProvenanceError(sorted(leaked))
         if type != "hypothesis_queued":
-            assert not any(k.startswith("expected_") for k in fields), (
-                "a forecast may not enter a verdict"
-            )
+            forecast = [k for k in fields if str(k).startswith("expected_")]
+            if forecast:
+                raise ForecastProvenanceError(sorted(forecast))
 
         with self._close_lock:
             if self._closed:

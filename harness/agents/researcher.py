@@ -242,8 +242,10 @@ def propose(
         if events is not None:
             events.emit(
                 "rule_trip",
-                rule="hypothesis_schema",
-                id="propose",
+                rule_id="hypothesis_schema",
+                statement=str(err),
+                severity="fail",
+                round=0,
                 summary=f"schema reject: {err}",
             )
         return None

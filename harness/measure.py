@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
 from harness.events import EventLog
+from harness.overfit import gap_alarm, seed_consistency
 from harness.protocol import Protocol
 from harness.types import Node, Rung, RunResult, State, Verdict
 
@@ -267,6 +268,10 @@ class Measure:
         self._holdout_visits = 0
         self._replicate_deltas: list[list[float]] = []
         self._rho_refreshed = False
+        # Per-node inconclusive count for inconclusive_next. Lives here, not
+        # on verdict()'s signature: the log is the record, this is the tally.
+        self._inconclusive_by_node: dict[int, int] = {}
+        self._promoted_events: list[dict] = []
         self._timeout_s = float(
             (protocol.run or {}).get("measure_timeout_s", 600.0)
             if hasattr(protocol, "run")
@@ -418,13 +423,26 @@ class Measure:
                     self.events.emit(
                         "rule_trip",
                         node=node.id,
-                        rule=rule_id,
+                        rule_id=rule_id,
+                        statement=rule_id,
+                        severity="fail",
+                        round=0,
                         summary=f"node {node.id} rule_trip {rule_id}",
                     )
 
             if rule_trips:
                 state = "leaked"
                 reason = f"replicate leaked: {','.join(rule_trips)}"
+            elif seed_consistency(deltas) < 1.0:
+                prior = self._inconclusive_by_node.get(node.id, 0)
+                nxt = inconclusive_next(prior)
+                if nxt == "retire":
+                    state = "retired"
+                    reason = "replicate seed consistency < 1; retired"
+                else:
+                    state = "inconclusive"
+                    reason = "replicate seed consistency < 1; requeue"
+                    self._inconclusive_by_node[node.id] = prior + 1
             elif decision == "pass":
                 if attribution == "unclear":
                     state = "inconclusive"
@@ -432,7 +450,28 @@ class Measure:
                 else:
                     # attribution "clear" or None → promote
                     state = "promoted"
-                    reason = f"replicate pass: mean Δ={delta_mean:+.4f} ≥ bar={band.bar:.4f}"
+                    reason = (
+                        f"replicate pass: mean Δ={delta_mean:+.4f} "
+                        f"≥ bar={band.bar:.4f}"
+                    )
+                    if gap_alarm(self._promoted_events):
+                        if oracle_delta is None and on_promote_oracle is not None:
+                            try:
+                                oracle_delta = on_promote_oracle()
+                            except (HoldoutBudgetExceeded, RuntimeError) as exc:
+                                self.events.emit(
+                                    "failure",
+                                    node=node.id,
+                                    summary=f"oracle failed: {exc}",
+                                    **{"class": "oracle_failed"},
+                                )
+                                oracle_delta = None
+                            on_promote_oracle = None
+                        if oracle_delta is None or float(oracle_delta) <= 0:
+                            state = "rejected"
+                            reason = (
+                                "gap_alarm: oracle_delta must be > 0 to promote"
+                            )
             elif decision == "fail_sign":
                 state = "rejected"
                 reason = "replicate fail_sign"
@@ -493,6 +532,15 @@ class Measure:
         self.events.emit("verdict", **payload)
 
         if state == "promoted":
+            self._promoted_events.append(
+                {
+                    "type": "verdict",
+                    "state": "promoted",
+                    "node": node.id,
+                    "delta_mean": delta_mean,
+                    "oracle_delta": oracle_delta,
+                }
+            )
             self.events.emit(
                 "incumbent_changed",
                 node=node.id,
@@ -574,6 +622,21 @@ class Measure:
             delta_mean=delta_mean,
             accepted=accepted,
             best_reported=next_best,
+        )
+
+    def emit_cached_prediction(self, node: Node, value: float) -> None:
+        """Publish a holdout number that originated in this Measure, not the tree."""
+        self.events.emit(
+            "prediction",
+            node=node.id,
+            metric=self.metric,
+            value=float(value),
+            best_reported=float(value),
+            producer="measure",
+            summary=(
+                f"prediction {float(value):.4f} "
+                "(baseline holdout cache, no promotion)"
+            ),
         )
 
     def maybe_refresh(self) -> Band | None:
