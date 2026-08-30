@@ -189,6 +189,7 @@ class Queue:
             parent_node=hyp.parent_node,
             tokens_in=int(getattr(hyp, "tokens_in", 0) or 0),
             tokens_out=int(getattr(hyp, "tokens_out", 0) or 0),
+            pattern=hyp.pattern or hyp.mechanism,
             summary=f"queued {hyp.id} ({hyp.stage}/{hyp.mechanism})",
         )
         return True
@@ -456,17 +457,20 @@ class Tree:
         delta: float | None,
         verdict: str,
     ) -> None:
-        write_lesson(
-            self._lessons_path,
-            {
-                "round": self._nodes_done,
-                "node": node.id,
-                "family": family,
-                "pattern": pattern,
-                "defect": defect,
-                "delta": delta,
-                "verdict": verdict,
-            },
+        row = {
+            "round": self._nodes_done,
+            "node": node.id,
+            "family": family,
+            "pattern": pattern,
+            "defect": defect,
+            "delta": delta,
+            "verdict": verdict,
+        }
+        write_lesson(self._lessons_path, row)
+        self.events.emit(
+            "lesson_written",
+            **row,
+            summary=f"lesson [{defect}] {pattern} round {self._nodes_done}",
         )
 
     def calibrate_baseline(self, baseline: Node) -> SeedCache:

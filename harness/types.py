@@ -40,6 +40,8 @@ EVENT_TYPES = (
     "run_ended",
     "incumbent_changed",
     "prediction",
+    "lesson_written",
+    "proposal_rejected",
 )
 # Phase 5 added incumbent_changed + prediction (Plan_delta §1; no schema bump).
 STATES = (

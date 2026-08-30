@@ -115,10 +115,11 @@ def test_forbidden_filter_precedes_the_llm(tmp_path: Path):
     trips = [
         json.loads(l)
         for l in (tmp_path / "run" / "events.jsonl").read_text().splitlines()
-        if l.strip() and json.loads(l).get("type") == "rule_trip"
+        if l.strip() and json.loads(l).get("type") == "proposal_rejected"
     ]
-    assert trips and trips[-1]["rule"] == "forbidden_pattern"
-    assert trips[-1]["round"] == 4
+    assert trips and trips[-1]["reason"] == "forbidden"
+    assert trips[-1]["first_round"] == 4
+    assert trips[-1]["tokens_in"] == 0
 
 
 def test_forbidden_is_a_fold(tmp_path: Path):
