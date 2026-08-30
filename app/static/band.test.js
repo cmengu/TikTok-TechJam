@@ -365,9 +365,14 @@ describe("band — real fixture is internally consistent with harness/measure.py
       .split("\n")
       .map((line) => line.replace(/#.*$/, ""))
       .join("\n");
-    // harness/measure.py:21: PROMOTE_FLOOR = 0.010
-    const floorM = srcNoComments.match(/PROMOTE_FLOOR\s*=\s*([0-9.]+)/);
-    assert.ok(floorM, "could not find PROMOTE_FLOOR in harness/measure.py");
+    // Step 5 made the floor calibratable: harness/measure.py now binds
+    // PROMOTE_FLOOR to a name (_PROMOTE_FLOOR_DEFAULT = 0.010) and rebinds it
+    // to `2.0 * SIGMA` inside _apply_calibration. Scraping /PROMOTE_FLOOR\s*=/
+    // therefore reads the calibration expression's leading 2.0, not a floor.
+    // The fake stream runs an uncalibrated protocol, so the default is the
+    // value its bars were computed with.
+    const floorM = srcNoComments.match(/_PROMOTE_FLOOR_DEFAULT\s*=\s*([0-9.]+)/);
+    assert.ok(floorM, "could not find _PROMOTE_FLOOR_DEFAULT in harness/measure.py");
     // harness/measure.py:23: PROMOTE_Z_OVER_SQRT_K = 0.95
     const zM = srcNoComments.match(/PROMOTE_Z_OVER_SQRT_K\s*=\s*([0-9.]+)/);
     assert.ok(zM, "could not find PROMOTE_Z_OVER_SQRT_K in harness/measure.py");

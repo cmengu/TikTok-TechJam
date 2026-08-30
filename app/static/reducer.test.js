@@ -228,8 +228,11 @@ describe("reducer — Checkpoint C: state contract", () => {
     const state = fold(loadFixture());
     const node3 = state.nodes[3];
     assert.equal(node3.scores.cvr_auc.length, node3.seeds.length);
-    deepEqual(node3.scores.cvr_auc, [0.531, 0.529]);
-    deepEqual(node3.seeds, [1, 2]);
+    // The fixture's node 3 emits a replicating verdict (seed 1) and then a
+    // promoted one over three seeds; the reducer concatenates both, so seed 1
+    // legitimately appears twice.
+    deepEqual(node3.scores.cvr_auc, [0.531, 0.529, 0.53, 0.528]);
+    deepEqual(node3.seeds, [1, 1, 2, 3]);
   });
 
   it("test_failure_and_recovery_counted_by_class", () => {
@@ -242,8 +245,10 @@ describe("reducer — Checkpoint C: state contract", () => {
 
   it("test_rule_trip_counted_by_rule", () => {
     const state = fold(loadFixture());
-    deepEqual(state.reliability.ruleTripsByRule, { no_test_peek: 1 });
-    assert.equal(state.nodes[2].ruleTrips.length, 1);
+    // Two shapes coexist in the fixture: the pre-Phase-2 leak-audit trip keyed
+    // on `rule`, and the step-7 cascade trip keyed on `rule_id`.
+    deepEqual(state.reliability.ruleTripsByRule, { no_test_peek: 1, C7: 1 });
+    assert.equal(state.nodes[2].ruleTrips.length, 2);
   });
 
   it("test_research_sources_deduped_by_id", () => {
