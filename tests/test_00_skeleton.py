@@ -64,6 +64,7 @@ PRODUCT_STATES = {
     "retired",
     "leaked",
     "debugging",
+    "failed",
 }
 
 VOCAB_EVENT_TYPES = (

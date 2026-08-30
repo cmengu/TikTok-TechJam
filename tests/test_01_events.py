@@ -122,7 +122,7 @@ def test_heartbeat_via_emit_raises(run_dir, protocol):
 def test_bad_state_raises(run_dir, protocol):
     log = EventLog(run_dir, "synthetic-test", protocol)
     with pytest.raises(ValueError):
-        log.emit("state_changed", state="failed", summary="bad")
+        log.emit("state_changed", state="nope", summary="bad")
     log.close()
     assert len(_read_lines(_events_path(run_dir))) == 1
 

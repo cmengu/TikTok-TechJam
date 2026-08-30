@@ -30,7 +30,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE_DIR = REPO_ROOT / "candidate"
 
 TRANSITIONS: dict[str, set[str]] = {
-    "screening": {"running", "retired"},
     "running": {
         "replicating",
         "inconclusive",
@@ -38,9 +37,12 @@ TRANSITIONS: dict[str, set[str]] = {
         "debugging",
         "leaked",
         "retired",
+        "failed",
     },
-    "replicating": {"promoted", "inconclusive", "rejected", "leaked", "retired"},
-    "debugging": {"running", "retired"},
+    "replicating": {"promoted", "inconclusive", "rejected", "leaked", "retired", "failed"},
+    "debugging": {"running", "retired", "failed"},
+    "failed": {"debugging", "retired"},
+    "screening": {"running", "retired", "failed"},
     "inconclusive": {"replicating", "retired"},
     "promoted": {"retired"},
     "rejected": set(),
@@ -103,9 +105,6 @@ def select(nodes: list[Node], budget_left_s: float) -> Move:
     live = [n for n in nodes if n.state in ("running", "replicating")]
     if len(live) >= MAX_LIVE_BRANCHES:
         return Move(None, None, "at branch cap")
-    drafts = [n for n in nodes if n.kind == "draft" and n.state == "promoted"]
-    if len(drafts) < DRAFTS_MIN:
-        return Move("draft", None, "breadth floor")
     broken = [
         n
         for n in nodes
@@ -113,6 +112,9 @@ def select(nodes: list[Node], budget_left_s: float) -> Move:
     ]
     if broken:
         return Move("debug", _best(broken).id, "repair before extend")
+    drafts = [n for n in nodes if n.kind == "draft" and n.state == "promoted"]
+    if len(drafts) < DRAFTS_MIN:
+        return Move("draft", None, "breadth floor")
     return Move("improve", _argmax_promoted(nodes).id, "extend best")
 
 
@@ -914,16 +916,10 @@ class Tree:
         fc = result.failure_class or "crash"
         depth = self._debug_depth.get(node.id, 0)
         if fc in ("crash", "contract_violation") and depth < DEBUG_DEPTH:
-            self._debug_depth[node.id] = depth + 1
-            debug_k = self._debug_depth[node.id]
-            if node.state != "debugging":
-                self._set_state(node, "debugging")
-            self._commit_hyp(node, hyp, result.stderr_tail, debug_k)
-            self._node_attempt[node.id] = self._node_attempt.get(node.id, 1) + 1
-            if node.state != "running":
-                self._set_state(node, "running", f"node {node.id} debug retry {debug_k}")
-            return True
-        if node.state in ("debugging",):
+            if node.state not in ("failed",):
+                self._set_state(node, "failed")
+            return False
+        if node.state in ("debugging", "failed"):
             self._set_state(node, "retired")
         elif node.state in ("running", "replicating", "screening"):
             self._set_state(node, "retired")
@@ -940,6 +936,31 @@ class Tree:
             self.workspace.checkout(self.incumbent.commit)
         return False
 
+    def _act_debug(self, move: Move) -> bool:
+        node = self.nodes[int(move.parent)]  # type: ignore[arg-type]
+        hyp = self.hyp_index.get(node.hypothesis_id)
+        if hyp is None:
+            return False
+        depth = self._debug_depth.get(node.id, 0)
+        if depth >= DEBUG_DEPTH:
+            if node.state in ("failed", "debugging"):
+                self._set_state(node, "retired")
+            return True
+        self._debug_depth[node.id] = depth + 1
+        node.kind = "debug"  # type: ignore[assignment]
+        if node.state in ("failed",):
+            self._set_state(node, "debugging")
+        self._commit_hyp(node, hyp, None, self._debug_depth[node.id])
+        self._node_attempt[node.id] = self._node_attempt.get(node.id, 1) + 1
+        if node.state in ("debugging",):
+            self._set_state(node, "running", f"node {node.id} debug retry {self._debug_depth[node.id]}")
+        self._run_ladder(node, hyp)
+        self._maybe_fork(node)
+        stats = family_stats(self._read_log())
+        if self.queue:
+            self.queue.rerank(stats)
+        return True
+
     def step(self) -> bool:
         if self._ended:
             return False
@@ -953,12 +974,6 @@ class Tree:
                 limit_h = None
             if limit_h is not None and self._gpu_spent_s / 3600.0 >= limit_h:
                 self._finish("budget")
-                return False
-        if len(self.queue) == 0:
-            if self.refill_queue is not None:
-                self.refill_queue()
-            if len(self.queue) == 0:
-                self._finish("empty_queue")
                 return False
         budget_left = 1.0
         if self.budget is not None:
@@ -978,6 +993,14 @@ class Tree:
         if move.kind is None:
             self._finish("max_live_branches")
             return False
+        if move.kind == "debug" and move.parent is not None:
+            return self._act_debug(move)
+        if len(self.queue) == 0:
+            if self.refill_queue is not None:
+                self.refill_queue()
+            if len(self.queue) == 0:
+                self._finish("empty_queue")
+                return False
         hyp = self.queue.pop()
         self.hyp_index.setdefault(hyp.id, hyp)
         parent = hyp.parent_node

@@ -20,6 +20,7 @@ State = Literal[
     "retired",
     "leaked",
     "debugging",
+    "failed",
 ]
 Rung = Literal["smoke", "screen", "full", "replicate", "holdout"]
 
@@ -59,6 +60,7 @@ STATES = (
     "retired",
     "leaked",
     "debugging",
+    "failed",
 )
 
 
