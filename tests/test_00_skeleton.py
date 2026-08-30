@@ -46,6 +46,8 @@ IMPLEMENTED = {
     "harness.agents.tuner",
     "harness.agents.contract",
     "harness.agents._util",
+    "harness.feedback",
+    "harness.attribute",
     "data.kuairand",
     "harness.kit",
     "harness.tasks.kuairand",
@@ -83,6 +85,9 @@ VOCAB_EVENT_TYPES = (
     "run_ended",
     "incumbent_changed",
     "prediction",
+    "lesson_written",
+    "proposal_rejected",
+    "attribution_checked",
 )
 
 # Harness Decisions §1 — the seven fields that stay null until the webinar.
@@ -222,7 +227,7 @@ def test_types_round_trip():
 
 def test_state_vocabulary():
     assert set(STATES) == PRODUCT_STATES
-    assert len(EVENT_TYPES) == 19
+    assert len(EVENT_TYPES) == 22
     assert EVENT_TYPES == VOCAB_EVENT_TYPES
 
 

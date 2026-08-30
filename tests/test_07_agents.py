@@ -98,6 +98,7 @@ def _queue_all_bank(events: EventLog) -> None:
 
 
 def _read_events(events: EventLog) -> list[dict]:
+    events.drain()
     path = Path(events._run_dir) / "events.jsonl"  # noqa: SLF001
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
@@ -114,6 +115,12 @@ def test_valid_proposal_becomes_hypothesis(tmp_path: Path):
         "citation": "no prior",
         "expected_gain": 0.02,
         "expected_gpu_h": 0.1,
+        "claim": {
+            "mechanism": "target-encoding",
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
     }
     llm = FakeLLM({"researcher": [(payload, _usage())]})
     hyp = propose(llm, "brief", "incumbent", {}, [], cache)
@@ -187,6 +194,12 @@ def test_research_events_emitted(tmp_path: Path):
         "expected_gain": 0.02,
         "expected_gpu_h": 0.1,
         "citations": ["Paper A", "Paper B"],
+        "claim": {
+            "mechanism": "cross-stats",
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
     }
     llm = FakeLLM({"researcher": [(payload, _usage())]})
     propose(llm, "brief", "incumbent", {}, [], cache)

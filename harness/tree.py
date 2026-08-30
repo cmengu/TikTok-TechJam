@@ -13,8 +13,17 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from harness.events import EventLog
+from harness.feedback import DEFECTS, write_lesson
 from harness.measure import SeedCache
 from harness.outputs import Convergence, write_submission
+from harness.attribute import (
+    Claim,
+    attribute,
+    bundle_metrics,
+    claim_payload,
+    emit_valid_pair_baseline,
+    observable_rows,
+)
 from harness.types import Cost, Hypothesis, Node, RunResult, Verdict
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +58,6 @@ FULL_SEEDS = (1, 2, 3)
 SCREEN_SEEDS_CAL = (1, 2, 3, 4, 5)
 HOLDOUT_RUN_SEEDS = (1, 2, 3)
 SMOKE_TIMEOUT_S = 60.0
-ATTRIBUTION_HAND = "clear"
 
 
 class IllegalTransition(Exception):
@@ -186,6 +194,10 @@ class Queue:
             expected_gain=hyp.expected_gain,
             expected_gpu_h=hyp.expected_gpu_h,
             parent_node=hyp.parent_node,
+            tokens_in=int(getattr(hyp, "tokens_in", 0) or 0),
+            tokens_out=int(getattr(hyp, "tokens_out", 0) or 0),
+            pattern=hyp.pattern or hyp.mechanism,
+            claim=claim_payload(getattr(hyp, "claim", None), hyp.mechanism),
             summary=f"queued {hyp.id} ({hyp.stage}/{hyp.mechanism})",
         )
         return True
@@ -202,11 +214,11 @@ class Queue:
         if row and row.get("n", 0) > 0:
             mean_d = float(row["mean_delta"])
             sd = float(row["sd_delta"])
-            gpu = max(float(row["mean_gpu_min"]), 1e-9)
-            return (mean_d + sd) / gpu
-        # Cold-start: expected_gain / expected_gpu_h (hours → minutes-ish scale).
-        gpu_h = max(float(hyp.expected_gpu_h), 1e-9)
-        return float(hyp.expected_gain) / (gpu_h * 60.0)
+            wall_s = float(row.get("mean_wall_s") or 0.0)
+            if wall_s <= 0:
+                wall_s = float(row.get("mean_gpu_min", 0.0)) * 60.0
+            return (mean_d + sd) / max(wall_s, 1.0)
+        return float(getattr(hyp, "p_win", 0.0) or 0.0)
 
     def rerank(self, stats: dict[str, dict]) -> list[str]:
         self._items.sort(
@@ -267,11 +279,13 @@ def family_stats(events: list[dict]) -> dict[str, dict]:
         n = len(deltas)
         mean_d = statistics.mean(deltas) if deltas else 0.0
         sd = statistics.stdev(deltas) if n >= 2 else 0.0
+        mean_gpu = statistics.mean(gpus) if gpus else 1.0
         out[fam] = {
             "mean_delta": mean_d,
             "sd_delta": sd,
             "n": n,
-            "mean_gpu_min": statistics.mean(gpus) if gpus else 1.0,
+            "mean_gpu_min": mean_gpu,
+            "mean_wall_s": mean_gpu * 60.0,
         }
     return out
 
@@ -367,7 +381,6 @@ class Tree:
         screen_timeout_s: float = 300.0,
         full_timeout_s: float = 600.0,
         smoke_timeout_s: float = SMOKE_TIMEOUT_S,
-        attribution: str = ATTRIBUTION_HAND,
         refill_queue: Callable[[], None] | None = None,
     ) -> None:
         self.events = events
@@ -384,8 +397,8 @@ class Tree:
         self.screen_timeout_s = float(screen_timeout_s)
         self.full_timeout_s = float(full_timeout_s)
         self.smoke_timeout_s = float(smoke_timeout_s)
-        self.attribution = attribution
         self.refill_queue = refill_queue
+        self._inc_obs: dict[str, float] = {}
         self._initial_commit = workspace.head() if workspace is not None else None
 
         self.nodes: dict[int, Node] = {}
@@ -446,22 +459,32 @@ class Tree:
         self,
         node: Node,
         family: str,
+        pattern: str,
+        defect: str,
         delta: float | None,
-        gpu_min: float,
-        diff_summary: str,
+        verdict: str,
     ) -> None:
         row = {
+            "round": self._nodes_done,
             "node": node.id,
             "family": family,
+            "pattern": pattern,
+            "defect": defect,
             "delta": delta,
-            "gpu_min": gpu_min,
-            "diff_summary": diff_summary,
+            "verdict": verdict,
         }
-        with self._lessons_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, separators=(",", ":")) + "\n")
+        write_lesson(self._lessons_path, row)
+        self.events.emit(
+            "lesson_written",
+            **row,
+            summary=f"lesson [{defect}] {pattern} round {self._nodes_done}",
+        )
 
     def calibrate_baseline(self, baseline: Node) -> SeedCache:
         """Calibrate measure + seed caches on seeds 1,2,3 (locked)."""
+
+        metric = self.measure.metric
+        full_results: list[RunResult] = []
 
         class _Recording:
             def __init__(self, inner: Any) -> None:
@@ -471,10 +494,12 @@ class Tree:
 
             def run(self, node, rung, seed, timeout_s, **kwargs):  # noqa: ANN001
                 res = self._inner.run(node, rung, seed, timeout_s, **kwargs)
-                if res.ok and self.measure.metric in res.metrics:
+                if res.ok and metric in res.metrics:
                     self.by_rung_seed[(str(rung), int(seed))] = float(
-                        res.metrics[self.measure.metric]
+                        res.metrics[metric]
                     )
+                    if str(rung) == "full":
+                        full_results.append(res)
                 return res
 
         recorder = _Recording(self.runner)
@@ -507,6 +532,9 @@ class Tree:
 
         self.incumbent = baseline
         self.nodes[baseline.id] = baseline
+        if full_results:
+            self._inc_obs = bundle_metrics(full_results)
+        emit_valid_pair_baseline(self.events, self.protocol)
         self.events.emit(
             "incumbent_changed", node=baseline.id, reason="baseline",
             summary=f"node {baseline.id} became incumbent (baseline calibration)",
@@ -588,6 +616,9 @@ class Tree:
                 expected_gpu_h=draft.expected_gpu_h,
                 parent_node=parent,
                 patch=draft.patch,
+                pattern=draft.pattern,
+                p_win=draft.p_win,
+                claim=draft.claim,
             )
             if not self.queue.push(fork_hyp):
                 continue
@@ -636,9 +667,26 @@ class Tree:
         self._holdout_done_first = True
         self._roll_holdout_cache(report)
 
+    def _check_attribution(self, node: Node, hyp: Hypothesis, results: list[RunResult]) -> str:
+        claim = getattr(hyp, "claim", None)
+        if not isinstance(claim, Claim):
+            claim = Claim(mechanism=hyp.mechanism, observables=[])
+        after = bundle_metrics(results)
+        before = dict(self._inc_obs)
+        result = attribute(claim, before, after)
+        self.events.emit(
+            "attribution_checked",
+            node=node.id,
+            round=self._nodes_done,
+            mechanism=claim.mechanism,
+            result=result,
+            observables=observable_rows(claim, before, after),
+            summary=f"node {node.id} attribution {result} ({claim.mechanism})",
+        )
+        return result
+
     def _run_ladder(self, node: Node, hyp: Hypothesis) -> None:
         family = self._family_of(hyp)
-        diff_summary = hyp.description[:80]
         while True:
             attempt = self._node_attempt.get(node.id, 1)
             if node.state != "running":
@@ -661,13 +709,22 @@ class Tree:
                 if self._handle_failure(node, hyp, screen):
                     continue
                 return
+            attr_screen = self._check_attribution(node, hyp, [screen])
             v_screen = self.measure.verdict(
                 node, [screen], self.screen_inc, "screen",
-                attribution=self.attribution,  # type: ignore[arg-type]
+                attribution=attr_screen,  # type: ignore[arg-type]
                 gpu_min=float(screen.wall_s) / 60.0,
             )
             if v_screen.state != "replicating":
                 self._set_state(node, v_screen.state)
+                self._append_lesson(
+                    node,
+                    family,
+                    hyp.pattern or hyp.mechanism,
+                    "no_gain",
+                    v_screen.delta_mean,
+                    v_screen.state,
+                )
                 if self.workspace and self.incumbent and self.incumbent.commit:
                     self.workspace.checkout(self.incumbent.commit)
                 return
@@ -694,7 +751,7 @@ class Tree:
                     d = float(res.metrics[self.measure.metric]) - self.full_inc.get(seed)
                 except Exception:
                     d = None
-                self._append_lesson(node, family, d, gpu_min, diff_summary)
+                del d, gpu_min
             if retry:
                 continue
             if len(results) != len(FULL_SEEDS):
@@ -711,23 +768,34 @@ class Tree:
                 self._holdout_done_first = True
                 return report.delta_mean
 
+            attr_rep = self._check_attribution(node, hyp, results)
             v_rep = self.measure.verdict(
                 node, results, self.full_inc, "replicate",
-                attribution=self.attribution,  # type: ignore[arg-type]
+                attribution=attr_rep,  # type: ignore[arg-type]
                 gpu_min=total_gpu_min,
                 on_promote_oracle=(
                     _oracle_after_pass
-                    if oracle_on and self.attribution != "unclear"
+                    if oracle_on and attr_rep != "unclear"
                     else None
                 ),
             )
             self._set_state(node, v_rep.state)
+            defect = "leak_suspected" if v_rep.state == "leaked" else "no_gain"
+            self._append_lesson(
+                node,
+                family,
+                hyp.pattern or hyp.mechanism,
+                defect,
+                v_rep.delta_mean,
+                v_rep.state,
+            )
             if v_rep.state == "promoted":
                 self._promotions += 1
                 screen_roll = dict(self.screen_inc.as_dict())
                 screen_roll[SCREEN_SEED] = float(screen.metrics[self.measure.metric])
                 self.screen_inc = SeedCache(screen_roll)
                 self.full_inc = SeedCache({r.seed: float(r.metrics[self.measure.metric]) for r in results})
+                self._inc_obs = bundle_metrics(results)
                 self.incumbent = node
                 if not oracle_on:
                     self._holdout_if_needed(node, at_end=False)
@@ -803,6 +871,15 @@ class Tree:
             self._set_state(node, "retired")
         elif node.state in ("running", "replicating", "screening"):
             self._set_state(node, "retired")
+        defect = fc if fc in DEFECTS else "crash"
+        self._append_lesson(
+            node,
+            self._family_of(hyp),
+            hyp.pattern or hyp.mechanism,
+            defect,
+            None,
+            "rejected",
+        )
         if self.workspace and self.incumbent and self.incumbent.commit:
             self.workspace.checkout(self.incumbent.commit)
         return False

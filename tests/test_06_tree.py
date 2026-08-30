@@ -737,10 +737,25 @@ def test_lessons_appended(tmp_path: Path):
     try:
         tree.step()
         lines = (run_dir / "lessons.jsonl").read_text(encoding="utf-8").splitlines()
-        assert len(lines) == 3
-        for line in lines:
-            row = json.loads(line)
-            assert {"node", "family", "delta", "gpu_min", "diff_summary"} <= set(row)
+        assert len(lines) == 1
+        row = json.loads(lines[0])
+        assert {
+            "round",
+            "node",
+            "family",
+            "pattern",
+            "defect",
+            "delta",
+            "verdict",
+        } <= set(row)
+        assert row["defect"] in {
+            "crash",
+            "diverged",
+            "timeout",
+            "silently_drops_rows",
+            "leak_suspected",
+            "no_gain",
+        }
     finally:
         events.close()
 

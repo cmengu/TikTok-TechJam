@@ -27,7 +27,16 @@ def _hyp(hid: str, stage: str, mechanism: str, parent: int | None = None) -> dic
         "id": hid,
         "stage": stage,
         "mechanism": mechanism,
+        "pattern": mechanism,
+        "tokens_in": 0,
+        "tokens_out": 0,
         "parent_node": parent,
+        "claim": {
+            "mechanism": mechanism,
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
         "summary": _s(f"queued {hid} ({stage}/{mechanism})"),
     }
 
@@ -320,6 +329,26 @@ def _build_script() -> list[dict]:
     )
     events.append(
         {
+            "type": "attribution_checked",
+            "node": 3,
+            "round": 1,
+            "mechanism": "lr-schedule",
+            "result": "unclear",
+            "observables": [
+                {
+                    "name": "gauc",
+                    "source": "harness",
+                    "direction": "positive",
+                    "before": 0.50,
+                    "after": 0.50,
+                    "moved": False,
+                }
+            ],
+            "summary": _s("node 3 attribution unclear (lr-schedule)"),
+        }
+    )
+    events.append(
+        {
             "type": "verdict",
             "node": 3,
             "state": "promoted",
@@ -379,6 +408,30 @@ def _build_script() -> list[dict]:
             "node": 3,
             "path": "submission/pred.csv",
             "summary": _s("submission written from promoted node 3"),
+        }
+    )
+    events.append(
+        {
+            "type": "lesson_written",
+            "round": 1,
+            "node": 2,
+            "family": "features/crossed-ids",
+            "pattern": "crossed-ids",
+            "defect": "no_gain",
+            "delta": -0.002,
+            "verdict": "rejected",
+            "summary": _s("lesson [no_gain] crossed-ids round 1"),
+        }
+    )
+    events.append(
+        {
+            "type": "proposal_rejected",
+            "round": 1,
+            "pattern": "crossed-ids",
+            "first_round": 1,
+            "reason": "forbidden",
+            "tokens_in": 0,
+            "summary": _s("forbidden pattern crossed-ids first seen round 1"),
         }
     )
     events.append(

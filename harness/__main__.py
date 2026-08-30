@@ -14,6 +14,7 @@ import yaml
 from harness.events import EventLog
 from harness.fake_run import write as write_fake
 from harness.protocol import Protocol, load, protocol_hash
+from harness.attribute import claim_from_bank_row
 from harness.types import Hypothesis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +102,9 @@ def _load_hypotheses(path: Path) -> list[Hypothesis]:
                 patch_path = (REPO_ROOT / patch_path).resolve()
             else:
                 patch_path = patch_path.resolve()
+        claim = None
+        if row.get("observables") or row.get("claim"):
+            claim = claim_from_bank_row(row, str(row["mechanism"]))
         out.append(
             Hypothesis(
                 id=str(row["id"]),
@@ -112,6 +116,8 @@ def _load_hypotheses(path: Path) -> list[Hypothesis]:
                 expected_gpu_h=float(row.get("expected_gpu_h") or 0.1),
                 parent_node=row.get("parent_node"),
                 patch=patch_path,
+                pattern=str(row.get("pattern") or row["mechanism"]),
+                claim=claim,
             )
         )
     return out
