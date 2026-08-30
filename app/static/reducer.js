@@ -16,6 +16,7 @@ export const EVENT_TYPES = [
   "cache_lookup",
   "hypothesis_queued",
   "queue_reordered",
+  "submission_run",
   "submission_written",
   "intervention",
   "run_ended",
@@ -23,6 +24,13 @@ export const EVENT_TYPES = [
   // harness/types.py EVENT_TYPES.
   "incumbent_changed",
   "prediction",
+  // Phase 2 (context/Phase2_event_contract.md: additive types, no schema bump)
+  // — mirrors harness/types.py EVENT_TYPES.
+  "lesson_written",
+  "proposal_rejected",
+  "attribution_checked",
+  "move_selected",
+  "verify_level",
 ];
 
 export const STATES = [
@@ -35,6 +43,9 @@ export const STATES = [
   "retired",
   "leaked",
   "debugging",
+  // Phase 2 step 11b: a crash or contract violation parks the node here until
+  // a debug move repairs it or DEBUG_DEPTH retires it.
+  "failed",
 ];
 
 // hypothesis_queued is feed-worthy: a new hypothesis is the only visible
@@ -60,6 +71,14 @@ const FEED_TYPES = new Set([
   // (harness/measure.py:33).
   "incumbent_changed",
   "prediction",
+  // Phase 2: each marks a stage of one round — a gate decision, a lesson, an
+  // attribution, a topology move. None is a high-frequency tick.
+  "submission_run",
+  "lesson_written",
+  "proposal_rejected",
+  "attribution_checked",
+  "move_selected",
+  "verify_level",
 ]);
 
 const LOG_CAP = 500;
@@ -330,7 +349,13 @@ export function reduce(state, ev) {
       next.reliability = {
         ...state.reliability,
         ruleTrips: [...state.reliability.ruleTrips, ev],
-        ruleTripsByRule: bump(state.reliability.ruleTripsByRule, ev.rule),
+        // Phase 2 renamed the field to `rule_id` (event contract). Older
+        // emitters (measure.py leak audit, tree.py duplicate hypothesis) still
+        // send `rule`; accept both rather than bucketing half as "unspecified".
+        ruleTripsByRule: bump(
+          state.reliability.ruleTripsByRule,
+          ev.rule_id ?? ev.rule,
+        ),
       };
       if (ev.node != null) {
         const cur = state.nodes[ev.node];
