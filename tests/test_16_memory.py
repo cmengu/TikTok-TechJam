@@ -164,6 +164,12 @@ def test_prompt_contains_no_raw_event_json(tmp_path: Path):
         "citation": "no prior",
         "expected_gain": 0.02,
         "expected_gpu_h": 0.1,
+        "claim": {
+            "mechanism": "fresh-feat",
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
     }
     llm = FakeLLM({"researcher": [(payload, Usage(3, 5))]})
     events.emit(

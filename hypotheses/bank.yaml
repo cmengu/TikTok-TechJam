@@ -1,82 +1,136 @@
 # Phase 7 seeded hypothesis bank (feature-side first). Priors from Backend_plan §3.
 # Patches are produced by LLMCoder at run time — entries here are proposals only.
+# Every entry declares observables; at least one is harness-side (task.score).
 
 - id: bank-target-encoding
   stage: features
   mechanism: target-encoding
+  pattern: target-encoding
   description: out-of-fold target encoding for sparse categoricals
   citation: no prior
   expected_gain: 0.02
   expected_gpu_h: 0.15
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-cross-stats
   stage: features
   mechanism: cross-stats
+  pattern: cross-stats
   description: user-item cross statistics from history aggregates
   citation: no prior
   expected_gain: 0.018
   expected_gpu_h: 0.12
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-hist-cat
   stage: features
   mechanism: hist-cat
+  pattern: hist-cat
   description: weighted category history sequence features
   citation: no prior
   expected_gain: 0.022
   expected_gpu_h: 0.18
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-hist-shop
   stage: features
   mechanism: hist-shop
+  pattern: hist-shop
   description: shop-id history sequence with decay weights
   citation: no prior
   expected_gain: 0.02
   expected_gpu_h: 0.18
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-freq-bucket
   stage: features
   mechanism: freq-bucket
+  pattern: freq-bucket
   description: frequency bucket side features for rare ids
   citation: no prior
   expected_gain: 0.015
   expected_gpu_h: 0.1
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-item-cat-cross
   stage: features
   mechanism: item-cat-cross
+  pattern: item-cat-cross
   description: item x category cross embedding interaction
   citation: no prior
   expected_gain: 0.017
   expected_gpu_h: 0.14
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-brand-side
   stage: features
   mechanism: brand-side
+  pattern: brand-side
   description: brand preference side features from history
   citation: no prior
   expected_gain: 0.016
   expected_gpu_h: 0.12
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-position-bias
   stage: features
   mechanism: position-bias
+  pattern: position-bias
   description: debias position via learned position embedding
   citation: no prior
   expected_gain: 0.012
   expected_gpu_h: 0.1
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-lr-warmup
   stage: training
   mechanism: lr-warmup
+  pattern: lr-warmup
   description: linear LR warmup for first 10% of steps
   citation: no prior
   expected_gain: 0.01
   expected_gpu_h: 0.08
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-emb-dim-12
   stage: training
   mechanism: emb-dim-12
+  pattern: emb-dim-12
   description: increase embedding dimension toward prior sweet spot 8-16
   citation: no prior
   expected_gain: 0.011
   expected_gpu_h: 0.09
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
+
+- id: obj-pairwise
+  stage: objective
+  mechanism: pairwise
+  pattern: pairwise
+  description: swap pointwise log-loss for a pairwise ranking objective
+  citation: no prior
+  expected_gain: 0.02
+  expected_gpu_h: 0.15
+  observables:
+    - {name: gauc_minus_ndcg_delta, direction: positive, source: harness}
+    - {name: train_logloss, direction: up, source: candidate}
+    - {name: valid_pairs_per_epoch, direction: positive, source: candidate}

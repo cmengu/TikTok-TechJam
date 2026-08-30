@@ -20,6 +20,7 @@ from harness.feedback import (
     format_lesson,
     render,
 )
+from harness.attribute import claim_from_bank_row, claim_from_mapping
 from harness.types import Cost, Hypothesis
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +43,12 @@ HYPOTHESIS_SCHEMA = {
     "expected_gain": "number",
     "expected_gpu_h": "number",
     "pattern": "slug",
+    "claim": {
+        "mechanism": "slug",
+        "observables": [
+            {"name": "str", "source": "harness|candidate", "direction": "positive|up|down|negative"}
+        ],
+    },
 }
 
 
@@ -83,6 +90,7 @@ def _bank_to_hypothesis(row: dict[str, Any]) -> Hypothesis:
         patch=None,
         pattern=str(row.get("pattern") or row["mechanism"]),
         p_win=float(row.get("p_win") or row.get("expected_gain") or 0.0),
+        claim=claim_from_bank_row(row, str(row["mechanism"])),
     )
 
 
@@ -105,6 +113,10 @@ def _validate_payload(data: dict[str, Any]) -> str | None:
         float(data.get("expected_gpu_h", 0.1))
     except (TypeError, ValueError):
         return "expected_gain/expected_gpu_h must be numbers"
+    try:
+        claim_from_mapping(data.get("claim"), str(mechanism))
+    except ValueError as exc:
+        return str(exc)
     return None
 
 
@@ -123,6 +135,7 @@ def _payload_to_hypothesis(data: dict[str, Any]) -> Hypothesis:
         p_win=float(data.get("p_win") or data.get("expected_gain") or 0.0),
         tokens_in=0,
         tokens_out=0,
+        claim=claim_from_mapping(data.get("claim"), str(data["mechanism"])),
     )
 
 
