@@ -19,7 +19,7 @@ from harness.overfit import (
     seed_consistency,
     split_rank_corr,
 )
-from harness.outputs import claim_level, report
+from harness.outputs import claim_level, claim_reason, report
 from harness.types import Cost, Node, RunResult
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -238,3 +238,29 @@ def test_claim_downgrades_without_oracle(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "primary" in text
     assert "L4-v" not in text
+
+
+def test_claim_reason_counts_promotions_carrying_oracle_delta():
+    events = _load_fixture()
+    assert claim_level(events) == "L4-v"
+    assert claim_reason(events) == "1 of 1 promotions carry oracle_delta"
+
+
+def test_claim_reason_shows_the_downgrade():          # refusal twin
+    events = [_promo(1, 0.03, 0.01), _promo(2, 0.04, None)]
+    assert claim_level(events) == "L4-m"
+    assert claim_reason(events) == "1 of 2 promotions carry oracle_delta"
+
+
+def test_claim_reason_without_promotions():           # refusal twin
+    assert claim_level([]) == "L3"
+    reason = claim_reason([])
+    assert "promotion" in reason
+    assert "L4" not in reason                         # the sentence never claims a rung
+
+
+def test_claim_reason_is_a_pure_fold():
+    events = _load_fixture()
+    before = copy.deepcopy(events)
+    assert claim_reason(events) == claim_reason(events)
+    assert events == before                           # the fold does not touch its input
