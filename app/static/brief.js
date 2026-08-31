@@ -1,5 +1,7 @@
 /** E2 Game-plan view model. Pure: no DOM, no fetch. */
 
+import { escapeHtml } from "./chip.js";
+
 export const INTRO = {
   goal:
     "Beat the current-best ranking model on this dataset, under a frozen " +
@@ -25,12 +27,6 @@ export function buildBrief(payload) {
   };
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 function inline(s) {
   return escapeHtml(s).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");

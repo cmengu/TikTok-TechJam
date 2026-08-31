@@ -1,6 +1,7 @@
 /** E7 audit view models. Pure: no DOM, no fetch. */
 
 import { fmtDuration } from "./copy.js";
+import { escapeHtml } from "./chip.js";
 
 function isPlainObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -89,12 +90,6 @@ export function buildStability(payload) {
   };
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 export function doubleChecksPageHtml(vm) {
   const rows = vm.rows

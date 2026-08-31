@@ -8,7 +8,7 @@ import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
-import { chipHtml } from "./chip.js";
+import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
@@ -72,12 +72,6 @@ function requireView() {
   return el;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 // --- Dashboard: five panels answering "is it alive, what's it doing, how far
 // along, is anything wrong" per the product spec (Handoff_app.md, Task 5).
@@ -475,9 +469,6 @@ function renderDashboard(state) {
 // distinct tiers — hashed (defines comparability) vs. not-hashed (bounds this
 // run only) — per Handoff_app.md. No control here may change a run. ---
 
-function escapeAttr(s) {
-  return escapeHtml(s).replaceAll('"', "&quot;");
-}
 
 function chip(text, extraClass = "") {
   return `<span class="chip ${extraClass}">${escapeHtml(text)}</span>`;

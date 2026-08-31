@@ -2,6 +2,7 @@
 
 import { ideaOutcome } from "./reducer.js";
 import { stateLabel } from "./copy.js";
+import { escapeHtml, escapeAttr } from "./chip.js";
 
 export function normalize(title) {
   return String(title ?? "")
@@ -78,16 +79,7 @@ export function buildLibrary(state, manifest) {
   });
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
-function escapeAttr(s) {
-  return escapeHtml(s).replaceAll('"', "&quot;");
-}
 
 const ACTION_LABEL = { pdf: "Open PDF", link: "Read online", search: "Find it" };
 

@@ -1,13 +1,13 @@
 /** Pure chip HTML helper — no DOM, safe for node --test. */
 
-function escapeHtml(s) {
+export function escapeHtml(s) {
   return String(s)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
 
-function escapeAttr(s) {
+export function escapeAttr(s) {
   return escapeHtml(s).replaceAll('"', "&quot;");
 }
 

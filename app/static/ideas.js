@@ -2,6 +2,7 @@
 
 import { ideaOutcome } from "./reducer.js";
 import { fmtDelta, stateLabel } from "./copy.js";
+import { escapeHtml } from "./chip.js";
 
 function tokensFor(ev) {
   const inn = Number(ev?.tokens_in) || 0;
@@ -64,12 +65,6 @@ export function buildIdeas(state) {
   return { inPlay, done, banned };
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 function shelfHtml(title, cards, bodyFn) {
   const inner = cards.length
