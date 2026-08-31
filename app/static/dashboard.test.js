@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
 
 function move(round, kind, parent, reason) {
   return { type: "move_selected", round, kind, parent, reason };
@@ -118,5 +118,70 @@ describe("dashboard strip builders", () => {
     assert.deepEqual(buildCascadeCounter(state), buildCascadeCounter(state));
     assert.deepEqual(payload, payloadBefore);
     assert.deepEqual(state, stateBefore);
+  });
+});
+
+const TRACE = {
+  papersRead: 4,
+  ideasProposed: 6,
+  ideasBanned: 1,
+  attemptsBuilt: 4,
+  quickTests: 3,
+  repeatTests: 2,
+  hiddenChecks: 1,
+  accepted: 1,
+  declined: 1,
+  retrying: 2,
+  shelved: 0,
+  crashed: 2,
+};
+
+const MONITORS = {
+  available: true,
+  primary: 0.527,
+  claim_level: "L4-v",
+  claim_reason: "1 of 1 promotions carry oracle_delta",
+};
+
+describe("dashboard hero", () => {
+  it("test_hero_shows_score_and_trust", () => {
+    const hero = buildHero(MONITORS, TRACE);
+    assert.equal(hero.score, "0.5270");
+    assert.equal(hero.trust.word, "fully verified");
+    assert.equal(typeof hero.trust.hint, "string");
+  });
+
+  it("test_hero_before_first_score", () => {
+    const hero = buildHero({ available: false, primary: 0 }, TRACE);
+    assert.equal(hero.score, "—");
+    assert.notEqual(hero.score, "0.0000");
+    assert.ok(Array.isArray(hero.funnel));
+    assert.equal(hero.funnel.length, 4);
+  });
+
+  it("test_funnel_from_trace", () => {
+    const hero = buildHero(MONITORS, TRACE);
+    assert.deepEqual(
+      hero.funnel.map((s) => [s.label, s.count, s.href]),
+      [
+        ["papers", 4, "#/research"],
+        ["ideas", 6, "#/hypotheses"],
+        ["attempts", 4, "#/run"],
+        ["accepted", 1, "#/run"],
+      ],
+    );
+  });
+
+  it("test_caption_is_verbatim", () => {
+    const reason = MONITORS.claim_reason;
+    const hero = buildHero(MONITORS, TRACE);
+    assert.equal(hero.caption, reason);
+    assert.equal(hero.caption === reason, true);
+    assert.equal(hero.caption.length, reason.length);
+    const twisted = buildHero(
+      { ...MONITORS, claim_reason: reason + " (approx)" },
+      TRACE,
+    );
+    assert.notEqual(twisted.caption, reason);
   });
 });
