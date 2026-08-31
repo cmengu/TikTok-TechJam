@@ -194,8 +194,12 @@ class Workspace:
         else:
             diff_path = diff_path.resolve()
         if diff_path.is_file() and diff_path.stat().st_size > 0:
+            # --recount mirrors the coder's apply: LLM diffs miscount their
+            # @@ headers, and this second apply site crashed the first fixed
+            # full run (kuairand-20260831-170110) after the coder's own
+            # recounted apply had already passed.
             applied = self._git(
-                "apply", "--whitespace=nowarn", str(diff_path), check=False
+                "apply", "--recount", "--whitespace=nowarn", str(diff_path), check=False
             )
             if applied.returncode != 0:
                 raise RuntimeError(
@@ -967,7 +971,21 @@ class Tree:
                 self._set_state(node, "failed")
                 return False
         if diff_path is not None:
-            node.commit = self.workspace.commit_node(node.id, Path(diff_path), debug_k=debug_k)
+            try:
+                node.commit = self.workspace.commit_node(node.id, Path(diff_path), debug_k=debug_k)
+            except Exception as exc:
+                # Same contract as the materialise branch above: a patch that
+                # will not commit fails the NODE, never the run — the unhandled
+                # RuntimeError here ended kuairand-20260831-170110 with 9 ideas
+                # still queued.
+                self.events.emit(
+                    "failure",
+                    node=node.id,
+                    summary=f"patch apply failed for {hyp.id}: {exc}"[:200],
+                    **{"class": "patch_apply_failed"},
+                )
+                self._set_state(node, "failed")
+                return False
         return True
 
     def _handle_failure(self, node, hyp, result) -> bool:  # noqa: ANN001

@@ -886,6 +886,47 @@ def test_patch_apply_failure_fails_the_node(tmp_path: Path):
     assert not [e for e in rows if e.get("type") == "verdict" and e.get("node") == nid]
 
 
+class _OkCoder:
+    """Coder whose own apply passes; the diff only breaks at commit time."""
+
+    def __init__(self, diff_path):  # noqa: ANN001
+        self._diff_path = diff_path
+
+    def materialise(self, hyp, incumbent, traceback):  # noqa: ANN001
+        return self._diff_path
+
+
+def test_commit_failure_fails_the_node_not_the_run(tmp_path: Path):
+    """workspace.commit_node raising must fail the NODE — the unhandled path
+    crashed run kuairand-20260831-170110 with 9 ideas still queued."""
+    measure = FakeMeasure()
+    runner = FakeRunner()
+    tree, events, run_dir, _ws = _make_tree(tmp_path, measure, runner, [_hyp("h-commit", mechanism="fz")])
+    diff = tmp_path / "ok.diff"
+    diff.write_text("not applied by _OkCoder\n", encoding="utf-8")
+    tree.coder = _OkCoder(diff)
+
+    def _boom(node_id, diff_path, debug_k=None):  # noqa: ANN001
+        raise RuntimeError("git apply failed for node 2: corrupt patch at line 92")
+
+    tree.workspace.commit_node = _boom
+    hyp = replace(tree.hyp_index["h-commit"], patch=None)
+    nid = tree.events.new_node(None)
+    node = _node(nid, state="screening", kind="improve")
+    node.hypothesis_id = hyp.id
+    tree.nodes[nid] = node
+
+    ok = tree._commit_hyp(node, hyp, None, None)
+
+    assert ok is False
+    assert node.state == "failed"
+    assert node.commit is None
+    rows = _read_events(run_dir)
+    fails = [e for e in rows if e.get("type") == "failure" and e.get("node") == nid]
+    assert len(fails) == 1
+    assert fails[0]["class"] == "patch_apply_failed"
+
+
 def test_hand_patch_survives_coder_failure(tmp_path: Path):
     """hyp.patch set → the coder raising falls back to the hand patch (old path)."""
     measure = FakeMeasure()
