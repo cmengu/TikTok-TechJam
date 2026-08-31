@@ -32,6 +32,9 @@ starter_kit/*.tar.gz
 .idea/
 .vscode/
 
+# Submission video build artefacts (typography cards + renders)
+video/cards/
+
 # One-shot codemods (applied locally; delete after branch merges)
 scripts/patch_*.py
 scripts/apply_*.py
