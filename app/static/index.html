@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>LuxMax</title>
+  <title>Lux Max</title>
   <style>
     @font-face {
       font-family: "Instrument Sans";
@@ -117,6 +117,9 @@
       font-family: "Instrument Serif", Georgia, serif;
       font-weight: 400;
       font-size: var(--fs-title);
+      letter-spacing: 1px;
+      transform: scaleX(1.28);
+      transform-origin: left;
     }
     h1 {
       color: var(--rail-ink-hi);
@@ -125,10 +128,15 @@
       font-size: 22px;
       line-height: 1.15;
       margin: 0;
-      margin-left: 1.9375rem;
+      margin-left: 0.625rem;
+      letter-spacing: 1px;
+      transform: scaleX(1.28);
+      transform-origin: left;
+      display: inline-block;
     }
     .wordmark-sub {
       margin: var(--s1) 0 var(--s6);
+      margin-left: 0.625rem;
       color: var(--rail-ink);
       font-size: 11px;
       text-transform: uppercase;
@@ -165,6 +173,9 @@
       text-transform: uppercase;
       letter-spacing: 0.09em;
       font-weight: 500;
+    }
+    #sidebar ul > li:first-child > .nav-group-label {
+      padding-top: var(--s1);
     }
     #sidebar .nav-sub {
       margin-left: 0.625rem;
@@ -974,6 +985,9 @@
       font-size: 28px;
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
+      letter-spacing: 1px;
+      transform: scaleX(1.28);
+      transform-origin: left;
     }
     .stat-caption {
       font-size: 12px;
@@ -1268,8 +1282,8 @@
 <body>
   <div class="app">
     <nav id="sidebar">
-      <h1>LuxMax</h1>
-      <p class="wordmark-sub">autonomous model improvement, verified</p>
+      <h1>Lux Max</h1>
+      <p class="wordmark-sub">Autonomous ML Research</p>
       <ul>
         <li>
           <span class="nav-group-label">Overview</span>
