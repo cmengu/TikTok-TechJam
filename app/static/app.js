@@ -12,7 +12,7 @@ import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
-import { buildJourney, journeyStripHtml } from "./journey.js";
+import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
 import { buildRulebook, rulebookPageHtml } from "./rulebook.js";
@@ -320,6 +320,23 @@ function buildPaperTickerPanel(state) {
 
 let dashboardRung = { level: "—", reason: "—" };
 let dashboardMonitors = { available: false };
+let cachedContract = null;
+function ensureContract() {
+  if (cachedContract != null || ensureContract.inFlight) return;
+  ensureContract.inFlight = true;
+  fetch("/contract")
+    .then((res) => res.json())
+    .then((payload) => {
+      cachedContract = payload;
+      renderRoute();
+    })
+    .catch(() => {
+      cachedContract = { available: false };
+    })
+    .finally(() => {
+      ensureContract.inFlight = false;
+    });
+}
 let dashboardRungFetchGen = 0;
 let dashboardRungInFlight = false;
 
@@ -1068,9 +1085,9 @@ function renderAttemptTrail(state, nodeId) {
   return `<ol class="trail attempt-trail">${items}</ol>`;
 }
 
-function renderDossier(dossier, journey = null, trailHtml = "", claimHtml = "") {
+function renderDossier(dossier, journey = null, trailHtml = "", claimHtml = "", receipt = null) {
   const { node, verdicts } = dossier;
-  const strip = journey ? journeyStripHtml(journey) : "";
+  const strip = journey ? journeyStripHtml(journey, receipt) : "";
   return `
     ${strip}
     ${trailHtml}
@@ -1130,8 +1147,10 @@ function renderRun(state, path) {
     const journey = buildJourney(state, selectedId);
     const trailHtml = renderAttemptTrail(state, selectedId);
     const claimHtml = claimCardHtml(buildClaimCard(state, selectedId));
+    const receipt = buildReceipt(state, cachedContract, selectedId);
+    ensureContract();
     dossierHtml = dossier
-      ? renderDossier(dossier, journey, trailHtml, claimHtml)
+      ? renderDossier(dossier, journey, trailHtml, claimHtml, receipt)
       : `<p class="panel-empty">no such attempt</p>`;
   }
 

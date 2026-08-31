@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { initial, reduce } from "./reducer.js";
-import { buildJourney, journeyStripHtml, STAGES } from "./journey.js";
+import { DICT } from "./copy.js";
+import { buildJourney, journeyStripHtml, STAGES, buildReceipt } from "./journey.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(
@@ -115,5 +116,66 @@ describe("journey", () => {
     assert.equal(stages.length, 7);
     assert.ok(stages.every((s) => s === "done"));
     assert.match(html, /class="journey-strip"/);
+  });
+
+  it("test_zero_spend_on_level1_stop", () => {
+    const state = {
+      ...initial(),
+      cascade: {
+        ...initial().cascade,
+        byNode: {
+          5: [{ level: "omega", passed: false, trips: ["C1"], llm_calls: 0, runs: 0 }],
+        },
+      },
+      reliability: {
+        ...initial().reliability,
+        ruleTrips: [
+          { node: 5, rule_id: "C1", statement: "Never reads validation labels." },
+        ],
+      },
+    };
+    const receipt = buildReceipt(state, { available: true, rules: [] }, 5);
+    assert.equal(receipt.spend.readings, 0);
+    assert.equal(receipt.spend.runs, 0);
+    assert.equal(receipt.stoppedAt, "free");
+    const html = journeyStripHtml(
+      { stages: STAGES.map((s) => ({ ...s, status: "failed" })), loops: 0 },
+      receipt,
+    );
+    assert.ok(html.includes(DICT.receiptStopFree.word));
+  });
+
+  it("test_tripped_rule_quoted", () => {
+    const state = fold(loadFixture());
+    const receipt = buildReceipt(state, null, 2);
+    assert.ok(receipt.levels.some((lv) =>
+      lv.tripped.some((t) => t.statement.includes("self-label")),
+    ));
+  });
+
+  it("test_semantic_line_counts_contract", () => {
+    const state = fold(loadFixture());
+    const contract = {
+      available: true,
+      rules: [
+        { check: "static" },
+        { check: "llm" },
+        { check: "llm" },
+      ],
+    };
+    const receipt = buildReceipt(state, contract, 1);
+    assert.equal(receipt.semanticLine, DICT.receiptSemantic.word.replace("{n}", "2"));
+  });
+
+  it("test_full_pass_receipt", () => {
+    const state = fold(loadFixture());
+    const receipt = buildReceipt(state, { available: true, rules: [] }, 1);
+    assert.ok(receipt);
+    assert.equal(receipt.stoppedAt, null);
+    assert.equal(receipt.levels[0].passed, true);
+  });
+
+  it("test_no_cascade_null", () => {
+    assert.equal(buildReceipt(initial(), null, 99), null);
   });
 });
