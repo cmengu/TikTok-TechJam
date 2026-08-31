@@ -4,6 +4,7 @@ import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
 import { buildDossier, buildAttemptTrail } from "./dossier.js";
+import { buildClaimCard, claimCardHtml } from "./claimcard.js";
 import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero, provenanceCounts } from "./dashboard.js";
@@ -1067,12 +1068,13 @@ function renderAttemptTrail(state, nodeId) {
   return `<ol class="trail attempt-trail">${items}</ol>`;
 }
 
-function renderDossier(dossier, journey = null, trailHtml = "") {
+function renderDossier(dossier, journey = null, trailHtml = "", claimHtml = "") {
   const { node, verdicts } = dossier;
   const strip = journey ? journeyStripHtml(journey) : "";
   return `
     ${strip}
     ${trailHtml}
+    ${claimHtml}
     ${renderDossierHeader(node)}
     <div class="dossier-section">
       <h3>History</h3>
@@ -1127,8 +1129,9 @@ function renderRun(state, path) {
     const dossier = buildDossier(state, selectedId);
     const journey = buildJourney(state, selectedId);
     const trailHtml = renderAttemptTrail(state, selectedId);
+    const claimHtml = claimCardHtml(buildClaimCard(state, selectedId));
     dossierHtml = dossier
-      ? renderDossier(dossier, journey, trailHtml)
+      ? renderDossier(dossier, journey, trailHtml, claimHtml)
       : `<p class="panel-empty">no such attempt</p>`;
   }
 

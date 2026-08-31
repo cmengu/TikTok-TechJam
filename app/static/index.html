@@ -55,6 +55,7 @@
 
       --pos:  #2e5943;
       --pos-wash:  #e9efe9;
+      --wine: #96323c;
       --warn: #8a6a2c;
       --warn-wash: #f6f1e6;
       --crit: #96323c;
@@ -1119,6 +1120,16 @@
       padding: var(--s3);
       background: var(--surface);
     }
+    .claim-card { margin: var(--s4) 0; }
+    .claim-banner {
+      font-size: var(--fs-label);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: var(--s2) 0 0;
+    }
+    .claim-banner--given { color: var(--pos); font-size: var(--fs-label); font-weight: 600; }
+    .claim-banner--refused { color: var(--wine); font-size: var(--fs-label); font-weight: 600; }
 
     /* .trail — intended: <ol class="trail"><li>…</li></ol> */
     .trail {
