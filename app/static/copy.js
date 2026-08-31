@@ -149,6 +149,22 @@ export const DICT = {
     word: "the contract file is unreadable",
     hint: null,
   },
+  wallCaption: {
+    word: "The final score is measured behind this wall. The searching agent cannot see through it, and every look is counted against a budget.",
+    hint: null,
+  },
+  wallMeter: {
+    word: "Hidden check: visited {v} of {cap}",
+    hint: "scored on data the model never saw; budget of 12 uses",
+  },
+  wallQueries: {
+    word: "Times the search consulted the test signal: {q}",
+    hint: null,
+  },
+  wallDigests: {
+    word: "Data fingerprints: recorded at load ✓",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {

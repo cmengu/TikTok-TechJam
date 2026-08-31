@@ -5,6 +5,7 @@ import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
 import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
+import { buildWall, wallHtml } from "./wall.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
@@ -1445,7 +1446,7 @@ function renderMonitors(_state) {
         view.innerHTML = `<p class="panel-empty">monitors payload unusable</p>`;
         return;
       }
-      view.innerHTML = renderMonitorsView(vm);
+      view.innerHTML = wallHtml(buildWall(payload)) + renderMonitorsView(vm);
     })
     .catch(() => {
       if (gen !== monitorsFetchGen) return;
