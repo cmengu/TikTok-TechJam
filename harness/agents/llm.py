@@ -138,19 +138,13 @@ class AnthropicLLM:
 
 def _strip_fences(text: str) -> str:
     """Drop a single wrapping ```/```json fence pair if the model added one."""
-    stripped = text.strip()
-    if not stripped.startswith("```"):
-        return stripped
-    lines = stripped.splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    # A response can carry fences MID-text too (prose + a fenced block, or
-    # several blocks) — seen on kuairand-20260831-171932, where git recount
-    # choked on a bare ``` at line 130. Fence lines are never valid diff or
-    # JSON content, so drop them wherever they appear.
-    lines = [l for l in lines if not l.strip().startswith("```")]
+    # Fence lines can appear as a wrap OR mid-text (prose + a fenced block,
+    # or several blocks) — seen on kuairand-20260831-171932, where git
+    # recount choked on a bare ``` at line 130. Fence markers are never
+    # valid diff or JSON content, so drop them wherever they appear.
+    lines = [
+        l for l in text.strip().splitlines() if not l.strip().startswith("```")
+    ]
     return "\n".join(lines).strip()
 
 
