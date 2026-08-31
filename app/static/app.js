@@ -927,7 +927,7 @@ function renderVerdictEntry({ verdict, reading }) {
     // comparison is unavailable and why, via band.js's own verdictAnnotation,
     // never invent one here.
     const { reason } = verdictAnnotation(verdict);
-    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || "no band was reported for this verdict")}</div>`;
+    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || "no band was reported for this decision")}</div>`;
   }
   const deltaMeanHtml =
     typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)

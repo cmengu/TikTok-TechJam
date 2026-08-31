@@ -1,6 +1,7 @@
 /** E5 Library view model. Pure: no DOM, no fetch. */
 
 import { ideaOutcome } from "./reducer.js";
+import { stateLabel } from "./copy.js";
 
 export function normalize(title) {
   return String(title ?? "")
@@ -42,7 +43,7 @@ function ideasFor(state, source) {
     {
       id: node.hypothesisId,
       pattern: idea?.pattern ?? idea?.mechanism ?? null,
-      outcome: verdict?.state ?? null,
+      outcome: verdict?.state != null ? stateLabel(verdict.state).word : null,
     },
   ];
 }

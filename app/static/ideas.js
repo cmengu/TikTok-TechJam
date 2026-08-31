@@ -1,7 +1,7 @@
 /** E6 Ideas view model. Pure: no DOM, no fetch. */
 
 import { ideaOutcome } from "./reducer.js";
-import { fmtDelta } from "./copy.js";
+import { fmtDelta, stateLabel } from "./copy.js";
 
 function tokensFor(ev) {
   const inn = Number(ev?.tokens_in) || 0;
@@ -53,7 +53,7 @@ export function buildIdeas(state) {
     if (verdict) {
       done.push(
         card(ev, {
-          outcome: verdict.state ?? null,
+          outcome: verdict.state != null ? stateLabel(verdict.state).word : null,
           actualDelta: verdict.delta_mean ?? null,
         }),
       );

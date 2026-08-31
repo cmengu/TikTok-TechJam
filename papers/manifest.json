@@ -33,7 +33,7 @@
     "pdf": null,
     "year": 2024,
     "venue": "RecSys",
-    "one_liner": "The incumbent ranking model this run is trying to beat."
+    "one_liner": "The current-best ranking model this run is trying to beat."
   },
   {
     "title": "Counteracting Duration Bias in Video Recommendation via Counterfactual Watch Time",
