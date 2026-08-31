@@ -220,6 +220,31 @@ export const DICT = {
     word: "all {n} judgment rules carried in one model reading",
     hint: null,
   },
+  tourBriefTitle: { word: "Game plan", hint: null },
+  tourBriefBody: {
+    word: "This is what the agent was asked to do. Read it once, then look at the attempts.",
+    hint: null,
+  },
+  tourRunTitle: { word: "Attempts tree", hint: null },
+  tourRunBody: {
+    word: "Every solution it tried, and the move that created each. Click an attempt to open its dossier.",
+    hint: null,
+  },
+  tourJourneyTitle: { word: "One attempt's journey", hint: null },
+  tourJourneyBody: {
+    word: "Seven stages, including the free checks and the hidden check. Expand free checks to see the receipt.",
+    hint: null,
+  },
+  tourMemoryTitle: { word: "What it learned", hint: null },
+  tourMemoryBody: {
+    word: "Weak spots, promising directions, and banned patterns. The footer is the exact text the proposing model reads next.",
+    hint: null,
+  },
+  tourHeroTitle: { word: "The score", hint: null },
+  tourHeroBody: {
+    word: "The headline number, and whether to trust it. Stamps tell you if a figure was measured or only forecast.",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {
