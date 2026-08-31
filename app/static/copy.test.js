@@ -17,6 +17,8 @@ import {
   fmtScore,
   fmtTokens,
   claimReasonLabel,
+  eventTypeLabel,
+  EVENT_TYPE_LABELS,
   fmtPublished,
   levelLabel,
   moveLabel,
@@ -281,6 +283,28 @@ describe("fmtPublished", () => {
     ];
     for (const value of gnarly) {
       assert.ok(!fmtPublished(value).includes("[object Object]"));
+    }
+  });
+});
+
+describe("eventTypeLabel", () => {
+  it("test_known_types_read_as_plain_words", () => {
+    assert.equal(eventTypeLabel("research_source", 2), "papers");
+    assert.equal(eventTypeLabel("research_source", 1), "paper");
+    assert.equal(eventTypeLabel("verdict", 3), "decisions");
+    assert.equal(eventTypeLabel("node_created", 2), "attempts built");
+  });
+
+  it("test_unknown_types_fall_back_to_events", () => {
+    assert.equal(eventTypeLabel("some_new_type", 2), "events");
+    assert.equal(eventTypeLabel(undefined, 1), "event");
+  });
+
+  it("test_every_label_clears_the_banned_list", () => {
+    const bannedRe = new RegExp(`\\b(?:${BANNED.join("|")})\\b`, "i");
+    for (const [type, entry] of Object.entries(EVENT_TYPE_LABELS)) {
+      assert.ok(!bannedRe.test(entry.one), `${type}: ${entry.one}`);
+      assert.ok(!bannedRe.test(entry.many), `${type}: ${entry.many}`);
     }
   });
 });

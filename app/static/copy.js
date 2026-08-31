@@ -317,6 +317,40 @@ function passThrough(input) {
   return { word: String(input), hint: null };
 }
 
+// Plain-language names for raw event types, for the feed's gap markers
+// ("#12–#8 — 2 papers, 1 decision" instead of "2 research_source, 1 verdict").
+// Unknown types fall back to the honest generic "events" rather than leaking
+// a machine name.
+export const EVENT_TYPE_LABELS = {
+  run_started: { one: "run start", many: "run starts" },
+  run_ended: { one: "run end", many: "run ends" },
+  node_created: { one: "attempt built", many: "attempts built" },
+  state_changed: { one: "status change", many: "status changes" },
+  move_selected: { one: "move", many: "moves" },
+  hypothesis_queued: { one: "idea queued", many: "ideas queued" },
+  proposal_rejected: { one: "idea declined", many: "ideas declined" },
+  lesson_written: { one: "note", many: "notes" },
+  research_source: { one: "paper", many: "papers" },
+  measurement: { one: "measurement", many: "measurements" },
+  verdict: { one: "decision", many: "decisions" },
+  verify_level: { one: "check", many: "checks" },
+  failure: { one: "crash", many: "crashes" },
+  recovery: { one: "recovery", many: "recoveries" },
+  rule_trip: { one: "rulebook trip", many: "rulebook trips" },
+  attribution_checked: { one: "win check", many: "win checks" },
+  incumbent_changed: { one: "current-best change", many: "current-best changes" },
+  submission_written: { one: "submission written", many: "submissions written" },
+  submission_run: { one: "submission run", many: "submission runs" },
+  usage: { one: "spend update", many: "spend updates" },
+  heartbeat: { one: "heartbeat", many: "heartbeats" },
+};
+
+export function eventTypeLabel(type, count = 1) {
+  const entry = EVENT_TYPE_LABELS[type];
+  if (!entry) return count === 1 ? "event" : "events";
+  return count === 1 ? entry.one : entry.many;
+}
+
 // The harness writes claim_reason in its own vocabulary (harness/outputs.py).
 // Translate the two known shapes; anything unrecognised passes through and
 // the jargon sweep is the guard against new leaks.

@@ -9,7 +9,7 @@ import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, provenanceCounts } from "./dashboard.js";
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
-import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished } from "./copy.js";
+import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
@@ -256,8 +256,15 @@ function buildGapRow(highSeq, lowSeq, feedGaps) {
   for (const g of skipped) {
     byType.set(g.type, (byType.get(g.type) || 0) + 1);
   }
-  const summary = [...byType.entries()].map(([type, n]) => `${n} ${type}`).join(", ");
-  return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${summary}</li>`;
+  // Viewers read plain words; the raw event types stay on the hover
+  // (flagged on PR #60 — the marker rendered "2 research_source").
+  const summary = [...byType.entries()]
+    .map(([type, n]) => `${n} ${eventTypeLabel(type, n)}`)
+    .join(", ");
+  const rawTypes = [...byType.entries()]
+    .map(([type, n]) => `${n}\u00d7 ${type}`)
+    .join(", ");
+  return `<li class="feed-gap" title="${escapeAttr(rawTypes)}">#${highSeq}–#${lowSeq} — ${summary}</li>`;
 }
 
 function buildEventsPanel(state) {
