@@ -1,6 +1,7 @@
 /** D1 — seven-stage attempt journey as a pure fold. No DOM. */
 
 import { stateLabel } from "./copy.js";
+import { escapeHtml } from "./chip.js";
 
 export const STAGES = [
   { id: "idea", label: "idea" },
@@ -164,9 +165,3 @@ export function journeyStripHtml(journey) {
   return `<div class="journey-strip">${chips}${retry}</div>`;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}

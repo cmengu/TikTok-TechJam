@@ -8,7 +8,7 @@ import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
-import { chipHtml } from "./chip.js";
+import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
@@ -72,12 +72,6 @@ function requireView() {
   return el;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 // --- Dashboard: five panels answering "is it alive, what's it doing, how far
 // along, is anything wrong" per the product spec (Handoff_app.md, Task 5).
@@ -175,10 +169,10 @@ function buildScorePanel(state) {
     .join("");
   return `
     <table class="metrics score-table">
-      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>Incumbent</th></tr></thead>
+      <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th><th>${escapeHtml(DICT.incumbent.word)}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="hdr-dim panel-note" title="a promoted verdict's band tests whether the replicate agreed with the screen, not whether the lead over baseline clears run-to-run noise. harness/measure.py::calibrate is implemented and computes a Band from screen/full run noise, but nothing in the harness compares that Band — or the incumbent's score — against protocol.ruler.baseline.published for significance">vs-baseline significance: not yet instrumented</p>
+    <p class="hdr-dim panel-note" title="${escapeAttr(DICT.baselineSignificanceNote.word)}">vs-baseline significance: not yet instrumented</p>
   `;
 }
 
@@ -301,7 +295,7 @@ function buildStoppingPanel(state) {
       ${kv("epsilon (protocol target)", renderScalar(convergence.epsilon))}
       ${kv("n_rounds (protocol target)", renderScalar(convergence.n_rounds))}
     </dl>
-    <p class="panel-note" title="counts verdicts in state.verdicts since the last one with state === &quot;promoted&quot; — not the harness's rounds-without-improvement count, which does not exist yet">verdicts since last promotion: ${since} (not the convergence counter — the harness's rounds-without-improvement count does not exist yet)</p>
+    <p class="panel-note" title="${escapeAttr(DICT.sinceWinTitle.word)}">decisions since last accepted win: ${since} (not the convergence counter — the run does not yet track rounds without improvement)</p>
   `;
 }
 
@@ -448,7 +442,7 @@ function renderDashboard(state) {
       </section>
       <section>
         <h2>Cascade</h2>
-        <p>ω ${escapeHtml(String(cascade.rejected.omega))} · v_sem ${escapeHtml(String(cascade.rejected.v_sem))} · smoke ${escapeHtml(String(cascade.rejected.smoke))}</p>
+        <p>${escapeHtml(DICT.omega.word)} ${escapeHtml(String(cascade.rejected.omega))} · ${escapeHtml(DICT.v_sem.word)} ${escapeHtml(String(cascade.rejected.v_sem))} · ${escapeHtml(DICT.smoke.word)} ${escapeHtml(String(cascade.rejected.smoke))}</p>
         <p class="panel-note">llm_calls ${escapeHtml(String(cascade.llmCalls))} · runs ${escapeHtml(String(cascade.runs))}</p>
       </section>
     </div>
@@ -486,9 +480,6 @@ function renderDashboard(state) {
 // distinct tiers — hashed (defines comparability) vs. not-hashed (bounds this
 // run only) — per Handoff_app.md. No control here may change a run. ---
 
-function escapeAttr(s) {
-  return escapeHtml(s).replaceAll('"', "&quot;");
-}
 
 function chip(text, extraClass = "") {
   return `<span class="chip ${extraClass}">${escapeHtml(text)}</span>`;
@@ -1454,7 +1445,7 @@ function renderMonitorsView(vm) {
             `<li>node ${escapeHtml(String(p.node))} gap ${escapeHtml(String(p.gap))}</li>`,
         )
         .join("")
-    : `<p class="panel-empty">no oracle gaps</p>`;
+    : `<p class="panel-empty">no ${escapeHtml(DICT.oracle.word)} gaps</p>`;
   const seeds = vm.seedEmpty
     ? `<p class="panel-empty">no seed-consistency rows</p>`
     : `<ul>${vm.seedConsistency
@@ -1471,7 +1462,7 @@ function renderMonitorsView(vm) {
         <ul>${numbers}</ul>
       </section>
       <section>
-        <h2>Oracle gap (${escapeHtml(alarm)})</h2>
+        <h2>${escapeHtml(DICT.oracleGapHeading.word)} (${escapeHtml(alarm)})</h2>
         ${vm.gap.points.length ? `<ul>${gaps}</ul>` : gaps}
       </section>
       <section>

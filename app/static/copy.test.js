@@ -138,4 +138,86 @@ describe("copy", () => {
     assert.equal(attributionLabel("clearish"), "unexplained");
     assert.equal(attributionLabel(null), "unexplained");
   });
+
+  it("test_oracle_gap_heading_is_plain", () => {
+    const label = DICT.oracleGapHeading;
+    assert.equal(typeof label.word, "string");
+    assert.ok(label.word.length > 0);
+    assert.equal(bannedRe().test(label.word), false, `banned in heading: ${label.word}`);
+    assert.equal(label.word, "Hidden-check gap");
+  });
+
+  it("test_app_templates_do_not_render_oracle_gap_heading", () => {
+    const src = readFileSync(APP, "utf8");
+    assert.equal(
+      src.includes("<h2>Oracle gap"),
+      false,
+      "app.js still hard-codes <h2>Oracle gap — use DICT.oracleGapHeading",
+    );
+  });
+
+  it("test_baseline_significance_note_is_plain", () => {
+    const label = DICT.baselineSignificanceNote;
+    assert.equal(typeof label.word, "string");
+    assert.ok(label.word.length > 0);
+    assert.equal(bannedRe().test(label.word), false, `banned in note: ${label.word}`);
+    assert.equal(
+      label.word,
+      "an accepted win's noise bar tests whether the repeat test agreed with the quick test, not whether the lead over the published baseline clears run-to-run noise — nothing yet compares the current best's score against the published baseline for significance",
+    );
+  });
+
+  it("test_app_templates_do_not_hardcode_baseline_significance_note", () => {
+    const src = readFileSync(APP, "utf8");
+    assert.equal(
+      src.includes("a promoted verdict's band tests"),
+      false,
+      "app.js still hard-codes the vs-baseline hover — use DICT.baselineSignificanceNote",
+    );
+  });
+
+  it("test_since_win_title_is_plain", () => {
+    const label = DICT.sinceWinTitle;
+    assert.equal(typeof label.word, "string");
+    assert.ok(label.word.length > 0);
+    assert.equal(bannedRe().test(label.word), false, `banned in title: ${label.word}`);
+    assert.equal(
+      label.word,
+      "counts decisions in the log since the last accepted win — the run itself does not yet track rounds without improvement",
+    );
+  });
+
+  it("test_app_templates_do_not_hardcode_since_win_title", () => {
+    const src = readFileSync(APP, "utf8");
+    assert.equal(
+      src.includes("verdicts since last promotion"),
+      false,
+      "app.js still hard-codes the since-win line — use DICT.sinceWinTitle",
+    );
+  });
+});
+
+describe("pre-G2 renderer copy entries", () => {
+  const entries = ["oracleGapHeading", "baselineSignificanceNote", "sinceWinTitle"];
+
+  it("test_renderer_copy_entries_exist", () => {
+    for (const key of entries) {
+      assert.equal(typeof DICT[key].word, "string");
+      assert.ok(DICT[key].word.length > 0);
+    }
+    assert.equal(DICT.oracleGapHeading.word, "Hidden-check gap");
+  });
+
+  it("test_renderer_copy_entries_speak_no_jargon", () => {
+    // Refusal twin: a dictionary entry that itself carries a banned term
+    // would launder jargon straight back onto the page.
+    for (const key of entries) {
+      for (const term of BANNED) {
+        assert.ok(
+          !new RegExp(`\\b${term}\\b`, "i").test(DICT[key].word),
+          `${key} contains banned term "${term}"`,
+        );
+      }
+    }
+  });
 });

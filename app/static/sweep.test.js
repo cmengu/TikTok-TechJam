@@ -1,6 +1,6 @@
 /** G1 jargon sweep — every view-model string leaf vs copy.js BANNED. */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -211,5 +211,134 @@ describe("sweep", () => {
   it("test_sweep_actually_covers", () => {
     const leaves = collectLeaves();
     assert.ok(leaves.length > 100, `walker found ${leaves.length} string leaves`);
+  });
+});
+
+// ── G1b — static scan of renderer template literals ──────────────────────────
+// The leaf walk above covers view-model output; it cannot see jargon typed
+// directly into a renderer's HTML template (the "Rung" heading shipped that
+// way). This scan reads every non-test module's source, extracts template
+// literal contents with a small state machine (comments, quotes, and ${…}
+// interpolations excluded, nesting handled), and checks the *rendered* text —
+// text nodes plus title/aria-label hover values — against the same BANNED list.
+
+function extractTemplates(src) {
+  const out = [];
+  const mode = ["code"]; // code | tpl | interp | line | block | sq | dq
+  const bufs = [];
+  const depths = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    const d = src[i + 1];
+    const m = mode[mode.length - 1];
+    if (m === "line") {
+      if (c === "\n") mode.pop();
+      i += 1;
+    } else if (m === "block") {
+      if (c === "*" && d === "/") {
+        mode.pop();
+        i += 2;
+      } else i += 1;
+    } else if (m === "sq" || m === "dq") {
+      if (c === "\\") i += 2;
+      else {
+        if ((m === "sq" && c === "'") || (m === "dq" && c === '"')) mode.pop();
+        i += 1;
+      }
+    } else if (m === "tpl") {
+      if (c === "\\") {
+        bufs[bufs.length - 1] += " ";
+        i += 2;
+      } else if (c === "`") {
+        out.push(bufs.pop());
+        mode.pop();
+        i += 1;
+      } else if (c === "$" && d === "{") {
+        mode.push("interp");
+        depths.push(0);
+        bufs[bufs.length - 1] += "\x00";
+        i += 2;
+      } else {
+        bufs[bufs.length - 1] += c;
+        i += 1;
+      }
+    } else {
+      // code or interp
+      if (c === "/" && d === "/") {
+        mode.push("line");
+        i += 2;
+      } else if (c === "/" && d === "*") {
+        mode.push("block");
+        i += 2;
+      } else if (c === "'") {
+        mode.push("sq");
+        i += 1;
+      } else if (c === '"') {
+        mode.push("dq");
+        i += 1;
+      } else if (c === "`") {
+        mode.push("tpl");
+        bufs.push("");
+        i += 1;
+      } else if (m === "interp" && c === "{") {
+        depths[depths.length - 1] += 1;
+        i += 1;
+      } else if (m === "interp" && c === "}") {
+        if (depths[depths.length - 1] === 0) {
+          mode.pop();
+          depths.pop();
+        } else depths[depths.length - 1] -= 1;
+        i += 1;
+      } else i += 1;
+    }
+  }
+  return out;
+}
+
+// Rendered text a viewer can meet: hover values first, then text nodes with
+// tags stripped; \x00 marks a removed interpolation so words never merge
+// across it.
+function visibleChunks(tpl) {
+  const chunks = [];
+  for (const m of tpl.matchAll(/(?:title|aria-label)="([^"]*)"/gi)) {
+    chunks.push(...m[1].split("\x00"));
+  }
+  const text = tpl.replace(/<[^>]*>/g, " ");
+  chunks.push(...text.split("\x00"));
+  return chunks.map((s) => s.trim()).filter(Boolean);
+}
+
+describe("G1b static template scan", () => {
+  const moduleFiles = readdirSync(__dirname).filter(
+    (f) => f.endsWith(".js") && !f.endsWith(".test.js"),
+  );
+  const bannedRes = BANNED.map((t) => ({ term: t, re: new RegExp(`\\b${t}\\b`, "i") }));
+
+  function collect() {
+    const all = [];
+    for (const file of moduleFiles) {
+      const src = readFileSync(join(__dirname, file), "utf8");
+      for (const tpl of extractTemplates(src)) {
+        for (const chunk of visibleChunks(tpl)) all.push({ file, chunk });
+      }
+    }
+    return all;
+  }
+
+  it("test_no_renderer_template_emits_banned_terms", () => {
+    const violations = [];
+    for (const { file, chunk } of collect()) {
+      for (const { term, re } of bannedRes) {
+        if (re.test(chunk)) violations.push(`${file}: "${chunk}" (${term})`);
+      }
+    }
+    assert.deepEqual(violations, []);
+  });
+
+  it("test_template_scan_actually_covers", () => {
+    // Refusal twin: a scanner that parses nothing passes vacuously. The
+    // renderers carry well over a hundred rendered text chunks today.
+    assert.ok(collect().length > 100, `only ${collect().length} chunks found`);
   });
 });

@@ -2,6 +2,7 @@
 
 import { claimLabel, fmtScore } from "./copy.js";
 import { renderMarkdown } from "./brief.js";
+import { escapeHtml } from "./chip.js";
 
 export function buildReport(payload) {
   if (payload == null || typeof payload !== "object" || Array.isArray(payload)) {
@@ -29,12 +30,6 @@ export function buildReportHero(monitors) {
   };
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 export function reportPageHtml(report, hero) {
   const hint =
