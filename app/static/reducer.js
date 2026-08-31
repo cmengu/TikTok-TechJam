@@ -83,6 +83,7 @@ const FEED_TYPES = new Set([
 
 const LOG_CAP = 500;
 const FEED_CAP = 1000;
+const FEED_GAPS_CAP = 2000;
 const MEASUREMENTS_CAP = 500;
 
 export const initial = () => ({
@@ -167,6 +168,7 @@ export const initial = () => ({
 
   log: [],
   feed: [],
+  feedGaps: [],
   unknown: {},
 });
 
@@ -588,6 +590,8 @@ export function reduce(state, ev) {
   next.log = capPush(next.log, ev, LOG_CAP);
   if (FEED_TYPES.has(ev.type)) {
     next.feed = capPush(next.feed, ev, FEED_CAP);
+  } else {
+    next.feedGaps = capPush(next.feedGaps, { seq: ev.seq, type: ev.type }, FEED_GAPS_CAP);
   }
   return next;
 }

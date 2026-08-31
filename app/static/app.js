@@ -236,28 +236,39 @@ function buildEventRow(g) {
 
 // A gap is a run of seq numbers skipped between two known boundary seqs
 // (never negative — highSeq and lowSeq are always adjacent group boundaries,
-// or a group boundary against the run's seq=1 start or state.lastSeq). We
-// can't say which event kinds were skipped without re-reading state.log, so
-// the marker only ever names a count.
-function buildGapRow(highSeq, lowSeq) {
+// or a group boundary against the run's seq=1 start or state.lastSeq).
+// feedGaps records what was skipped (reducer.js), so we can usually name the
+// types; when feedGaps has nothing for this range (e.g. capped out), fall
+// back to a bare count.
+function buildGapRow(highSeq, lowSeq, feedGaps) {
   const count = highSeq - lowSeq - 1;
   if (count <= 0) return "";
-  return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${count} events not shown</li>`;
+  const skipped = feedGaps.filter((g) => g.seq > lowSeq && g.seq < highSeq);
+  if (!skipped.length) {
+    return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${count} event${count === 1 ? "" : "s"} not shown</li>`;
+  }
+  const byType = new Map();
+  for (const g of skipped) {
+    byType.set(g.type, (byType.get(g.type) || 0) + 1);
+  }
+  const summary = [...byType.entries()].map(([type, n]) => `${n} ${type}`).join(", ");
+  return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${summary}</li>`;
 }
 
 function buildEventsPanel(state) {
   const groups = collapseFeed(state.feed);
   const all = groups.slice().reverse();
+  const feedGaps = state.feedGaps;
   if (!all.length) return `<p class="panel-empty">no events yet</p>`;
   const rows = [];
-  rows.push(buildGapRow(state.lastSeq, all[0].last.seq));
+  rows.push(buildGapRow(state.lastSeq, all[0].last.seq, feedGaps));
   all.forEach((g, i) => {
     rows.push(buildEventRow(g));
     if (i < all.length - 1) {
-      rows.push(buildGapRow(g.first.seq, all[i + 1].last.seq));
+      rows.push(buildGapRow(g.first.seq, all[i + 1].last.seq, feedGaps));
     }
   });
-  rows.push(buildGapRow(all[all.length - 1].first.seq, 1));
+  rows.push(buildGapRow(all[all.length - 1].first.seq, 1, feedGaps));
   return `<div class="event-scroll"><ul class="event-list">${rows.join("")}</ul></div>`;
 }
 
