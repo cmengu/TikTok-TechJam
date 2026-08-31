@@ -3,10 +3,10 @@
 import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
-import { buildDossier } from "./dossier.js";
+import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
-import { stateLabel, rungLabel, moveLabel } from "./copy.js";
+import { stateLabel, rungLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
@@ -1015,11 +1015,57 @@ function renderDossierScores(node) {
   return `<dl class="kv">${rows}</dl>`;
 }
 
-function renderDossier(dossier, journey = null) {
+function renderAttemptTrailItem(row) {
+  switch (row.kind) {
+    case "paper":
+      return `<a href="${escapeAttr(row.href)}">${escapeHtml(row.title || "paper")}</a>`;
+    case "idea": {
+      const gain =
+        row.expectedGain == null ? "—" : fmtDelta(row.expectedGain);
+      return `${escapeHtml(row.pattern || "idea")} · expected ${escapeHtml(gain)}`;
+    }
+    case "free-checks":
+      return `free checks passed${row.levels?.length ? ` (${escapeHtml(row.levels.join(", "))})` : ""}`;
+    case "quick-test":
+    case "repeat-test":
+    case "hidden-check": {
+      const label =
+        row.kind === "quick-test"
+          ? "quick test"
+          : row.kind === "repeat-test"
+            ? "repeat test"
+            : "hidden check";
+      const score = row.score == null ? "—" : fmtScore(row.score);
+      const bar =
+        Array.isArray(row.band) && row.band.length === 2
+          ? ` noise bar ${escapeHtml(fmtScore(row.band[0]))}–${escapeHtml(fmtScore(row.band[1]))}`
+          : "";
+      return `${label} ${escapeHtml(score)}${bar}`;
+    }
+    case "decision":
+      return escapeHtml(row.text || "");
+    case "note":
+      return escapeHtml(row.text || "");
+    default:
+      return "";
+  }
+}
+
+function renderAttemptTrail(state, nodeId) {
+  const rows = buildAttemptTrail(state, nodeId);
+  if (!rows.length) return "";
+  const items = rows
+    .map((row) => `<li>${renderAttemptTrailItem(row)}</li>`)
+    .join("");
+  return `<ol class="trail attempt-trail">${items}</ol>`;
+}
+
+function renderDossier(dossier, journey = null, trailHtml = "") {
   const { node, verdicts } = dossier;
   const strip = journey ? journeyStripHtml(journey) : "";
   return `
     ${strip}
+    ${trailHtml}
     ${renderDossierHeader(node)}
     <div class="dossier-section">
       <h3>History</h3>
@@ -1073,8 +1119,9 @@ function renderRun(state, path) {
   } else {
     const dossier = buildDossier(state, selectedId);
     const journey = buildJourney(state, selectedId);
+    const trailHtml = renderAttemptTrail(state, selectedId);
     dossierHtml = dossier
-      ? renderDossier(dossier, journey)
+      ? renderDossier(dossier, journey, trailHtml)
       : `<p class="panel-empty">no such attempt</p>`;
   }
 

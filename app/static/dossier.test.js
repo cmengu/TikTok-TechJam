@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildDossier } from "./dossier.js";
+import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { verdictReading } from "./band.js";
+import { initial, reduce } from "./reducer.js";
+import { sentence } from "./feed.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REAL_VERDICT_FIXTURE = join(
@@ -293,5 +295,47 @@ describe("dossier — buildDossier, malformed state: never throws, returns null"
     assert.ok(dossier);
     assert.equal(dossier.verdicts.length, 1);
     assert.equal(dossier.verdicts[0].verdict.node, 7);
+  });
+});
+
+const GOLDEN = join(
+  __dirname,
+  "..",
+  "..",
+  "tests",
+  "fixtures",
+  "fake-events.jsonl",
+);
+
+function foldGolden() {
+  return loadJsonl(GOLDEN).reduce((s, ev) => reduce(s, ev), initial());
+}
+
+describe("dossier — attempt trail", () => {
+  it("test_trail_node3_complete", () => {
+    const state = foldGolden();
+    const rows = buildAttemptTrail(state, 3);
+    assert.deepEqual(
+      rows.map((r) => r.kind),
+      ["idea", "quick-test", "repeat-test", "hidden-check", "decision"],
+    );
+    assert.equal(rows[0].pattern, "lr-schedule");
+    assert.equal(rows[1].kind, "quick-test");
+    assert.equal(rows[2].kind, "repeat-test");
+    assert.equal(rows[3].kind, "hidden-check");
+    assert.equal(rows[4].text, sentence(state.nodes[3].latestVerdict));
+  });
+
+  it("test_trail_omits_missing_rows", () => {
+    const state = foldGolden();
+    const n1 = buildAttemptTrail(state, 1);
+    assert.equal(n1.some((r) => r.kind === "paper"), false);
+    assert.equal(n1.some((r) => r.kind === "repeat-test"), false);
+    assert.equal(n1.some((r) => r.kind === "hidden-check"), false);
+    assert.equal(n1.some((r) => r.kind === "note"), false);
+    assert.ok(n1.find((r) => r.kind === "idea"));
+    assert.ok(n1.find((r) => r.kind === "free-checks"));
+    assert.ok(n1.find((r) => r.kind === "quick-test"));
+    assert.ok(n1.find((r) => r.kind === "decision"));
   });
 });
