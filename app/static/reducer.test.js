@@ -194,7 +194,7 @@ describe("reducer — Checkpoint C: state contract", () => {
   it("test_all_event_types_reduce_without_throwing", () => {
     const state = fold(corpus());
     deepEqual(state.unknown, {});
-    assert.equal(state.nodeOrder.length, 3);
+    assert.equal(state.nodeOrder.length, 4);
   });
 
   it("test_reduce_is_pure", () => {
@@ -203,7 +203,7 @@ describe("reducer — Checkpoint C: state contract", () => {
       deepFreeze(state);
       state = reduce(state, ev); // throws if reduce ever wrote through a frozen ref
     }
-    assert.equal(state.nodeOrder.length, 3);
+    assert.equal(state.nodeOrder.length, 4);
     assert.equal(state.run.status, "ended");
   });
 
@@ -573,8 +573,24 @@ describe("reducer — Phase 2 (F1: vocabulary and slices)", () => {
   it("test_old_fixture_still_reduces_identically_in_the_untouched_slices", () => {
     // The orders' F1 gate: adding Phase 2 types must not move the old state.
     const state = fold(loadFixture());
-    assert.equal(state.nodeOrder.length, 3);
+    assert.equal(state.nodeOrder.length, 4);
     assert.equal(state.run.status, "ended");
     deepEqual(Object.keys(state.unknown), []);
+  });
+
+  it("test_node_4_is_the_unclear_inconclusive_branch", () => {
+    const state = fold(loadFixture());
+
+    // node 4: replicate passed on the number, promotion withheld because the
+    // mechanism could not be attributed.
+    assert.equal(state.nodes[4].latestVerdict.state, "inconclusive");
+    assert.equal(state.nodes[4].latestVerdict.attribution, "unclear");
+    assert.equal(state.attribution.byNode[4].result, "unclear");
+
+    // twin: node 3 is the fixture's only promotion. If it ever stops being
+    // promoted+clear, claim_level() drops the fixture from L4-v to L3.
+    assert.equal(state.nodes[3].latestVerdict.state, "promoted");
+    assert.equal(state.nodes[3].latestVerdict.attribution, "clear");
+    assert.ok(state.nodes[3].latestVerdict.oracle_delta > 0);
   });
 });
