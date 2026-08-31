@@ -253,6 +253,17 @@ def api_papers_manifest():
     return {"available": True, "papers": data}
 
 
+@app.get("/runs/{run_id}/report")
+def api_report(run_id: str):
+    path = _run_dir(run_id) / "report.md"
+    if not path.is_file():
+        return {
+            "available": False,
+            "reason": "the run has not finished — the summary writes itself at the end",
+        }
+    return {"available": True, "markdown": path.read_text(encoding="utf-8")}
+
+
 @app.get("/")
 def index():
     return FileResponse(

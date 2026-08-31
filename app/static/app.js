@@ -21,6 +21,7 @@ import {
   spendPageHtml,
   stabilityPageHtml,
 } from "./audit.js";
+import { buildReport, buildReportHero, reportPageHtml } from "./report.js";
 
 export { chipHtml };
 
@@ -1125,12 +1126,6 @@ function renderHeader(state) {
   renderElapsedBudgetSlot(state.run);
 }
 
-function renderStub(label) {
-  return () => {
-    requireView().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
-  };
-}
-
 function renderStyleguide() {
   requireView().innerHTML = `
     <div class="styleguide">
@@ -1264,6 +1259,35 @@ function renderStability() {
   );
 }
 
+let reportFetchGen = 0;
+
+function renderReport(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading summary…</p>`;
+  const path = currentRoutePath();
+  const gen = ++reportFetchGen;
+  if (!runId) return;
+  Promise.all([
+    fetch(`/runs/${runId}/report`).then((res) => res.json()),
+    fetch(`/runs/${runId}/audit/monitors`)
+      .then((res) => res.json())
+      .catch(() => null),
+  ])
+    .then(([reportPayload, monitorsPayload]) => {
+      if (gen !== reportFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = reportPageHtml(
+        buildReport(reportPayload),
+        buildReportHero(monitorsPayload),
+      );
+    })
+    .catch(() => {
+      if (gen !== reportFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">summary unavailable</p>`;
+    });
+}
+
 let monitorsFetchGen = 0;
 
 function renderMonitors(_state) {
@@ -1370,7 +1394,7 @@ const ROUTES = [
   { hash: "audit/cost", render: renderSpend },
   { hash: "audit/reliability", render: renderStability },
   { hash: "audit/monitors", render: renderMonitors },
-  { hash: "report", render: renderStub("Report") },
+  { hash: "report", render: renderReport },
   { hash: "styleguide", render: renderStyleguide },
 ];
 // Audit has no content of its own — two of its three children are parked

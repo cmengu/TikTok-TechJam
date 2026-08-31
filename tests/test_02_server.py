@@ -316,3 +316,22 @@ def test_manifest_malformed_degrades(
     body = res.json()
     assert body["available"] is False
     assert "malformed" in body.get("reason", "")
+
+
+def test_report_serves_markdown(client: TestClient, runs_dir: Path):
+    (runs_dir / "fake-0001" / "report.md").write_text(
+        "# Run report\n\nHello from the summary.\n", encoding="utf-8"
+    )
+    res = client.get("/runs/fake-0001/report")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert "Hello from the summary" in body["markdown"]
+
+
+def test_report_absent_available_false(client: TestClient):
+    res = client.get("/runs/fake-0001/report")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "finished" in body["reason"]
