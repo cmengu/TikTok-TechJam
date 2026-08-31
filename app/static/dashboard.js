@@ -1,7 +1,7 @@
 /** F2 dashboard strip + hero view models, plus the hero's HTML leaf.
  * Pure: no DOM, no fetch. */
 
-import { claimLabel, fmtScore } from "./copy.js";
+import { DICT, claimLabel, fmtScore } from "./copy.js";
 import { escapeHtml, escapeAttr } from "./chip.js";
 import { stampHtml } from "./provenance.js";
 
@@ -120,7 +120,7 @@ export function heroHtml(hero) {
     <div class="stat">
       <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>${stamp}
       <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
-      <span class="stat-src">monitors.primary</span>
+      <span class="stat-src" title="monitors.primary">${escapeHtml(DICT.scoreSource.word)}</span>
     </div>
     <p class="dashboard-hero-caption">${escapeHtml(hero.caption)}</p>
     <div class="funnel">${funnel}</div>

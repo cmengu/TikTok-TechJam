@@ -197,6 +197,14 @@ describe("dashboard hero html", () => {
     assert.ok(!html.includes("measured"));
   });
 
+  it("test_hero_source_is_plain_language_with_raw_key_on_hover", () => {
+    // Fix list item 3: the literal "monitors.primary" reached the viewer.
+    const html = heroHtml(buildHero(MONITORS, TRACE));
+    assert.ok(html.includes("from the measurement layer"));
+    assert.ok(html.includes('title="monitors.primary"'));
+    assert.ok(!html.includes(">monitors.primary<"));
+  });
+
   it("test_hero_with_a_score_keeps_the_stamp", () => {
     const html = heroHtml(buildHero(MONITORS, TRACE));
     assert.ok(html.includes("0.5270"));

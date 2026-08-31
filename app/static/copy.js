@@ -165,6 +165,10 @@ export const DICT = {
     word: "Data fingerprints: recorded at load ✓",
     hint: null,
   },
+  scoreSource: {
+    word: "from the measurement layer",
+    hint: null,
+  },
   stampMeasured: { word: "measured", hint: null },
   stampForecast: { word: "forecast", hint: null },
   stampHover: {

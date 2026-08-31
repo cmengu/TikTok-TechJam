@@ -1263,7 +1263,7 @@ function renderStyleguide() {
       <div class="stat">
         <span class="stat-value">0.6041</span>
         <span class="stat-caption">score</span>
-        <span class="stat-src">monitors.primary</span>
+        <span class="stat-src" title="monitors.primary">${escapeHtml(DICT.scoreSource.word)}</span>
       </div>
       <div class="chip-row">
         <span class="chip-state chip-state--accepted">accepted</span>
