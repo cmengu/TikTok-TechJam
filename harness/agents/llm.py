@@ -209,7 +209,12 @@ class ClaudeCLILLM:
         )
         if schema is not None:
             return json.loads(_strip_fences(text)), usage
-        return text.strip(), usage
+        # Diff-mode responses get the same treatment: headless Claude wraps
+        # unified diffs in ```diff fences despite the system prompt, and a
+        # fence line makes git apply reject the whole patch (seen on the
+        # first real KuaiRand run — every node trained the unpatched
+        # baseline). Stripping here keeps the guarantee at the seam.
+        return _strip_fences(text), usage
 
     def judge(self, diff: str, statements: list[str]) -> dict[str, Any]:
         prompt = (
