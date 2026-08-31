@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 STATIC = Path(__file__).resolve().parent / "static"
 BRIEF_PATH = ROOT / "context" / "Backend_plan.md"
+PAPERS = ROOT / "papers"
 
 app = FastAPI()
 
@@ -238,6 +239,20 @@ def api_brief(run_id: str):
     return {"available": True, "task": proto.get("task"), "sections": sections}
 
 
+@app.get("/papers/manifest")
+def api_papers_manifest():
+    path = PAPERS / "manifest.json"
+    if not path.is_file():
+        return {"available": False, "reason": "manifest not present"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"available": False, "reason": "manifest malformed"}
+    if not isinstance(data, list):
+        return {"available": False, "reason": "manifest malformed"}
+    return {"available": True, "papers": data}
+
+
 @app.get("/")
 def index():
     return FileResponse(
@@ -247,6 +262,8 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+if PAPERS.is_dir():
+    app.mount("/papers", StaticFiles(directory=str(PAPERS)), name="papers")
 
 
 def serve() -> None:

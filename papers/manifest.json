@@ -1,0 +1,56 @@
+[
+  {
+    "title": "Wide & Deep Learning for Recommender Systems",
+    "match": ["Wide & Deep", "Wide and Deep", "1606.07792"],
+    "url": "https://arxiv.org/abs/1606.07792",
+    "pdf": null,
+    "year": 2016,
+    "venue": "DLRS",
+    "one_liner": "Memorize frequent patterns on a wide linear side; generalize with a deep net."
+  },
+  {
+    "title": "DeepFM: A Factorization-Machine based Neural Network for CTR Prediction",
+    "match": ["DeepFM", "1703.04247"],
+    "url": "https://arxiv.org/abs/1703.04247",
+    "pdf": null,
+    "year": 2017,
+    "venue": "IJCAI",
+    "one_liner": "Factorization machines plus a deep net, sharing embeddings, no hand-crafted crosses."
+  },
+  {
+    "title": "Factorization Machines",
+    "match": ["FM", "Factorization Machines", "Rendle 2010"],
+    "url": "https://ieeexplore.ieee.org/document/5694074",
+    "pdf": null,
+    "year": 2010,
+    "venue": "ICDM",
+    "one_liner": "Pairwise factorized interactions for sparse categorical features."
+  },
+  {
+    "title": "Utilizing Non-click Samples via Semi-supervised Learning for Conversion Rate Prediction",
+    "match": ["NISE", "NISE baseline notes"],
+    "url": "https://github.com/Hjh233/NISE",
+    "pdf": null,
+    "year": 2024,
+    "venue": "RecSys",
+    "one_liner": "The incumbent ranking model this run is trying to beat."
+  },
+  {
+    "title": "Counteracting Duration Bias in Video Recommendation via Counterfactual Watch Time",
+    "match": ["CWM", "Counterfactual Watch Model", "2406.07932"],
+    "url": "https://arxiv.org/abs/2406.07932",
+    "pdf": null,
+    "year": 2024,
+    "venue": "KDD",
+    "one_liner": "Watch time as a truncated signal; models the time a viewer would have kept watching."
+  },
+  {
+    "title": "KuaiRand: An Unbiased Sequential Recommendation Dataset with Randomly Exposed Videos",
+    "match": ["KuaiRand", "2208.08696"],
+    "url": "https://arxiv.org/abs/2208.08696",
+    "pdf": null,
+    "year": 2022,
+    "venue": "CIKM",
+    "one_liner": "The dataset behind this run — random exposure so ranking quality is measurable."
+  }
+]
