@@ -8,6 +8,9 @@ import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
 import { stateLabel } from "./copy.js";
 import { sentence } from "./feed.js";
+import { chipHtml } from "./chip.js";
+
+export { chipHtml };
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -209,9 +212,7 @@ function buildEventRow(g) {
     g.count === 1 ? sentence(ev) : `${g.count}× ${sentence(ev)}`;
   const mod = ev.type === "verdict" ? chipStateModifier(ev.state) : null;
   const stateChip =
-    mod != null
-      ? `<span class="chip-state chip-state--${mod}">${escapeHtml(stateLabel(ev.state).word)}</span> `
-      : "";
+    mod != null ? `${chipHtml(stateLabel(ev.state), mod)} ` : "";
   const body =
     ev.node != null
       ? `<a href="#/run/${escapeAttr(String(ev.node))}">${escapeHtml(text)}</a>`

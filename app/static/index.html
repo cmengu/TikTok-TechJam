@@ -880,6 +880,36 @@
       background: var(--pos-wash);
       color: var(--pos);
     }
+    [data-hint] {
+      position: relative;
+      cursor: help;
+    }
+    [data-hint]:hover::after,
+    [data-hint]:focus-visible::after {
+      content: attr(data-hint);
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 6px);
+      z-index: 5;
+      max-width: 240px;
+      padding: 0.35rem 0.55rem;
+      border-radius: var(--r-ctl);
+      background: var(--rail);
+      color: var(--rail-ink-hi);
+      font-size: var(--fs-label);
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      text-transform: none;
+      line-height: 1.35;
+      white-space: normal;
+      pointer-events: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      [data-hint]:hover::after,
+      [data-hint]:focus-visible::after {
+        transition: none;
+      }
+    }
     .chip-state--live::before {
       content: "";
       width: 6px;
