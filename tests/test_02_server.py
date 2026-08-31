@@ -391,3 +391,59 @@ def test_wall_fields_zero_when_no_holdout(
     body = res.json()
     assert body["holdout_visits"] == 0
     assert body["holdout_cap"] == 12
+
+
+def test_feedback_missing_degrades(client: TestClient):
+    res = client.get("/runs/fake-0001/feedback")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "no failures yet" in body["reason"]
+
+
+def test_feedback_endpoint_shape(client: TestClient, runs_dir: Path):
+    from harness.feedback import write_lesson, feedback_from, load_lessons, render
+
+    path = runs_dir / "fake-0001" / "lessons.jsonl"
+    write_lesson(
+        path,
+        {
+            "round": 1,
+            "node": 2,
+            "family": "features/crossed-ids",
+            "pattern": "crossed-ids",
+            "defect": "no_gain",
+            "delta": -0.002,
+            "verdict": "rejected",
+        },
+    )
+    res = client.get("/runs/fake-0001/feedback")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert "weak" in body and "directions" in body and "forbidden" in body
+    assert "text" in body
+    lessons = load_lessons(path)
+    assert body["text"] == render(feedback_from(lessons))
+
+
+def test_feedback_text_matches_render(client: TestClient, runs_dir: Path):
+    from harness.feedback import write_lesson, feedback_from, load_lessons, render
+
+    path = runs_dir / "fake-0001" / "lessons.jsonl"
+    write_lesson(
+        path,
+        {
+            "round": 0,
+            "node": 0,
+            "family": "features/x",
+            "pattern": "seed-x",
+            "defect": "crash",
+            "delta": 0,
+            "verdict": "rejected",
+        },
+    )
+    res = client.get("/runs/fake-0001/feedback")
+    text = res.json()["text"]
+    expected = render(feedback_from(load_lessons(path)))
+    assert text == expected

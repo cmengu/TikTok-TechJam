@@ -179,6 +179,25 @@ export const DICT = {
     word: "0 exceptions possible — the gate refuses them.",
     hint: null,
   },
+  memoryTitle: {
+    word: "What the run has learned",
+    hint: null,
+  },
+  memoryWeak: { word: "Weak spots", hint: null },
+  memoryDirections: { word: "Promising directions", hint: null },
+  memoryBanned: { word: "Banned patterns", hint: null },
+  memorySeeded: {
+    word: "known before the run started — the organisers' published dead ends",
+    hint: null,
+  },
+  memoryVerbatimLead: {
+    word: "This exact text is what the proposing model reads next round:",
+    hint: null,
+  },
+  memoryEmpty: {
+    word: "no failures yet — the run writes this page itself",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {
