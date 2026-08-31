@@ -729,29 +729,57 @@ function runRouteKey(state, path) {
 }
 
 function renderTreeNode(entry, state, selectedId) {
-  const { node, children, orphan } = entry;
-  const isIncumbent = state.incumbent != null && String(state.incumbent) === String(node.id);
-  const isSelected = selectedId != null && String(selectedId) === String(node.id);
+  const { node, children, orphan, plainState, onBestPath, dimmed, loops, edgeLabel } =
+    entry;
+  const isIncumbent =
+    state.incumbent != null && String(state.incumbent) === String(node.id);
+  const isSelected =
+    selectedId != null && String(selectedId) === String(node.id);
+  const isLive = ["screening", "running", "replicating", "debugging"].includes(
+    node.state,
+  );
   const classes = ["tree-node"];
   if (isSelected) classes.push("tree-node-selected");
   if (orphan) classes.push("tree-node-orphan");
+  if (dimmed) classes.push("tree-node-dimmed");
+  if (onBestPath) classes.push("tree-node-best");
+  if (isLive) classes.push("tree-node-live");
   const hypHtml =
     node.hypothesisId != null
       ? escapeHtml(String(node.hypothesisId))
-      : chip("no hypothesis id", "chip-null");
+      : chip("no idea id", "chip-null");
   const badges = [];
-  if (isIncumbent) badges.push(chip("incumbent", "chip-incumbent"));
+  if (isIncumbent) {
+    badges.push(
+      `<span class="chip chip-incumbent">◆ current best</span>`,
+    );
+  }
   if (orphan) badges.push(chip("orphan", "chip-null"));
+  if (loops > 0) {
+    badges.push(
+      `<span class="tree-loop-badge">retry ${escapeHtml(String(loops))}</span>`,
+    );
+  }
+  if (isLive) {
+    badges.push(`<span class="tree-live-dot" aria-label="live"></span>`);
+  }
+  const edgeHtml =
+    edgeLabel != null
+      ? `<span class="tree-edge-label">${escapeHtml(edgeLabel)}</span>`
+      : "";
   const childrenHtml = children.length
-    ? `<ul class="tree-children">${children.map((c) => renderTreeNode(c, state, selectedId)).join("")}</ul>`
+    ? `<ul class="tree-children${onBestPath ? " tree-children-best" : ""}">${children
+        .map((c) => renderTreeNode(c, state, selectedId))
+        .join("")}</ul>`
     : "";
   return `
     <li>
+      ${edgeHtml}
       <div class="${classes.join(" ")}" data-node-id="${escapeAttr(String(node.id))}">
         <span class="tree-node-id">#${escapeHtml(String(node.id))}</span>
-        <span class="tree-node-hyp">hyp ${hypHtml}</span>
-        <span class="tree-node-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
-        <span class="tree-node-state">${escapeHtml(String(node.state ?? "?"))}</span>
+        <span class="tree-node-hyp">idea ${hypHtml}</span>
+        <span class="tree-node-kind">${escapeHtml(moveLabel(node.kind).word)}</span>
+        <span class="tree-node-state">${escapeHtml((plainState && plainState.word) || stateLabel(node.state).word)}</span>
         ${badges.join(" ")}
       </div>
       ${childrenHtml}

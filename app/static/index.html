@@ -527,6 +527,42 @@
       color: var(--pos);
       font-weight: 600;
     }
+    .tree-node-dimmed {
+      opacity: 0.4;
+    }
+    .tree-node-best {
+      border-color: var(--pos);
+    }
+    .tree-children-best {
+      border-left-color: var(--pos);
+    }
+    .tree-edge-label {
+      display: block;
+      font-size: var(--fs-label);
+      color: var(--ink-muted);
+      margin: 0 0 var(--s1) 0.625rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tree-loop-badge {
+      font-size: var(--fs-label);
+      color: var(--warn);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tree-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--pos);
+      display: inline-block;
+      animation: stage-pulse 1.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tree-live-dot {
+        animation: none;
+      }
+    }
 
     /* --- journey strip (D2): seven stage chips before the dossier --- */
     .journey-strip {
