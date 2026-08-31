@@ -270,3 +270,130 @@ def test_brief_deterministic(tmp_path: Path):
     b = compose(text_path, protocol)
     assert a == b
     assert "protocol.task=" in a
+
+
+# --- ClaudeCLILLM: headless `claude -p` adapter, subprocess mocked — no CLI ---
+
+
+def _cli_envelope(result: str, **usage) -> str:
+    base = {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 700,
+        "cache_read_input_tokens": 1300,
+        "output_tokens": 54,
+    }
+    base.update(usage)
+    return json.dumps({"is_error": False, "result": result, "usage": base})
+
+
+class _FakeProc:
+    def __init__(self, stdout: str, returncode: int = 0, stderr: str = ""):
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def test_claude_cli_parses_result_and_usage(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    seen: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        return _FakeProc(_cli_envelope("--- a/x\n+++ b/x\n"))
+
+    monkeypatch.setattr(llm_mod.subprocess, "run", fake_run)
+    adapter = llm_mod.ClaudeCLILLM()
+    text, usage = adapter.complete("coder", "write a diff", None)
+    assert text == "--- a/x\n+++ b/x"
+    # tokens_in counts fresh + cache-written + cache-read: all were processed
+    assert usage.tokens_in == 10 + 700 + 1300
+    assert usage.tokens_out == 54
+    assert seen["cmd"][:2] == ["claude", "-p"]
+    assert "--output-format" in seen["cmd"] and "json" in seen["cmd"]
+    # the coder role rides the coder model
+    assert seen["cmd"][seen["cmd"].index("--model") + 1] == "claude-haiku-4-5-20251001"
+
+
+def test_claude_cli_schema_parses_json_and_strips_fences(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from harness.agents import llm as llm_mod
+
+    fenced = "```json\n{\"pattern\": \"features/x\"}\n```"
+    monkeypatch.setattr(
+        llm_mod.subprocess, "run", lambda cmd, **kw: _FakeProc(_cli_envelope(fenced))
+    )
+    data, _usage = llm_mod.ClaudeCLILLM().complete(
+        "researcher", "propose", {"type": "object"}
+    )
+    assert data == {"pattern": "features/x"}
+
+
+def test_claude_cli_error_envelope_raises(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    envelope = json.dumps({"is_error": True, "result": "usage limit reached"})
+    monkeypatch.setattr(
+        llm_mod.subprocess, "run", lambda cmd, **kw: _FakeProc(envelope)
+    )
+    with pytest.raises(RuntimeError, match="usage limit"):
+        llm_mod.ClaudeCLILLM().complete("researcher", "propose", None)
+
+
+def test_claude_cli_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    monkeypatch.setattr(
+        llm_mod.subprocess,
+        "run",
+        lambda cmd, **kw: _FakeProc("", returncode=1, stderr="boom"),
+    )
+    with pytest.raises(RuntimeError, match="exited 1"):
+        llm_mod.ClaudeCLILLM().complete("researcher", "propose", None)
+
+
+def test_claude_cli_missing_binary_raises(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    def raise_missing(cmd, **kwargs):
+        raise FileNotFoundError("claude")
+
+    monkeypatch.setattr(llm_mod.subprocess, "run", raise_missing)
+    with pytest.raises(RuntimeError, match="not installed"):
+        llm_mod.ClaudeCLILLM().complete("researcher", "propose", None)
+
+
+def test_claude_cli_judge_rejects_numbers(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    monkeypatch.setattr(
+        llm_mod.subprocess, "run", lambda cmd, **kw: _FakeProc(_cli_envelope("3"))
+    )
+    with pytest.raises(ValueError, match="number"):
+        llm_mod.ClaudeCLILLM().judge("diff", ["statement"])
+
+
+def test_make_llm_selects_by_environment(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    monkeypatch.setenv("HARNESS_LLM", "claude-cli")
+    assert isinstance(llm_mod.make_llm(), llm_mod.ClaudeCLILLM)
+
+    monkeypatch.setenv("HARNESS_LLM", "api")
+    assert isinstance(llm_mod.make_llm(), llm_mod.AnthropicLLM)
+
+    # unset: the API key wins over an installed CLI
+    monkeypatch.delenv("HARNESS_LLM", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    assert isinstance(llm_mod.make_llm(), llm_mod.AnthropicLLM)
+
+    # unset, no key: an installed claude CLI is the subscription fallback
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(llm_mod.shutil, "which", lambda name: "/usr/local/bin/claude")
+    assert isinstance(llm_mod.make_llm(), llm_mod.ClaudeCLILLM)
+
+    # unset, no key, no CLI: AnthropicLLM, whose first call raises the
+    # missing-key error — make_llm itself never raises
+    monkeypatch.setattr(llm_mod.shutil, "which", lambda name: None)
+    assert isinstance(llm_mod.make_llm(), llm_mod.AnthropicLLM)

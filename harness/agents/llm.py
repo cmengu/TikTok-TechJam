@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -132,6 +134,115 @@ class AnthropicLLM:
         if not isinstance(data, dict):
             raise ValueError("semantic judge returned a number")
         return data
+
+
+def _strip_fences(text: str) -> str:
+    """Drop a single wrapping ```/```json fence pair if the model added one."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+class ClaudeCLILLM:
+    """Headless Claude Code (`claude -p`) adapter — runs on the user's
+    subscription instead of an API key. Same surface as AnthropicLLM."""
+
+    def __init__(self, models: dict[str, str] | None = None) -> None:
+        self.models = models or {
+            "researcher": "claude-sonnet-5",
+            "coder": "claude-haiku-4-5-20251001",
+        }
+
+    def complete(
+        self, role: str, prompt: str, schema: dict | None
+    ) -> tuple[Any, Usage]:
+        model = self.models.get(role, self.models.get("researcher", "claude-sonnet-5"))
+        system = (
+            "Respond with JSON only, no markdown fences."
+            if schema is not None
+            else "Respond with a unified diff only, no prose."
+        )
+        cmd = [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--model",
+            model,
+            "--system-prompt",
+            system,
+        ]
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=300.0
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "claude CLI is not installed (needed when ANTHROPIC_API_KEY "
+                "is not set); install Claude Code or export an API key"
+            ) from exc
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"claude -p exited {proc.returncode}: {proc.stderr.strip()[-500:]}"
+            )
+        data = json.loads(proc.stdout)
+        if data.get("is_error"):
+            raise RuntimeError(f"claude -p error: {str(data.get('result'))[:500]}")
+        text = str(data.get("result", ""))
+        usage_raw = data.get("usage", {})
+        # The CLI splits the prompt into fresh vs cached prefix tokens; the
+        # cost ledger counts tokens processed, so all three land in tokens_in.
+        usage = Usage(
+            tokens_in=(
+                int(usage_raw.get("input_tokens", 0))
+                + int(usage_raw.get("cache_creation_input_tokens", 0))
+                + int(usage_raw.get("cache_read_input_tokens", 0))
+            ),
+            tokens_out=int(usage_raw.get("output_tokens", 0)),
+        )
+        if schema is not None:
+            return json.loads(_strip_fences(text)), usage
+        return text.strip(), usage
+
+    def judge(self, diff: str, statements: list[str]) -> dict[str, Any]:
+        prompt = (
+            "For each statement, return JSON mapping the statement to a boolean "
+            "and the line you relied on. Booleans only — no numbers.\n"
+            + json.dumps(statements)
+            + "\n\nDiff:\n"
+            + diff
+        )
+        data, _usage = self.complete("judge", prompt, {"type": "object"})
+        if not isinstance(data, dict):
+            raise ValueError("semantic judge returned a number")
+        return data
+
+
+def make_llm(models: dict[str, str] | None = None):
+    """Pick the LLM adapter from the environment.
+
+    HARNESS_LLM=claude-cli forces the subscription path, HARNESS_LLM=api the
+    key path. Unset: the API key wins if present, else a installed claude CLI,
+    else AnthropicLLM (whose first call raises the missing-key error).
+    """
+    choice = os.environ.get("HARNESS_LLM", "")
+    if choice == "claude-cli":
+        return ClaudeCLILLM(models=models)
+    if choice == "api":
+        return AnthropicLLM(models=models)
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return AnthropicLLM(models=models)
+    if shutil.which("claude"):
+        return ClaudeCLILLM(models=models)
+    return AnthropicLLM(models=models)
+
 
 
 class OpenAILLM:
