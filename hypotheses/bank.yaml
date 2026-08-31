@@ -1,4 +1,8 @@
-# Phase 7 seeded hypothesis bank (feature-side first). Priors from Backend_plan §3.
+# Seeded hypothesis bank — KuaiRand-Pure edition (reseeded 31 Aug 2026).
+# The candidate sees ONLY train.csv columns: row_id, date, user_id, video_id,
+# author_id, tab, duration_ms, long_view — every idea below lives inside those
+# plus train-derived aggregates. The previous bank named Ali-CCP columns
+# (shop, brand, item-category) that do not exist here; those entries are gone.
 # Patches are produced by LLMCoder at run time — entries here are proposals only.
 # Every entry declares observables; at least one is harness-side (task.score).
 
@@ -6,94 +10,90 @@
   stage: features
   mechanism: target-encoding
   pattern: target-encoding
-  description: out-of-fold target encoding for sparse categoricals
-  citation: no prior
-  expected_gain: 0.02
+  description: out-of-fold mean long_view per user_id, video_id and author_id, smoothed toward the global rate; the row's own label never contributes
+  citation: Micci-Barreca 2001, A preprocessing scheme for high-cardinality categorical attributes
+  expected_gain: 0.004
   expected_gpu_h: 0.15
   observables:
     - {name: gauc, direction: positive, source: harness}
     - {name: ndcg_at_5, direction: positive, source: harness}
 
-- id: bank-cross-stats
+- id: bank-user-activity
   stage: features
-  mechanism: cross-stats
-  pattern: cross-stats
-  description: user-item cross statistics from history aggregates
-  citation: no prior
-  expected_gain: 0.018
-  expected_gpu_h: 0.12
+  mechanism: user-activity-bucket
+  pattern: user-activity-bucket
+  description: per-user impression count from train bucketed into ~8 quantile bins as an extra token; separates heavy from light users
+  citation: Covington et al. 2016, Deep Neural Networks for YouTube Recommendations (example-age/activity signals)
+  expected_gain: 0.003
+  expected_gpu_h: 0.1
   observables:
     - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
 
-- id: bank-hist-cat
+- id: bank-video-popularity
   stage: features
-  mechanism: hist-cat
-  pattern: hist-cat
-  description: weighted category history sequence features
-  citation: no prior
-  expected_gain: 0.022
-  expected_gpu_h: 0.18
-  observables:
-    - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: bank-hist-shop
-  stage: features
-  mechanism: hist-shop
-  pattern: hist-shop
-  description: shop-id history sequence with decay weights
-  citation: no prior
-  expected_gain: 0.02
-  expected_gpu_h: 0.18
-  observables:
-    - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: bank-freq-bucket
-  stage: features
-  mechanism: freq-bucket
-  pattern: freq-bucket
-  description: frequency bucket side features for rare ids
-  citation: no prior
-  expected_gain: 0.015
+  mechanism: video-popularity-bucket
+  pattern: video-popularity-bucket
+  description: per-video train impression count and out-of-fold positive rate, each quantile-bucketed into tokens; rare videos share a bucket instead of a lone embedding
+  citation: Wide & Deep, Cheng et al. 2016 (memorization of frequent patterns)
+  expected_gain: 0.003
   expected_gpu_h: 0.1
   observables:
     - {name: gauc, direction: positive, source: harness}
     - {name: ndcg_at_5, direction: positive, source: harness}
 
-- id: bank-item-cat-cross
+- id: bank-author-freq
   stage: features
-  mechanism: item-cat-cross
-  pattern: item-cat-cross
-  description: item x category cross embedding interaction
-  citation: no prior
-  expected_gain: 0.017
-  expected_gpu_h: 0.14
-  observables:
-    - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: bank-brand-side
-  stage: features
-  mechanism: brand-side
-  pattern: brand-side
-  description: brand preference side features from history
-  citation: no prior
-  expected_gain: 0.016
-  expected_gpu_h: 0.12
-  observables:
-    - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: bank-position-bias
-  stage: features
-  mechanism: position-bias
-  pattern: position-bias
-  description: debias position via learned position embedding
-  citation: no prior
-  expected_gain: 0.012
+  mechanism: author-freq-bucket
+  pattern: author-freq-bucket
+  description: author_id frequency bucket from train so rare authors back off to a shared token rather than a noisy embedding
+  citation: FM, Rendle 2010 (sparse factorization backoff)
+  expected_gain: 0.002
   expected_gpu_h: 0.1
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+
+- id: bank-tab-cross
+  stage: features
+  mechanism: tab-cross
+  pattern: tab-cross
+  description: explicit cross tokens user_id x tab and tab x dur_bucket; tab is the browsing surface and interacts with both taste and length tolerance
+  citation: Wide & Deep, Cheng et al. 2016 (cross-product transformations)
+  expected_gain: 0.003
+  expected_gpu_h: 0.1
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
+
+- id: bank-dur-log-buckets
+  stage: features
+  mechanism: dur-log-buckets
+  pattern: dur-log-buckets
+  description: replace linear duration bucket edges with log-scaled edges (more resolution under 60s where most videos sit); long_view is defined relative to duration, making this the key confounder
+  citation: KuaiRand dataset paper, Gao et al. 2022 (long_view definition)
+  expected_gain: 0.003
+  expected_gpu_h: 0.05
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+
+- id: bank-date-token
+  stage: features
+  mechanism: date-token
+  pattern: date-token
+  description: day-of-week token from the date column plus a days-since-user-first-seen bucket computed from train only
+  citation: Covington et al. 2016 (example age)
+  expected_gain: 0.002
+  expected_gpu_h: 0.1
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+
+- id: bank-pairwise
+  stage: objective
+  mechanism: pairwise
+  pattern: pairwise
+  description: swap pointwise log-loss for an in-batch pairwise ranking objective grouped by user; the metric is a ranking metric
+  citation: BPR, Rendle et al. 2009
+  expected_gain: 0.004
+  expected_gpu_h: 0.2
   observables:
     - {name: gauc, direction: positive, source: harness}
     - {name: ndcg_at_5, direction: positive, source: harness}
@@ -102,35 +102,20 @@
   stage: training
   mechanism: lr-warmup
   pattern: lr-warmup
-  description: linear LR warmup for first 10% of steps
-  citation: no prior
-  expected_gain: 0.01
-  expected_gpu_h: 0.08
+  description: linear LR warmup over the first 10% of steps, then the current schedule
+  citation: Goyal et al. 2017, Accurate Large Minibatch SGD
+  expected_gain: 0.001
+  expected_gpu_h: 0.05
   observables:
     - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
 
 - id: bank-emb-dim-12
   stage: training
   mechanism: emb-dim-12
   pattern: emb-dim-12
-  description: increase embedding dimension toward prior sweet spot 8-16
-  citation: no prior
-  expected_gain: 0.011
-  expected_gpu_h: 0.09
+  description: raise embedding dimension toward the 8-16 sweet spot measured on comparable sparse FMs
+  citation: FM, Rendle 2010
+  expected_gain: 0.001
+  expected_gpu_h: 0.1
   observables:
     - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: obj-pairwise
-  stage: objective
-  mechanism: pairwise
-  pattern: pairwise
-  description: swap pointwise log-loss for a pairwise ranking objective
-  citation: no prior
-  expected_gain: 0.02
-  expected_gpu_h: 0.15
-  observables:
-    - {name: gauc_minus_ndcg_delta, direction: positive, source: harness}
-    - {name: train_logloss, direction: up, source: candidate}
-    - {name: valid_pairs_per_epoch, direction: positive, source: candidate}
