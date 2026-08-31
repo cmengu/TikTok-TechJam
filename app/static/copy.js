@@ -97,6 +97,18 @@ export const DICT = {
     word: "the threshold for this comparison is unavailable",
     hint: "smaller-than-this is luck",
   },
+  oracleGapHeading: {
+    word: "Hidden-check gap",
+    hint: "how far the reported score sits from the hidden check",
+  },
+  baselineSignificanceNote: {
+    word: "an accepted win's noise bar tests whether the repeat test agreed with the quick test, not whether the lead over the published baseline clears run-to-run noise — nothing yet compares the current best's score against the published baseline for significance",
+    hint: null,
+  },
+  sinceWinTitle: {
+    word: "counts decisions in the log since the last accepted win — the run itself does not yet track rounds without improvement",
+    hint: null,
+  },
   incumbent: {
     word: "current best",
     hint: "the model every attempt must beat",
