@@ -5,11 +5,12 @@ import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
 import { buildDossier } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
-import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
 import { stateLabel, rungLabel, moveLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
+import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
 import { buildLibrary, libraryPageHtml } from "./library.js";
 import { buildIdeas, ideasPageHtml } from "./ideas.js";
@@ -308,6 +309,7 @@ function buildPaperTickerPanel(state) {
 }
 
 let dashboardRung = { level: "—", reason: "—" };
+let dashboardMonitors = { available: false };
 let dashboardRungFetchGen = 0;
 let dashboardRungInFlight = false;
 
@@ -321,18 +323,30 @@ function ensureDashboardRungFetch() {
     .then((payload) => {
       if (gen !== dashboardRungFetchGen) return;
       if (currentRoutePath() !== path) return;
+      dashboardMonitors = payload;
       dashboardRung = buildRung(payload);
-      const el = requireView().querySelector("[data-dashboard-rung]");
-      if (!el) return;
-      el.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+      const view = requireView();
+      const rungEl = view.querySelector("[data-dashboard-rung]");
+      if (rungEl) {
+        rungEl.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+      }
+      const heroEl = view.querySelector("[data-dashboard-hero]");
+      if (heroEl) {
+        heroEl.innerHTML = renderHeroHtml(
+          buildHero(dashboardMonitors, buildTrace(store.getState())),
+        );
+      }
     })
     .catch(() => {
       if (gen !== dashboardRungFetchGen) return;
       if (currentRoutePath() !== path) return;
+      dashboardMonitors = { available: false };
       dashboardRung = buildRung({ available: false });
-      const el = requireView().querySelector("[data-dashboard-rung]");
-      if (!el) return;
-      el.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+      const view = requireView();
+      const rungEl = view.querySelector("[data-dashboard-rung]");
+      if (rungEl) {
+        rungEl.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+      }
     })
     .finally(() => {
       if (gen === dashboardRungFetchGen) dashboardRungInFlight = false;
@@ -341,6 +355,54 @@ function ensureDashboardRungFetch() {
 
 function renderRungStrip(rung) {
   return `<p>${escapeHtml(rung.level)}</p><p class="panel-note">${escapeHtml(rung.reason)}</p>`;
+}
+
+function renderHeroHtml(hero) {
+  const hint =
+    hero.trust.hint != null && hero.trust.hint !== ""
+      ? ` data-hint="${escapeAttr(hero.trust.hint)}"`
+      : "";
+  const funnel = hero.funnel
+    .map(
+      (s) =>
+        `<a class="funnel-step" href="${escapeAttr(s.href)}"><span class="funnel-count">${escapeHtml(String(s.count))}</span> ${escapeHtml(s.label)}</a>`,
+    )
+    .join('<span class="funnel-arrow">→</span>');
+  return `
+    <div class="stat">
+      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>
+      <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
+      <span class="stat-src">monitors.primary</span>
+    </div>
+    <p class="dashboard-hero-caption">${escapeHtml(hero.caption)}</p>
+    <div class="funnel">${funnel}</div>
+  `;
+}
+
+const LIVE_NODE_STATES = new Set([
+  "screening",
+  "running",
+  "replicating",
+  "debugging",
+]);
+
+function liveStatusHtml(state, nowMs) {
+  const live = (state.nodeOrder || [])
+    .map((id) => state.nodes[id])
+    .find((n) => n && LIVE_NODE_STATES.has(n.state));
+  if (!live) {
+    const text = state.run.status === "ended" ? "run ended" : "no attempt live";
+    return `<p class="dashboard-live">${escapeHtml(text)}</p>`;
+  }
+  const journey = buildJourney(state, live.id);
+  const current = journey?.stages?.find((s) => s.status === "current");
+  const stage = current?.label ?? stateLabel(live.state).word;
+  let elapsed = "—";
+  if (state.run.startedAt) {
+    const end = state.run.endedAt ? new Date(state.run.endedAt) : nowMs;
+    elapsed = formatDuration(end - new Date(state.run.startedAt));
+  }
+  return `<p class="dashboard-live">attempt #${escapeHtml(String(live.id))} · ${escapeHtml(stage)} · ${escapeHtml(elapsed)}</p>`;
 }
 
 function renderDashboard(state) {
@@ -360,6 +422,10 @@ function renderDashboard(state) {
        <p class="panel-note">${escapeHtml(String(lastMove.reason))}</p>`
     : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
+    <section class="card dashboard-hero" data-dashboard-hero>
+      ${renderHeroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+    </section>
+    ${liveStatusHtml(state, nowMs)}
     <div class="dashboard-strip">
       <section data-dashboard-rung>
         <h2>Rung</h2>
@@ -377,23 +443,23 @@ function renderDashboard(state) {
     </div>
     <div class="dashboard-grid">
       <section>
-        <h2>Now running</h2>
+        <h2>Live</h2>
         ${buildNowRunningPanel(state, nowMs)}
       </section>
       <section>
-        <h2>Score against baseline</h2>
+        <h2>Score vs current best</h2>
         ${buildScorePanel(state)}
       </section>
       <section>
-        <h2>Events</h2>
+        <h2>What happened</h2>
         ${buildEventsPanel(state)}
       </section>
       <section>
-        <h2>Progress toward stopping</h2>
+        <h2>Stopping</h2>
         ${buildStoppingPanel(state)}
       </section>
       <section>
-        <h2>Paper ticker</h2>
+        <h2>Papers</h2>
         ${buildPaperTickerPanel(state)}
       </section>
     </div>
