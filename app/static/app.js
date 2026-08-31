@@ -1052,6 +1052,40 @@ function renderStub(label) {
   };
 }
 
+function renderStyleguide() {
+  requireView().innerHTML = `
+    <div class="styleguide">
+      <h2>Styleguide</h2>
+      <section class="card">
+        <p>Card — surface, hairline, 10px radius, 24px padding.</p>
+      </section>
+      <div class="stat">
+        <span class="stat-value">0.6041</span>
+        <span class="stat-caption">score</span>
+        <span class="stat-src">monitors.primary</span>
+      </div>
+      <div class="chip-row">
+        <span class="chip-state chip-state--accepted">accepted</span>
+        <span class="chip-state chip-state--declined">declined</span>
+        <span class="chip-state chip-state--retrying">retrying</span>
+        <span class="chip-state chip-state--shelved">shelved</span>
+        <span class="chip-state chip-state--disqualified">disqualified</span>
+        <span class="chip-state chip-state--crashed">crashed</span>
+        <span class="chip-state chip-state--live">live</span>
+      </div>
+      <p class="empty">nothing here yet</p>
+      <div class="doc">
+        <p>Doc column — 68 characters, 16px at 1.7. Later pages (game plan, summary) copy this width.</p>
+      </div>
+      <ol class="trail">
+        <li>Paper read</li>
+        <li>Idea queued</li>
+        <li>Attempt built</li>
+      </ol>
+    </div>
+  `;
+}
+
 let monitorsFetchGen = 0;
 
 function renderMonitors(_state) {
@@ -1159,6 +1193,7 @@ const ROUTES = [
   { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
   { hash: "audit/monitors", render: renderMonitors },
   { hash: "report", render: renderStub("Report") },
+  { hash: "styleguide", render: renderStyleguide },
 ];
 // Audit has no content of its own — two of its three children are parked
 // pending cost and rung data (see Handoff_app.md, "Explicitly parked"), but

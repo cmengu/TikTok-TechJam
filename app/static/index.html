@@ -25,19 +25,26 @@
       font-display: swap;
       src: url("/static/fonts/instrument-serif.woff2") format("woff2");
     }
+    @font-face {
+      font-family: "IBM Plex Mono";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("/static/fonts/ibm-plex-mono.woff2") format("woff2");
+    }
 
     :root {
       color-scheme: light;
       font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.55;
 
-      --canvas:      #f7f5f4;
+      --canvas:      #f5f3ec;
       --ink:         #1a1917;
-      --surface:     #ffffff;
+      --surface:     #fdfcf9;
       --ink-muted:   #6a6866;
-      --sunken:      #f1efec;
+      --sunken:      #eeebe1;
       --ink-faint:   #9d9a96;
-      --hairline:    #e8e5e1;
+      --hairline:    #e0dccd;
       --hairline-hi: #d9d5d0;
       --rail:        #0f0e0c;
       --rail-ink:    #b8b5b1;
@@ -46,14 +53,17 @@
       --rail-hover:  #1e1d1a;
       --rail-ink-dim: #73716e;
 
-      --pos:  #396b53;
-      --pos-wash:  #eef3f0;
+      --pos:  #2e5943;
+      --pos-wash:  #e9efe9;
       --warn: #8a6a2c;
       --warn-wash: #f6f1e6;
       --crit: #96323c;
       --crit-wash: #f9edee;
-      --info: #3e4e7d;
-      --info-wash: #eef0f6;
+
+      --fs-hero: 56px;
+      --fs-title: 28px;
+      --fs-body: 15px;
+      --fs-label: 11px;
 
       --r-panel: 10px;
       --r-ctl: 8px;
@@ -71,10 +81,17 @@
       box-sizing: border-box;
     }
     table,
+    td,
     .score-table td,
     .kv dd,
     .dashboard-grid li {
       font-variant-numeric: tabular-nums;
+    }
+    .data,
+    .hash-value,
+    .tree-node-id,
+    .dossier-id {
+      font-family: "IBM Plex Mono", "SF Mono", Menlo, monospace;
     }
     #sidebar a,
     .tree-node {
@@ -92,7 +109,13 @@
       margin: 0;
       background: var(--canvas);
       color: var(--ink);
+      font-size: var(--fs-body);
       min-height: 100vh;
+    }
+    #view h2 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: var(--fs-title);
     }
     h1 {
       color: var(--rail-ink-hi);
@@ -355,7 +378,7 @@
       border-bottom: 1px solid var(--hairline);
     }
     .score-table td {
-      padding: var(--s2) var(--s3) var(--s2) 0;
+      padding: 12px var(--s3) 12px 0;
       border-bottom: 1px solid var(--hairline);
       vertical-align: baseline;
     }
@@ -710,7 +733,7 @@
     table.metrics th,
     table.metrics td {
       text-align: left;
-      padding: 0.25rem 1rem 0.25rem 0;
+      padding: 12px 1rem 12px 0;
     }
     table.metrics thead th {
       font-size: 0.6875rem;
@@ -755,7 +778,6 @@
       color: var(--crit);
     }
     .hash-value {
-      font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
       font-size: 0.8125rem;
       background: var(--sunken);
       border: 1px solid var(--hairline);
@@ -779,6 +801,163 @@
     .range-note {
       color: var(--ink-muted);
       font-size: 0.85rem;
+    }
+
+    /* --- LuxMax shared components (B2). Intended markup is in the comments;
+       later steps copy from the styleguide route, not from this comment. --- */
+
+    /* .card — intended: <section class="card">…</section> */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 10px;
+      padding: 24px;
+    }
+
+    /* .stat — intended:
+       <div class="stat">
+         <span class="stat-value">0.6041</span>
+         <span class="stat-caption">score</span>
+         <span class="stat-src">monitors.primary</span>
+       </div> */
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s1);
+    }
+    .stat-value {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 28px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .stat-caption {
+      font-size: 12px;
+      color: var(--ink-muted);
+    }
+    .stat-src {
+      font-family: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--ink-faint);
+    }
+
+    /* .chip-state — intended: <span class="chip-state chip-state--{state}">…</span> */
+    .chip-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 999px;
+      padding: 0.15rem 0.6rem;
+      font-size: var(--fs-label);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .chip-state--accepted {
+      background: var(--pos-wash);
+      color: var(--pos);
+    }
+    .chip-state--declined {
+      background: var(--crit-wash);
+      color: var(--crit);
+    }
+    .chip-state--retrying {
+      background: var(--warn-wash);
+      color: var(--warn);
+    }
+    .chip-state--shelved {
+      background: var(--sunken);
+      color: var(--ink-muted);
+    }
+    .chip-state--disqualified {
+      background: var(--crit-wash);
+      color: var(--crit);
+    }
+    .chip-state--crashed {
+      background: var(--crit);
+      color: var(--surface);
+    }
+    .chip-state--live {
+      background: var(--pos-wash);
+      color: var(--pos);
+    }
+    .chip-state--live::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: chip-live-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes chip-live-pulse {
+      50% { opacity: 0.35; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chip-state--live::before {
+        animation: none;
+      }
+    }
+
+    /* .empty — intended: <p class="empty">nothing here yet</p> */
+    .empty {
+      color: var(--ink-muted);
+      font-style: italic;
+      margin: 0;
+    }
+
+    /* .doc — intended: <div class="doc">…</div> */
+    .doc {
+      max-width: 68ch;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    /* .trail — intended: <ol class="trail"><li>…</li></ol> */
+    .trail {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      counter-reset: trail;
+    }
+    .trail li {
+      position: relative;
+      padding: 0 0 var(--s4) 2rem;
+      counter-increment: trail;
+    }
+    .trail li::before {
+      content: counter(trail);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      color: var(--ink-muted);
+      font-size: var(--fs-label);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+    .trail li:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      left: 0.6rem;
+      top: 1.25rem;
+      bottom: 0;
+      border-left: 1px solid var(--hairline);
+    }
+
+    .styleguide {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s5);
+    }
+    .styleguide .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--s2);
     }
   </style>
 </head>
