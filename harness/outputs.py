@@ -268,6 +268,15 @@ def claim_level(events: list[dict]) -> str:
     return "L4-v"
 
 
+def claim_reason(events: list[dict]) -> str:
+    """Why claim_level() returned what it did. Pure fold; no I/O."""
+    promos = _promotions(events)
+    if not promos:
+        return "no promotions on the log"
+    with_oracle = sum("oracle_delta" in e for e in promos)
+    return f"{with_oracle} of {len(promos)} promotions carry oracle_delta"
+
+
 def report(events: list[dict], out_path: Path) -> dict:
     assert_single_protocol(events)
     rep = audit_replication_pairs(events)
@@ -312,6 +321,7 @@ def report(events: list[dict], out_path: Path) -> dict:
         f"- oracle_gap: {gaps}",
         f"- ladder_queries: {queries}",
         f"- claim_level: {claim_level(events)}",
+        f"- claim_reason: {claim_reason(events)}",
         "",
         "## Tree summary",
         f"- promoted nodes: {promoted}",
