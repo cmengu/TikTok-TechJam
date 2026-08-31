@@ -41,6 +41,11 @@ BAD_DIFF = """\
 +broken
 """
 
+# GOOD_DIFF's body with deliberately wrong hunk-header counts — the exact
+# corruption haiku shipped on the first full run. Vanilla apply calls it
+# "corrupt patch"; --recount must accept it.
+MISCOUNTED_DIFF = GOOD_DIFF.replace("@@ -137,7 +137,7 @@", "@@ -137,6 +137,9 @@")
+
 
 def _usage() -> Usage:
     return Usage(tokens_in=12, tokens_out=34)
@@ -223,6 +228,16 @@ def test_coder_applies_diff(tmp_path: Path):
     assert path.read_text(encoding="utf-8") == GOOD_DIFF
     sha = ws.commit_node(1, path)
     assert sha
+
+
+def test_coder_recounts_miscounted_hunks(tmp_path: Path):
+    """A diff whose only defect is wrong @@ counts applies on the first try."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run", "test-run")
+    llm = FakeLLM({"coder": [(MISCOUNTED_DIFF, _usage())]})
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert path.read_text(encoding="utf-8") == MISCOUNTED_DIFF
 
 
 def test_coder_retries_on_apply_failure(tmp_path: Path):

@@ -54,7 +54,10 @@ class LLMCoder:
     def _try_apply(self, diff_path: Path) -> str | None:
         head = self.workspace.head()
         proc = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn", str(diff_path)],
+            # --recount: LLM coders reliably miscount @@ hunk headers (seen on the
+            # first full KuaiRand run — 3/3 patches rejected as "corrupt patch");
+            # git re-derives the counts from the hunk body instead of trusting them.
+            ["git", "apply", "--recount", "--whitespace=nowarn", str(diff_path)],
             cwd=str(self.workspace.path),
             capture_output=True,
             text=True,
