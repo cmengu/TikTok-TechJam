@@ -54,7 +54,10 @@ class LLMCoder:
     def _try_apply(self, diff_path: Path) -> str | None:
         head = self.workspace.head()
         proc = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn", str(diff_path)],
+            # --recount: LLM coders reliably miscount @@ hunk headers (seen on the
+            # first full KuaiRand run — 3/3 patches rejected as "corrupt patch");
+            # git re-derives the counts from the hunk body instead of trusting them.
+            ["git", "apply", "--recount", "--whitespace=nowarn", str(diff_path)],
             cwd=str(self.workspace.path),
             capture_output=True,
             text=True,
@@ -96,6 +99,10 @@ class LLMCoder:
                 raise RuntimeError(tb)
 
             diff_path = self.patches_dir / f"{hyp.id}-{uuid.uuid4().hex[:8]}.diff"
+            # git rejects a patch whose last line has no newline ("corrupt
+            # patch at line N+1") — and the fence-stripper's strip() eats it.
+            if not diff_text.endswith("\n"):
+                diff_text += "\n"
             diff_path.write_text(diff_text, encoding="utf-8")
 
             apply_err = self._try_apply(diff_path)

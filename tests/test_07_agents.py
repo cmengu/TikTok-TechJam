@@ -41,6 +41,15 @@ BAD_DIFF = """\
 +broken
 """
 
+# GOOD_DIFF's body with deliberately wrong hunk-header counts — the exact
+# corruption haiku shipped on the first full run. Vanilla apply calls it
+# "corrupt patch"; --recount must accept it.
+MISCOUNTED_DIFF = GOOD_DIFF.replace("@@ -137,7 +137,7 @@", "@@ -137,6 +137,9 @@")
+
+# The fence-stripper strip()s the trailing newline off CLI responses; git
+# calls such a file "corrupt patch at line N+1". The coder must restore it.
+NO_TRAILING_NEWLINE_DIFF = MISCOUNTED_DIFF.rstrip("\n")
+
 
 def _usage() -> Usage:
     return Usage(tokens_in=12, tokens_out=34)
@@ -223,6 +232,26 @@ def test_coder_applies_diff(tmp_path: Path):
     assert path.read_text(encoding="utf-8") == GOOD_DIFF
     sha = ws.commit_node(1, path)
     assert sha
+
+
+def test_coder_recounts_miscounted_hunks(tmp_path: Path):
+    """A diff whose only defect is wrong @@ counts applies on the first try."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run", "test-run")
+    llm = FakeLLM({"coder": [(MISCOUNTED_DIFF, _usage())]})
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert path.read_text(encoding="utf-8") == MISCOUNTED_DIFF
+
+
+def test_coder_restores_trailing_newline(tmp_path: Path):
+    """A truncated-looking diff (no final newline) still applies first try."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run", "test-run")
+    llm = FakeLLM({"coder": [(NO_TRAILING_NEWLINE_DIFF, _usage())]})
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert path.read_text(encoding="utf-8").endswith("\n")
 
 
 def test_coder_retries_on_apply_failure(tmp_path: Path):
@@ -488,3 +517,21 @@ def test_fixture_still_l4v_four_nodes():
     assert claim_level(events) == "L4-v"
     nodes = {e["id"] for e in events if e["type"] == "node_created"}
     assert len(nodes) == 4
+
+
+def test_strip_fences_drops_midtext_fences():
+    """Fence lines inside the body (prose + fenced block) must go too —
+    git recount choked on a bare ``` mid-patch on kuairand-20260831-171932."""
+    from harness.agents.llm import _strip_fences
+
+    text = "--- a/t.py\n+++ b/t.py\n```\n@@ -1,1 +1,1 @@\n-a\n+b\n```diff\n context"
+    out = _strip_fences(text)
+    assert "```" not in out
+    assert "+b" in out and " context" in out
+
+
+def test_strip_fences_plain_text_unchanged():
+    from harness.agents.llm import _strip_fences
+
+    plain = "--- a/t.py\n+++ b/t.py\n@@ -1,1 +1,1 @@\n-a\n+b"
+    assert _strip_fences(plain) == plain
