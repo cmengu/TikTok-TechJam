@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
 from pathlib import Path
 
 import pytest
@@ -145,3 +146,23 @@ def test_full_rung_verdicts_carry_attribution(fake_run_dir: Path):
     pairs = {(e.get("attribution"), e["state"]) for e in full}
     assert ("clear", "promoted") in pairs
     assert ("unclear", "inconclusive") in pairs
+
+
+def test_replicate_verdicts_carry_delta_per_seed(fake_run_dir: Path):
+    events = _read_jsonl(fake_run_dir / "events.jsonl")
+    replicate = [
+        e for e in events
+        if e["type"] == "verdict" and e.get("rung") == "replicate"
+    ]
+    assert replicate
+    for e in replicate:
+        deltas = e.get("delta_per_seed") or []
+        assert deltas, f"node {e.get('node')} replicate verdict missing delta_per_seed"
+        assert statistics.mean(deltas) == pytest.approx(e["delta_mean"])
+
+
+def test_delta_per_seed_keeps_its_producer(fake_run_dir: Path):
+    events = _read_jsonl(fake_run_dir / "events.jsonl")
+    for e in events:
+        if "delta_per_seed" in e:
+            assert e.get("producer") == "measure"
