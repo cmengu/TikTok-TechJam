@@ -133,6 +133,22 @@ export const DICT = {
     word: "banned idea",
     hint: "ideas it refuses to retry",
   },
+  checkStatic: {
+    word: "free pattern check",
+    hint: "a regex over the candidate, no model",
+  },
+  checkLlm: {
+    word: "one model reading",
+    hint: "one model judges the candidate against the contract",
+  },
+  rulebookHeader: {
+    word: "These {n} rules are the whole contract. The candidate reads this file; the checks below run this file. Same document.",
+    hint: null,
+  },
+  rulebookUnavailable: {
+    word: "the contract file is unreadable",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {

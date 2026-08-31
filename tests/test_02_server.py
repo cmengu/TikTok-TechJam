@@ -335,3 +335,33 @@ def test_report_absent_available_false(client: TestClient):
     body = res.json()
     assert body["available"] is False
     assert "finished" in body["reason"]
+
+
+def test_contract_returns_rules(client: TestClient):
+    res = client.get("/contract")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    rules = body["rules"]
+    # Addendum said nine; candidate/rules.jsonl has 18. The file is right.
+    assert len(rules) == 18
+    for row in rules:
+        assert "id" in row
+        assert "statement" in row
+        assert "check" in row
+        assert "severity" in row
+
+
+def test_contract_malformed_degrades(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    bad = tmp_path / "rules.jsonl"
+    bad.write_text("{not json\n", encoding="utf-8")
+    import harness.verify as verify
+
+    monkeypatch.setattr(verify, "RULES_PATH", bad)
+    res = client.get("/contract")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert body["reason"] == "the contract file is unreadable"
