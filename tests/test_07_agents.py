@@ -517,3 +517,21 @@ def test_fixture_still_l4v_four_nodes():
     assert claim_level(events) == "L4-v"
     nodes = {e["id"] for e in events if e["type"] == "node_created"}
     assert len(nodes) == 4
+
+
+def test_strip_fences_drops_midtext_fences():
+    """Fence lines inside the body (prose + fenced block) must go too —
+    git recount choked on a bare ``` mid-patch on kuairand-20260831-171932."""
+    from harness.agents.llm import _strip_fences
+
+    text = "--- a/t.py\n+++ b/t.py\n```\n@@ -1,1 +1,1 @@\n-a\n+b\n```diff\n context"
+    out = _strip_fences(text)
+    assert "```" not in out
+    assert "+b" in out and " context" in out
+
+
+def test_strip_fences_plain_text_unchanged():
+    from harness.agents.llm import _strip_fences
+
+    plain = "--- a/t.py\n+++ b/t.py\n@@ -1,1 +1,1 @@\n-a\n+b"
+    assert _strip_fences(plain) == plain

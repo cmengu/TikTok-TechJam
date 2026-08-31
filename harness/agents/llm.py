@@ -146,6 +146,11 @@ def _strip_fences(text: str) -> str:
         lines = lines[1:]
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
+    # A response can carry fences MID-text too (prose + a fenced block, or
+    # several blocks) — seen on kuairand-20260831-171932, where git recount
+    # choked on a bare ``` at line 130. Fence lines are never valid diff or
+    # JSON content, so drop them wherever they appear.
+    lines = [l for l in lines if not l.strip().startswith("```")]
     return "\n".join(lines).strip()
 
 
