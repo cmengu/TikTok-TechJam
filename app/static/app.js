@@ -11,6 +11,16 @@ import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
+import { buildLibrary, libraryPageHtml } from "./library.js";
+import { buildIdeas, ideasPageHtml } from "./ideas.js";
+import {
+  buildDoubleChecks,
+  buildSpend,
+  buildStability,
+  doubleChecksPageHtml,
+  spendPageHtml,
+  stabilityPageHtml,
+} from "./audit.js";
 
 export { chipHtml };
 
@@ -1182,6 +1192,78 @@ function renderBrief(_state) {
     });
 }
 
+let libraryFetchGen = 0;
+
+function renderLibrary(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading library…</p>`;
+  const path = currentRoutePath();
+  const gen = ++libraryFetchGen;
+  fetch("/papers/manifest")
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== libraryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const papers =
+        payload?.available === true && Array.isArray(payload.papers)
+          ? payload.papers
+          : [];
+      view.innerHTML = libraryPageHtml(buildLibrary(store.getState(), papers));
+    })
+    .catch(() => {
+      if (gen !== libraryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">library unavailable</p>`;
+    });
+}
+
+function renderIdeas(state) {
+  const vm = buildIdeas(state);
+  requireView().innerHTML = vm
+    ? ideasPageHtml(vm)
+    : `<p class="empty">no ideas yet</p>`;
+}
+
+function fetchAudit(label, url, build, html) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading ${label}…</p>`;
+  const path = currentRoutePath();
+  if (!runId) return;
+  fetch(url)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (currentRoutePath() !== path) return;
+      const vm = build(payload);
+      view.innerHTML = vm ? html(vm) : `<p class="empty">${label} unavailable</p>`;
+    })
+    .catch(() => {
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">${label} unavailable</p>`;
+    });
+}
+
+function renderDoubleChecks() {
+  fetchAudit(
+    "double-checks",
+    `/runs/${runId}/audit/replication`,
+    buildDoubleChecks,
+    doubleChecksPageHtml,
+  );
+}
+
+function renderSpend() {
+  fetchAudit("spend", `/runs/${runId}/audit/cost`, buildSpend, spendPageHtml);
+}
+
+function renderStability() {
+  fetchAudit(
+    "stability",
+    `/runs/${runId}/audit/reliability`,
+    buildStability,
+    stabilityPageHtml,
+  );
+}
+
 let monitorsFetchGen = 0;
 
 function renderMonitors(_state) {
@@ -1269,8 +1351,8 @@ const ROUTES = [
   // its four panels are meant to reflect every event.
   { hash: "protocol", render: renderProtocol, key: (state) => state.run.protocol },
   { hash: "brief", render: renderBrief },
-  { hash: "research", render: renderStub("Research") },
-  { hash: "hypotheses", render: renderStub("Hypotheses") },
+  { hash: "research", render: renderLibrary },
+  { hash: "hypotheses", render: renderIdeas },
   // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
   // hash strings exactly, so "#/run/3" matched nothing and fell through to
   // the DEFAULT_ROUTE (Dashboard). match() below is what fixes that; hash
@@ -1284,9 +1366,9 @@ const ROUTES = [
     render: renderRun,
     key: runRouteKey,
   },
-  { hash: "audit/replication", render: renderStub("Audit — Replication") },
-  { hash: "audit/cost", render: renderStub("Audit — Cost") },
-  { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
+  { hash: "audit/replication", render: renderDoubleChecks },
+  { hash: "audit/cost", render: renderSpend },
+  { hash: "audit/reliability", render: renderStability },
   { hash: "audit/monitors", render: renderMonitors },
   { hash: "report", render: renderStub("Report") },
   { hash: "styleguide", render: renderStyleguide },
