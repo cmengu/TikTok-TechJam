@@ -397,3 +397,27 @@ def test_make_llm_selects_by_environment(monkeypatch: pytest.MonkeyPatch):
     # missing-key error — make_llm itself never raises
     monkeypatch.setattr(llm_mod.shutil, "which", lambda name: None)
     assert isinstance(llm_mod.make_llm(), llm_mod.AnthropicLLM)
+
+
+def test_claude_cli_strips_fences_from_diff(monkeypatch: pytest.MonkeyPatch):
+    # The failure seen on the first real run: a fenced diff reached git apply.
+    from harness.agents import llm as llm_mod
+
+    fenced = "```diff\n--- a/template.py\n+++ b/template.py\n@@ -1 +1 @@\n-x\n+y\n```"
+    monkeypatch.setattr(
+        llm_mod.subprocess, "run", lambda cmd, **kw: _FakeProc(_cli_envelope(fenced))
+    )
+    text, _usage = llm_mod.ClaudeCLILLM().complete("coder", "write a diff", None)
+    assert text.startswith("--- a/template.py")
+    assert "```" not in text
+
+
+def test_claude_cli_unfenced_diff_unchanged(monkeypatch: pytest.MonkeyPatch):
+    from harness.agents import llm as llm_mod
+
+    plain = "--- a/t.py\n+++ b/t.py\n@@ -1 +1 @@\n-x\n+y"
+    monkeypatch.setattr(
+        llm_mod.subprocess, "run", lambda cmd, **kw: _FakeProc(_cli_envelope(plain))
+    )
+    text, _usage = llm_mod.ClaudeCLILLM().complete("coder", "write a diff", None)
+    assert text == plain
