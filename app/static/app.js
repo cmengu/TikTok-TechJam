@@ -514,7 +514,8 @@ function formatHash(value) {
   const remainder = str.replace(/^sha256:/, "");
   const looksLikeHash = /^[0-9a-f]+$/i.test(remainder) && remainder.length >= 32;
   const display = looksLikeHash && str.length > 12 ? `${str.slice(0, 12)}…` : str;
-  return `<span class="hash-value" data-copy="${escapeAttr(str)}" title="click to copy full value">${escapeHtml(display)}</span>`;
+  const hover = display === str ? "click to copy" : `${str} — click to copy`;
+  return `<span class="hash-value" data-copy="${escapeAttr(str)}" title="${escapeAttr(hover)}">${escapeHtml(display)}</span>`;
 }
 
 // The spread across seeds *is* the noise band — reproduced renders as
@@ -582,10 +583,12 @@ function buildMetricsBlock(metrics) {
   return `
     <div class="protocol-block">
       <h3>Metrics</h3>
-      <table class="metrics">
-        <thead><tr><th>Metric</th><th>Population</th><th>Positive</th><th>Required output</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="protocol-scroll">
+        <table class="metrics">
+          <thead><tr><th>Metric</th><th>Population</th><th>Positive</th><th>Required output</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -632,10 +635,12 @@ function buildBaselineBlock(baseline) {
       </dl>
       ${
         metricNames.length
-          ? `<table class="metrics">
-               <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th></tr></thead>
-               <tbody>${rows}</tbody>
-             </table>`
+          ? `<div class="protocol-scroll">
+               <table class="metrics">
+                 <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th></tr></thead>
+                 <tbody>${rows}</tbody>
+               </table>
+             </div>`
           : ""
       }
     </div>
