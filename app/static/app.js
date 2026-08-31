@@ -4,6 +4,7 @@ import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
 import { buildDossier } from "./dossier.js";
+import { buildMonitors } from "./monitors.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -992,6 +993,81 @@ function renderStub(label) {
   };
 }
 
+let monitorsFetchGen = 0;
+
+function renderMonitors(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading monitors…</p>`;
+  const path = currentRoutePath();
+  const gen = ++monitorsFetchGen;
+  if (!runId) return;
+  fetch(`/runs/${runId}/audit/monitors`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== monitorsFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const vm = buildMonitors(payload);
+      if (!vm) {
+        view.innerHTML = `<p class="panel-empty">monitors payload unusable</p>`;
+        return;
+      }
+      view.innerHTML = renderMonitorsView(vm);
+    })
+    .catch(() => {
+      if (gen !== monitorsFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="panel-empty">monitors unavailable</p>`;
+    });
+}
+
+function renderMonitorsView(vm) {
+  const numbers = vm.numbers
+    .map(
+      (row) =>
+        `<li><span>${escapeHtml(row.label)}</span> ${escapeHtml(row.text)}` +
+        ` <span class="panel-note">${escapeHtml(row.source)}</span></li>`,
+    )
+    .join("");
+  const gaps = vm.gap.points.length
+    ? vm.gap.points
+        .map(
+          (p) =>
+            `<li>node ${escapeHtml(String(p.node))} gap ${escapeHtml(String(p.gap))}</li>`,
+        )
+        .join("")
+    : `<p class="panel-empty">no oracle gaps</p>`;
+  const seeds = vm.seedEmpty
+    ? `<p class="panel-empty">no seed-consistency rows</p>`
+    : `<ul>${vm.seedConsistency
+        .map(
+          (row) =>
+            `<li>node ${escapeHtml(String(row.node))} ${escapeHtml(row.text)}</li>`,
+        )
+        .join("")}</ul>`;
+  const alarm = vm.gap.alarm ? "alarm" : "quiet";
+  return `
+    <div class="dashboard-grid">
+      <section>
+        <h2>Headline</h2>
+        <ul>${numbers}</ul>
+      </section>
+      <section>
+        <h2>Oracle gap (${escapeHtml(alarm)})</h2>
+        ${vm.gap.points.length ? `<ul>${gaps}</ul>` : gaps}
+      </section>
+      <section>
+        <h2>Seed consistency</h2>
+        ${seeds}
+      </section>
+      <section>
+        <h2>Rung</h2>
+        <p>${escapeHtml(vm.rung.level)}</p>
+        <p class="panel-note">${escapeHtml(vm.rung.reason)}</p>
+      </section>
+    </div>
+  `;
+}
+
 // --- router ---
 const ROUTES = [
   { hash: "dashboard", render: renderDashboard },
@@ -1022,6 +1098,7 @@ const ROUTES = [
   { hash: "audit/replication", render: renderStub("Audit — Replication") },
   { hash: "audit/cost", render: renderStub("Audit — Cost") },
   { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
+  { hash: "audit/monitors", render: renderMonitors },
   { hash: "report", render: renderStub("Report") },
 ];
 // Audit has no content of its own — two of its three children are parked
