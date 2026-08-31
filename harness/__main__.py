@@ -131,7 +131,7 @@ def _cmd_run(argv: list[str]) -> None:
     from harness.agents.brief import compose
     from harness.agents.cache import ResearchCache
     from harness.agents.coder import LLMCoder
-    from harness.agents.llm import AnthropicLLM
+    from harness.agents.llm import make_llm
     from harness.agents.researcher import propose
     from harness.measure import Measure
     from harness.runner import Runner
@@ -205,7 +205,7 @@ def _cmd_run(argv: list[str]) -> None:
         if use_agents:
             brief_path = Path(run_cfg["brief_path"])
             brief = compose(brief_path, protocol)
-            llm = AnthropicLLM(models=run_cfg["models"])
+            llm = make_llm(models=run_cfg["models"])
             cache = ResearchCache(protocol.protocol_hash, events=events)
             coder = LLMCoder(llm, workspace, events=events)
             tree_holder: dict[str, Tree] = {}
