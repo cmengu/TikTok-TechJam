@@ -99,6 +99,10 @@ class LLMCoder:
                 raise RuntimeError(tb)
 
             diff_path = self.patches_dir / f"{hyp.id}-{uuid.uuid4().hex[:8]}.diff"
+            # git rejects a patch whose last line has no newline ("corrupt
+            # patch at line N+1") — and the fence-stripper's strip() eats it.
+            if not diff_text.endswith("\n"):
+                diff_text += "\n"
             diff_path.write_text(diff_text, encoding="utf-8")
 
             apply_err = self._try_apply(diff_path)

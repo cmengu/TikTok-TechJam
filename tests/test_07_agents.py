@@ -46,6 +46,10 @@ BAD_DIFF = """\
 # "corrupt patch"; --recount must accept it.
 MISCOUNTED_DIFF = GOOD_DIFF.replace("@@ -137,7 +137,7 @@", "@@ -137,6 +137,9 @@")
 
+# The fence-stripper strip()s the trailing newline off CLI responses; git
+# calls such a file "corrupt patch at line N+1". The coder must restore it.
+NO_TRAILING_NEWLINE_DIFF = MISCOUNTED_DIFF.rstrip("\n")
+
 
 def _usage() -> Usage:
     return Usage(tokens_in=12, tokens_out=34)
@@ -238,6 +242,16 @@ def test_coder_recounts_miscounted_hunks(tmp_path: Path):
     coder = LLMCoder(llm, ws, events=events)
     path = coder.materialise(_hyp(), _node(), None)
     assert path.read_text(encoding="utf-8") == MISCOUNTED_DIFF
+
+
+def test_coder_restores_trailing_newline(tmp_path: Path):
+    """A truncated-looking diff (no final newline) still applies first try."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run", "test-run")
+    llm = FakeLLM({"coder": [(NO_TRAILING_NEWLINE_DIFF, _usage())]})
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert path.read_text(encoding="utf-8").endswith("\n")
 
 
 def test_coder_retries_on_apply_failure(tmp_path: Path):
