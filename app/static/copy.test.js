@@ -1,11 +1,16 @@
 /** C1 copy.js dictionary tests — node --test, no DOM. */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { STATES } from "./reducer.js";
 import {
   BANNED,
+  DICT,
+  attributionLabel,
   claimLabel,
   fmtDelta,
   fmtDuration,
@@ -16,6 +21,9 @@ import {
   rungLabel,
   stateLabel,
 } from "./copy.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const APP = join(__dirname, "app.js");
 
 const GERUND_ALLOWLIST = new Set([
   "accepted",
@@ -78,6 +86,12 @@ describe("copy", () => {
         assert.equal(re.test(label.hint), false, `banned in hint: ${label.hint}`);
       }
     }
+    for (const [key, label] of Object.entries(DICT)) {
+      assert.equal(re.test(label.word), false, `banned in DICT.${key}.word: ${label.word}`);
+      if (label.hint != null) {
+        assert.equal(re.test(label.hint), false, `banned in DICT.${key}.hint: ${label.hint}`);
+      }
+    }
   });
 
   it("test_formatters", () => {
@@ -95,5 +109,33 @@ describe("copy", () => {
     assert.equal(fmtTokens(0), "0");
     assert.notEqual(fmtScore(0), "—");
     assert.notEqual(fmtTokens(0), "—");
+  });
+
+  it("test_rung_heading_is_plain", () => {
+    const label = DICT.rungHeading;
+    assert.equal(typeof label.word, "string");
+    assert.ok(label.word.length > 0);
+    assert.equal(bannedRe().test(label.word), false, `banned in heading: ${label.word}`);
+    assert.notEqual(label.word.toLowerCase(), "rung");
+  });
+
+  it("test_app_templates_do_not_render_rung_heading", () => {
+    const src = readFileSync(APP, "utf8");
+    assert.equal(
+      src.includes("<h2>Rung</h2>"),
+      false,
+      "app.js still hard-codes <h2>Rung</h2> — use DICT.rungHeading",
+    );
+  });
+
+  it("test_attribution_label_maps_clear_and_unclear", () => {
+    assert.equal(attributionLabel("clear"), "explained");
+    assert.equal(attributionLabel("unclear"), "unexplained");
+  });
+
+  it("test_unknown_attribution_does_not_leak", () => {
+    assert.equal(attributionLabel("mystery"), "unexplained");
+    assert.equal(attributionLabel("clearish"), "unexplained");
+    assert.equal(attributionLabel(null), "unexplained");
   });
 });

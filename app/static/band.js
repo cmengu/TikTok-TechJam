@@ -1,5 +1,7 @@
 /** Checkpoint 1: pure band/verdict reader (no DOM, no app.js imports). Contract: harness/measure.py Band + screen_verdict/promote_bar. */
 
+import { DICT } from "./copy.js";
+
 // Mirrors harness/measure.py:19 — Redline §6 Ladder: screen — delta ≥ this ×
 // sd_delta_screen → replicating. Copied by hand — keep in sync.
 export const SCREEN_ADVANCE_SD = 1.0;
@@ -145,8 +147,7 @@ export function verdictAnnotation(verdict) {
   if (shape === "legacy") {
     return {
       text: null,
-      reason:
-        "band is fake_run.py's legacy lo/hi pair — the harness reported no threshold this decision was tested against",
+      reason: DICT.bandLegacyReason.word,
     };
   }
 
@@ -155,10 +156,10 @@ export function verdictAnnotation(verdict) {
       text: null,
       reason:
         rung == null
-          ? "this decision carries no test kind — which comparison the harness made is unknown"
-          : "the harness's threshold for this comparison is unavailable",
+          ? DICT.bandUnknownKindReason.word
+          : DICT.bandUnavailableReason.word,
     };
   }
 
-  return { text: null, reason: "no band was reported for this decision" };
+  return { text: null, reason: DICT.bandMissingReason.word };
 }

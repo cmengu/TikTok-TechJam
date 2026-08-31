@@ -262,7 +262,10 @@ describe("band — verdictAnnotation", () => {
     assert.ok(legacyVerdict, "expected at least one verdict with an array band in fake-events.jsonl");
     const { text, reason } = verdictAnnotation(legacyVerdict);
     assert.equal(text, null);
-    assert.match(reason, /lo\/hi/, `expected the reason to name the lo\\/hi pair: ${reason}`);
+    assert.match(reason, /noise bar/, `expected the reason to name the noise bar: ${reason}`);
+    assert.doesNotMatch(reason, /\bband\b/i, `reason still says "band": ${reason}`);
+    assert.doesNotMatch(reason, /\bharness\b/i, `reason still says "harness": ${reason}`);
+    assert.doesNotMatch(reason, /fake_run/, `reason still names fake_run.py: ${reason}`);
     // lo/hi are never themselves called a threshold — rule 3 of the band
     // contract (Handoff_app.md): "`lo`/`hi` are not something screen_verdict
     // or promote_bar compared against."
@@ -296,6 +299,7 @@ describe("band — verdictAnnotation", () => {
     const { text, reason } = verdictAnnotation(verdict);
     assert.equal(text, null);
     assert.match(reason, /test kind/i, `expected the reason to name the missing test kind: ${reason}`);
+    assert.doesNotMatch(reason, /\bharness\b/i, `reason still says "harness": ${reason}`);
   });
 
   it("test_annotation_without_band_gives_a_reason", () => {
@@ -309,7 +313,8 @@ describe("band — verdictAnnotation", () => {
     };
     const { text, reason } = verdictAnnotation(verdict);
     assert.equal(text, null);
-    assert.match(reason, /no band/i, `expected the reason to say no band was reported: ${reason}`);
+    assert.match(reason, /no noise bar/i, `expected the reason to say no noise bar was reported: ${reason}`);
+    assert.doesNotMatch(reason, /\bband\b/i, `reason still says "band": ${reason}`);
   });
 });
 
