@@ -241,3 +241,33 @@ def test_monitors_is_available_false_not_500_without_overfit(
 def test_monitors_unknown_run_is_404(client: TestClient):
     res = client.get("/runs/does-not-exist/audit/monitors")
     assert res.status_code == 404
+
+
+def test_brief_returns_sections(client: TestClient):
+    res = client.get("/runs/fake-0001/brief")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert body["task"] == "synthetic"
+    assert isinstance(body["sections"], list)
+    assert len(body["sections"]) >= 1
+    assert "title" in body["sections"][0]
+    assert "body" in body["sections"][0]
+
+
+def test_brief_missing_available_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    import app.server as server
+
+    monkeypatch.setattr(server, "BRIEF_PATH", tmp_path / "missing.md")
+    res = client.get("/runs/fake-0001/brief")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "brief" in body["reason"]
+
+
+def test_brief_unknown_run_404(client: TestClient):
+    res = client.get("/runs/does-not-exist/brief")
+    assert res.status_code == 404
