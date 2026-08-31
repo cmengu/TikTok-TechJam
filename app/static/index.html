@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>beating-nise</title>
+  <title>LuxMax</title>
   <style>
     @font-face {
       font-family: "Instrument Sans";
@@ -98,13 +98,16 @@
       color: var(--rail-ink-hi);
       font-family: "Instrument Serif", Georgia, serif;
       font-weight: 400;
-      font-size: 1.5rem;
+      font-size: 22px;
       line-height: 1.15;
-      display: inline-block;
-      transform: scaleX(1.28);
-      letter-spacing: -3px;
-      transform-origin: left center;
-      margin: 0 0 var(--s6);
+      margin: 0;
+    }
+    .wordmark-sub {
+      margin: var(--s1) 0 var(--s6);
+      color: var(--rail-ink);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
     }
     .app {
       display: flex;
@@ -782,7 +785,8 @@
 <body>
   <div class="app">
     <nav id="sidebar">
-      <h1>beating-nise</h1>
+      <h1>LuxMax</h1>
+      <p class="wordmark-sub">autonomous model improvement, verified</p>
       <ul>
         <li><a href="#/dashboard" data-route="dashboard">Dashboard</a></li>
         <li><a href="#/protocol" data-route="protocol">Protocol</a></li>
