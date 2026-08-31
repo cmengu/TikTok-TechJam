@@ -241,3 +241,97 @@ def test_monitors_is_available_false_not_500_without_overfit(
 def test_monitors_unknown_run_is_404(client: TestClient):
     res = client.get("/runs/does-not-exist/audit/monitors")
     assert res.status_code == 404
+
+
+def test_brief_returns_sections(client: TestClient):
+    res = client.get("/runs/fake-0001/brief")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert body["task"] == "synthetic"
+    assert isinstance(body["sections"], list)
+    assert len(body["sections"]) >= 1
+    assert "title" in body["sections"][0]
+    assert "body" in body["sections"][0]
+
+
+def test_brief_missing_available_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    import app.server as server
+
+    monkeypatch.setattr(server, "BRIEF_PATH", tmp_path / "missing.md")
+    res = client.get("/runs/fake-0001/brief")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "brief" in body["reason"]
+
+
+def test_brief_unknown_run_404(client: TestClient):
+    res = client.get("/runs/does-not-exist/brief")
+    assert res.status_code == 404
+
+
+def test_manifest_serves_and_validates(client: TestClient):
+    import app.server as server
+
+    res = client.get("/papers/manifest")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    papers = body["papers"]
+    assert isinstance(papers, list)
+    assert len(papers) >= 1
+    for entry in papers:
+        assert entry.get("url") or entry.get("pdf"), entry
+        pdf = entry.get("pdf")
+        if pdf:
+            path = server.PAPERS / pdf
+            assert path.is_file(), f"missing pdf {pdf}"
+
+
+def test_pdf_static_mount(client: TestClient):
+    import app.server as server
+
+    pdf = server.PAPERS / "_probe.pdf"
+    pdf.write_bytes(b"%PDF-1.1\n1 0 obj<<>>endobj\ntrailer<>\n%%EOF\n")
+    try:
+        res = client.get("/papers/_probe.pdf")
+        assert res.status_code == 200
+        assert "application/pdf" in res.headers.get("content-type", "")
+    finally:
+        pdf.unlink(missing_ok=True)
+
+
+def test_manifest_malformed_degrades(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    import app.server as server
+
+    (tmp_path / "manifest.json").write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(server, "PAPERS", tmp_path)
+    res = client.get("/papers/manifest")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "malformed" in body.get("reason", "")
+
+
+def test_report_serves_markdown(client: TestClient, runs_dir: Path):
+    (runs_dir / "fake-0001" / "report.md").write_text(
+        "# Run report\n\nHello from the summary.\n", encoding="utf-8"
+    )
+    res = client.get("/runs/fake-0001/report")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert "Hello from the summary" in body["markdown"]
+
+
+def test_report_absent_available_false(client: TestClient):
+    res = client.get("/runs/fake-0001/report")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "finished" in body["reason"]

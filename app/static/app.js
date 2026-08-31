@@ -10,6 +10,18 @@ import { stateLabel, rungLabel, moveLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
+import { buildBrief, briefPageHtml } from "./brief.js";
+import { buildLibrary, libraryPageHtml } from "./library.js";
+import { buildIdeas, ideasPageHtml } from "./ideas.js";
+import {
+  buildDoubleChecks,
+  buildSpend,
+  buildStability,
+  doubleChecksPageHtml,
+  spendPageHtml,
+  stabilityPageHtml,
+} from "./audit.js";
+import { buildReport, buildReportHero, reportPageHtml } from "./report.js";
 
 export { chipHtml };
 
@@ -1114,12 +1126,6 @@ function renderHeader(state) {
   renderElapsedBudgetSlot(state.run);
 }
 
-function renderStub(label) {
-  return () => {
-    requireView().innerHTML = `<p class="stub">${escapeHtml(label)} — not built yet.</p>`;
-  };
-}
-
 function renderStyleguide() {
   requireView().innerHTML = `
     <div class="styleguide">
@@ -1152,6 +1158,134 @@ function renderStyleguide() {
       </ol>
     </div>
   `;
+}
+
+let briefFetchGen = 0;
+
+function renderBrief(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading game plan…</p>`;
+  const path = currentRoutePath();
+  const gen = ++briefFetchGen;
+  if (!runId) return;
+  fetch(`/runs/${runId}/brief`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== briefFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const vm = buildBrief(payload);
+      if (!vm) {
+        view.innerHTML = `<p class="empty">game plan unavailable</p>`;
+        return;
+      }
+      view.innerHTML = briefPageHtml(vm);
+    })
+    .catch(() => {
+      if (gen !== briefFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">game plan unavailable</p>`;
+    });
+}
+
+let libraryFetchGen = 0;
+
+function renderLibrary(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading library…</p>`;
+  const path = currentRoutePath();
+  const gen = ++libraryFetchGen;
+  fetch("/papers/manifest")
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== libraryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const papers =
+        payload?.available === true && Array.isArray(payload.papers)
+          ? payload.papers
+          : [];
+      view.innerHTML = libraryPageHtml(buildLibrary(store.getState(), papers));
+    })
+    .catch(() => {
+      if (gen !== libraryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">library unavailable</p>`;
+    });
+}
+
+function renderIdeas(state) {
+  const vm = buildIdeas(state);
+  requireView().innerHTML = vm
+    ? ideasPageHtml(vm)
+    : `<p class="empty">no ideas yet</p>`;
+}
+
+function fetchAudit(label, url, build, html) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading ${label}…</p>`;
+  const path = currentRoutePath();
+  if (!runId) return;
+  fetch(url)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (currentRoutePath() !== path) return;
+      const vm = build(payload);
+      view.innerHTML = vm ? html(vm) : `<p class="empty">${label} unavailable</p>`;
+    })
+    .catch(() => {
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">${label} unavailable</p>`;
+    });
+}
+
+function renderDoubleChecks() {
+  fetchAudit(
+    "double-checks",
+    `/runs/${runId}/audit/replication`,
+    buildDoubleChecks,
+    doubleChecksPageHtml,
+  );
+}
+
+function renderSpend() {
+  fetchAudit("spend", `/runs/${runId}/audit/cost`, buildSpend, spendPageHtml);
+}
+
+function renderStability() {
+  fetchAudit(
+    "stability",
+    `/runs/${runId}/audit/reliability`,
+    buildStability,
+    stabilityPageHtml,
+  );
+}
+
+let reportFetchGen = 0;
+
+function renderReport(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading summary…</p>`;
+  const path = currentRoutePath();
+  const gen = ++reportFetchGen;
+  if (!runId) return;
+  Promise.all([
+    fetch(`/runs/${runId}/report`).then((res) => res.json()),
+    fetch(`/runs/${runId}/audit/monitors`)
+      .then((res) => res.json())
+      .catch(() => null),
+  ])
+    .then(([reportPayload, monitorsPayload]) => {
+      if (gen !== reportFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = reportPageHtml(
+        buildReport(reportPayload),
+        buildReportHero(monitorsPayload),
+      );
+    })
+    .catch(() => {
+      if (gen !== reportFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">summary unavailable</p>`;
+    });
 }
 
 let monitorsFetchGen = 0;
@@ -1240,9 +1374,9 @@ const ROUTES = [
   // text) within milliseconds on an active run. Dashboard has no key because
   // its four panels are meant to reflect every event.
   { hash: "protocol", render: renderProtocol, key: (state) => state.run.protocol },
-  { hash: "brief", render: renderStub("Brief") },
-  { hash: "research", render: renderStub("Research") },
-  { hash: "hypotheses", render: renderStub("Hypotheses") },
+  { hash: "brief", render: renderBrief },
+  { hash: "research", render: renderLibrary },
+  { hash: "hypotheses", render: renderIdeas },
   // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
   // hash strings exactly, so "#/run/3" matched nothing and fell through to
   // the DEFAULT_ROUTE (Dashboard). match() below is what fixes that; hash
@@ -1256,11 +1390,11 @@ const ROUTES = [
     render: renderRun,
     key: runRouteKey,
   },
-  { hash: "audit/replication", render: renderStub("Audit — Replication") },
-  { hash: "audit/cost", render: renderStub("Audit — Cost") },
-  { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
+  { hash: "audit/replication", render: renderDoubleChecks },
+  { hash: "audit/cost", render: renderSpend },
+  { hash: "audit/reliability", render: renderStability },
   { hash: "audit/monitors", render: renderMonitors },
-  { hash: "report", render: renderStub("Report") },
+  { hash: "report", render: renderReport },
   { hash: "styleguide", render: renderStyleguide },
 ];
 // Audit has no content of its own — two of its three children are parked

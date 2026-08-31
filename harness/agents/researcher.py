@@ -39,7 +39,7 @@ HYPOTHESIS_SCHEMA = {
     "stage": "one of data|features|objective|architecture|training|ensemble",
     "mechanism": "slug",
     "description": "str",
-    "citation": "str or no prior",
+    "citation": "str, optionally 'Title (https://…)'",
     "expected_gain": "number",
     "expected_gpu_h": "number",
     "pattern": "slug",
@@ -142,12 +142,20 @@ def _payload_to_hypothesis(data: dict[str, Any]) -> Hypothesis:
 def _emit_citations(events, node_id: int | None, citations: list[str], usage_slice: str, usage) -> None:
     if events is None:
         return
+    url_tail = re.compile(r"\s*\((https?://[^)]+)\)$")
     for i, title in enumerate(citations):
+        url = None
+        match = url_tail.search(title)
+        if match:
+            url = match.group(1)
+            title = title[: match.start()].rstrip()
         payload: dict[str, Any] = {
             "id": f"src-{node_id}-{i}",
             "title": title,
             "summary": f"research source: {title}",
         }
+        if url:
+            payload["url"] = url
         if node_id is not None:
             payload["node"] = node_id
         if usage is not None:

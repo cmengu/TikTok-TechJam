@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 STATIC = Path(__file__).resolve().parent / "static"
+BRIEF_PATH = ROOT / "context" / "Backend_plan.md"
+PAPERS = ROOT / "papers"
 
 app = FastAPI()
 
@@ -32,6 +34,30 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not text.strip():
         return []
     return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _split_md_sections(text: str) -> list[dict[str, str]]:
+    """Split markdown on '## ' headings into [{title, body}, ...]."""
+    if not text:
+        return []
+    chunks = text.split("\n## ")
+    sections: list[dict[str, str]] = []
+    for i, chunk in enumerate(chunks):
+        if i == 0:
+            if chunk.startswith("## "):
+                chunk = chunk[3:]
+            elif chunk.strip():
+                sections.append({"title": "", "body": chunk})
+                continue
+            else:
+                continue
+        newline = chunk.find("\n")
+        if newline == -1:
+            title, body = chunk.strip(), ""
+        else:
+            title, body = chunk[:newline].strip(), chunk[newline + 1 :]
+        sections.append({"title": title, "body": body})
+    return sections
 
 
 def list_runs() -> list[dict]:
@@ -203,6 +229,41 @@ def api_audit_monitors(run_id: str):
     }
 
 
+@app.get("/runs/{run_id}/brief")
+def api_brief(run_id: str):
+    events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
+    if not BRIEF_PATH.is_file():
+        return {"available": False, "reason": "brief file not present"}
+    sections = _split_md_sections(BRIEF_PATH.read_text(encoding="utf-8"))
+    proto = (events[0].get("protocol") or {}) if events else {}
+    return {"available": True, "task": proto.get("task"), "sections": sections}
+
+
+@app.get("/papers/manifest")
+def api_papers_manifest():
+    path = PAPERS / "manifest.json"
+    if not path.is_file():
+        return {"available": False, "reason": "manifest not present"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"available": False, "reason": "manifest malformed"}
+    if not isinstance(data, list):
+        return {"available": False, "reason": "manifest malformed"}
+    return {"available": True, "papers": data}
+
+
+@app.get("/runs/{run_id}/report")
+def api_report(run_id: str):
+    path = _run_dir(run_id) / "report.md"
+    if not path.is_file():
+        return {
+            "available": False,
+            "reason": "the run has not finished — the summary writes itself at the end",
+        }
+    return {"available": True, "markdown": path.read_text(encoding="utf-8")}
+
+
 @app.get("/")
 def index():
     return FileResponse(
@@ -212,6 +273,8 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+if PAPERS.is_dir():
+    app.mount("/papers", StaticFiles(directory=str(PAPERS)), name="papers")
 
 
 def serve() -> None:

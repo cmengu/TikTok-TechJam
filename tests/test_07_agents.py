@@ -421,3 +421,70 @@ def test_claude_cli_unfenced_diff_unchanged(monkeypatch: pytest.MonkeyPatch):
     )
     text, _usage = llm_mod.ClaudeCLILLM().complete("coder", "write a diff", None)
     assert text == plain
+
+
+def _cite_payload(citations: list[str]) -> dict:
+    return {
+        "stage": "features",
+        "mechanism": "cross-stats",
+        "description": "cross stats",
+        "citation": "no prior",
+        "expected_gain": 0.02,
+        "expected_gpu_h": 0.1,
+        "citations": citations,
+        "claim": {
+            "mechanism": "cross-stats",
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
+    }
+
+
+def test_citation_url_lands_on_event(tmp_path: Path):
+    events = _events(tmp_path)
+    _queue_all_bank(events)
+    protocol = placeholder_protocol(tmp_path)
+    cache = ResearchCache(protocol.protocol_hash, events=events, node_id=9)
+    llm = FakeLLM(
+        {
+            "researcher": [
+                (
+                    _cite_payload(
+                        ["Wide & Deep (https://arxiv.org/abs/1606.07792)"]
+                    ),
+                    _usage(),
+                )
+            ]
+        }
+    )
+    propose(llm, "brief", "incumbent", {}, [], cache)
+    sources = [e for e in _read_events(events) if e["type"] == "research_source"]
+    assert len(sources) == 1
+    assert sources[0]["title"] == "Wide & Deep"
+    assert sources[0]["url"] == "https://arxiv.org/abs/1606.07792"
+
+
+def test_citation_without_url_unchanged(tmp_path: Path):
+    events = _events(tmp_path)
+    _queue_all_bank(events)
+    protocol = placeholder_protocol(tmp_path)
+    cache = ResearchCache(protocol.protocol_hash, events=events, node_id=9)
+    llm = FakeLLM({"researcher": [(_cite_payload(["Paper A"]), _usage())]})
+    propose(llm, "brief", "incumbent", {}, [], cache)
+    sources = [e for e in _read_events(events) if e["type"] == "research_source"]
+    assert len(sources) == 1
+    assert sources[0]["title"] == "Paper A"
+    assert "url" not in sources[0]
+
+
+def test_fixture_still_l4v_four_nodes():
+    from harness.outputs import claim_level
+
+    path = ROOT / "tests" / "fixtures" / "fake-events.jsonl"
+    events = [
+        json.loads(line) for line in path.read_text().splitlines() if line.strip()
+    ]
+    assert claim_level(events) == "L4-v"
+    nodes = {e["id"] for e in events if e["type"] == "node_created"}
+    assert len(nodes) == 4

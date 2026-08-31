@@ -261,20 +261,21 @@ def _build_script() -> list[dict]:
     for i, title in enumerate(
         ("Wide & Deep", "DeepFM", "NISE baseline notes"), start=1
     ):
-        events.append(
-            {
-                "type": "research_source",
-                "id": f"src-{i}",
-                "title": title,
-                "cost": {
-                    "gpu_s": 0.0,
-                    "tokens_in": 100 if i == 1 else 50,
-                    "tokens_out": 40 if i == 1 else 20,
-                    "slice": "researching" if i == 1 else "coding",
-                },
-                "summary": _s(f"research source {i}: {title}"),
-            }
-        )
+        ev = {
+            "type": "research_source",
+            "id": f"src-{i}",
+            "title": title,
+            "cost": {
+                "gpu_s": 0.0,
+                "tokens_in": 100 if i == 1 else 50,
+                "tokens_out": 40 if i == 1 else 20,
+                "slice": "researching" if i == 1 else "coding",
+            },
+            "summary": _s(f"research source {i}: {title}"),
+        }
+        if i == 1:
+            ev["url"] = "https://arxiv.org/abs/1606.07792"
+        events.append(ev)
     events.append(
         {
             "type": "cache_lookup",
