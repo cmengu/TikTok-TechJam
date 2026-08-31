@@ -851,3 +851,55 @@ def test_rebuild_matches_live(tmp_path: Path):
             assert meta["state"] == live_nodes[nid]["state"]
     finally:
         events.close()
+
+
+class _RaisingCoder:
+    """Coder whose apply always fails — the fenced-diff scenario."""
+
+    def materialise(self, hyp, incumbent, traceback):  # noqa: ANN001
+        raise RuntimeError("git apply failed: patch fragment without header")
+
+
+def test_patch_apply_failure_fails_the_node(tmp_path: Path):
+    """A node whose patch never applied must not be measured as that idea."""
+    measure = FakeMeasure()
+    runner = FakeRunner()
+    tree, events, run_dir, _ws = _make_tree(tmp_path, measure, runner, [_hyp("h-apply", mechanism="fz")])
+    tree.coder = _RaisingCoder()
+    hyp = replace(tree.hyp_index["h-apply"], patch=None)
+    nid = tree.events.new_node(None)
+    node = _node(nid, state="screening", kind="improve")
+    node.hypothesis_id = hyp.id
+    tree.nodes[nid] = node
+
+    ok = tree._commit_hyp(node, hyp, None, None)
+
+    assert ok is False
+    assert node.state == "failed"
+    assert node.commit is None
+    rows = _read_events(run_dir)
+    fails = [e for e in rows if e.get("type") == "failure" and e.get("node") == nid]
+    assert len(fails) == 1
+    assert fails[0]["class"] == "patch_apply_failed"
+    # the false-memory guard: no lesson, no verdict for this node
+    assert not [e for e in rows if e.get("type") == "lesson_written" and e.get("node") == nid]
+    assert not [e for e in rows if e.get("type") == "verdict" and e.get("node") == nid]
+
+
+def test_hand_patch_survives_coder_failure(tmp_path: Path):
+    """hyp.patch set → the coder raising falls back to the hand patch (old path)."""
+    measure = FakeMeasure()
+    runner = FakeRunner()
+    tree, events, run_dir, _ws = _make_tree(tmp_path, measure, runner, [_hyp("h-hand", mechanism="fw")])
+    tree.coder = _RaisingCoder()
+    hyp = tree.hyp_index["h-hand"]          # _make_tree gives it a real patch path
+    assert hyp.patch is not None
+    nid = tree.events.new_node(None)
+    node = _node(nid, state="screening", kind="improve")
+    node.hypothesis_id = hyp.id
+    tree.nodes[nid] = node
+
+    ok = tree._commit_hyp(node, hyp, None, None)
+
+    assert ok is True
+    assert node.state == "screening"        # untouched — the node proceeds
