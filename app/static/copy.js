@@ -198,6 +198,18 @@ export const DICT = {
     word: "no failures yet — the run writes this page itself",
     hint: null,
   },
+  claimMustUp: { word: "had to go up", hint: null },
+  claimMustDown: { word: "had to go down", hint: null },
+  claimMovedYes: { word: "yes", hint: null },
+  claimMovedNo: { word: "no", hint: null },
+  claimNotMeasured: { word: "not measured", hint: null },
+  claimGiven: { word: "given", hint: null },
+  claimRefused: { word: "refused", hint: null },
+  claimTitle: { word: "Why we believe it", hint: null },
+  claimRefusedSentence: {
+    word: "Credit refused — the score moved but the stated mechanism's observables did not. This gain is not written into memory.",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {
