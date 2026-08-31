@@ -6,7 +6,7 @@ import shutil
 import time
 from pathlib import Path
 
-from harness.events import MEASURED, EventLog
+from harness.events import EventLog
 from harness.protocol import load
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +19,12 @@ def _s(text: str) -> str:
     if not text:
         raise ValueError("empty summary")
     return text[:139]
+
+
+def _meas(**fields) -> dict:
+    """A measurement-layer SCRIPT event. producer is stamped here, not at emit."""
+    summary = fields.pop("summary")
+    return {"producer": "measure", "summary": _s(summary), **fields}
 
 
 def _hyp(hid: str, stage: str, mechanism: str, parent: int | None = None) -> dict:
@@ -105,14 +111,14 @@ def _build_script() -> list[dict]:
     for i in range(40):
         events.append(_hb("w1", "busy", node=1, progress=i / 40))
     events.append(
-        {
-            "type": "measurement",
-            "node": 1,
-            "metric": "cvr_auc",
-            "value": 0.512,
-            "seed": 1,
-            "summary": _s("node 1 measured cvr_auc=0.512 seed=1"),
-        }
+        _meas(
+            type="measurement",
+            node=1,
+            metric="cvr_auc",
+            value=0.512,
+            seed=1,
+            summary="node 1 measured cvr_auc=0.512 seed=1",
+        )
     )
     events.append(
         {
@@ -187,14 +193,14 @@ def _build_script() -> list[dict]:
         }
     )
     events.append(
-        {
-            "type": "measurement",
-            "node": 2,
-            "metric": "cvr_auc",
-            "value": 0.498,
-            "seed": 1,
-            "summary": _s("node 2 measured cvr_auc=0.498 after recovery"),
-        }
+        _meas(
+            type="measurement",
+            node=2,
+            metric="cvr_auc",
+            value=0.498,
+            seed=1,
+            summary="node 2 measured cvr_auc=0.498 after recovery",
+        )
     )
     events.append(
         {
@@ -245,7 +251,10 @@ def _build_script() -> list[dict]:
         {
             "type": "rule_trip",
             "node": 2,
-            "rule": "no_test_peek",
+            "round": 1,
+            "rule_id": "no_test_peek",
+            "statement": "no_test_peek flagged on node 2 logs",
+            "severity": "fail",
             "summary": _s("rule trip: no_test_peek flagged on node 2 logs"),
         }
     )
@@ -336,24 +345,24 @@ def _build_script() -> list[dict]:
         events.append(_hb("w1", "busy", node=3, progress=i / 50))
     for i in range(80):
         events.append(
-            {
-                "type": "measurement",
-                "node": 3,
-                "metric": "cvr_auc",
-                "value": 0.520 + (i % 10) * 0.001,
-                "seed": 1,
-                "summary": _s(f"node 3 screen tick {i} cvr_auc"),
-            }
+            _meas(
+                type="measurement",
+                node=3,
+                metric="cvr_auc",
+                value=0.520 + (i % 10) * 0.001,
+                seed=1,
+                summary=f"node 3 screen tick {i} cvr_auc",
+            )
         )
     events.append(
-        {
-            "type": "measurement",
-            "node": 3,
-            "metric": "cvr_auc",
-            "value": 0.531,
-            "seed": 1,
-            "summary": _s("node 3 measured cvr_auc=0.531 seed=1"),
-        }
+        _meas(
+            type="measurement",
+            node=3,
+            metric="cvr_auc",
+            value=0.531,
+            seed=1,
+            summary="node 3 measured cvr_auc=0.531 seed=1",
+        )
     )
     events.append(
         {
@@ -373,14 +382,14 @@ def _build_script() -> list[dict]:
     for i in range(30):
         events.append(_hb("w1", "busy", node=3, progress=0.5 + i / 60))
     events.append(
-        {
-            "type": "measurement",
-            "node": 3,
-            "metric": "cvr_auc",
-            "value": 0.529,
-            "seed": 2,
-            "summary": _s("node 3 replicate seed=2 cvr_auc=0.529"),
-        }
+        _meas(
+            type="measurement",
+            node=3,
+            metric="cvr_auc",
+            value=0.529,
+            seed=2,
+            summary="node 3 replicate seed=2 cvr_auc=0.529",
+        )
     )
     events.append(
         {
@@ -388,18 +397,18 @@ def _build_script() -> list[dict]:
             "node": 3,
             "round": 1,
             "mechanism": "lr-schedule",
-            "result": "unclear",
+            "result": "clear",
             "observables": [
                 {
                     "name": "gauc",
                     "source": "harness",
                     "direction": "positive",
                     "before": 0.50,
-                    "after": 0.50,
-                    "moved": False,
+                    "after": 0.531,
+                    "moved": True,
                 }
             ],
-            "summary": _s("node 3 attribution unclear (lr-schedule)"),
+            "summary": _s("node 3 attribution clear (lr-schedule)"),
         }
     )
     events.append(
@@ -414,6 +423,7 @@ def _build_script() -> list[dict]:
             "band": [0.52, 0.54],
             "delta_mean": 0.031,
             "oracle_delta": 0.004,
+            "attribution": "clear",
             "gpu_min": 4.5,
             "producer": "measure",
             "summary": _s("node 3 promoted: replicate held within band"),
@@ -428,24 +438,24 @@ def _build_script() -> list[dict]:
         }
     )
     events.append(
-        {
-            "type": "measurement",
-            "node": 3,
-            "rung": "holdout",
-            "visit": 1,
-            "metric": "cvr_auc",
-            "value": 0.527,
-            "summary": _s("holdout visit=1 mean=0.527"),
-        }
+        _meas(
+            type="measurement",
+            node=3,
+            rung="holdout",
+            visit=1,
+            metric="cvr_auc",
+            value=0.527,
+            summary="holdout visit=1 mean=0.527",
+        )
     )
     events.append(
-        {
-            "type": "prediction",
-            "node": 3,
-            "metric": "cvr_auc",
-            "value": 0.527,
-            "summary": _s("prediction 0.527 (η ladder accepted)"),
-        }
+        _meas(
+            type="prediction",
+            node=3,
+            metric="cvr_auc",
+            value=0.527,
+            summary="prediction 0.527 (η ladder accepted)",
+        )
     )
     events.append(
         {
@@ -465,6 +475,62 @@ def _build_script() -> list[dict]:
             "summary": _s("submission written from promoted node 3"),
         }
     )
+
+    events.append(
+        {
+            "type": "node_created",
+            "id": 4,
+            "parent": 3,
+            "kind": "improve",
+            "hypothesis_id": "h-obj-1",
+            "summary": _s("node 4 created as improve under node 3"),
+        }
+    )
+    events.append(
+        {
+            "type": "state_changed",
+            "node": 4,
+            "state": "running",
+            "summary": _s("node 4 screening→running"),
+        }
+    )
+    events.append(
+        {
+            "type": "attribution_checked",
+            "node": 4,
+            "round": 2,
+            "mechanism": "focal-loss",
+            "result": "unclear",
+            "observables": [
+                {
+                    "name": "gauc",
+                    "source": "harness",
+                    "direction": "positive",
+                    "before": 0.531,
+                    "after": 0.531,
+                    "moved": False,
+                }
+            ],
+            "summary": _s("node 4 attribution unclear (focal-loss)"),
+        }
+    )
+    events.append(
+        {
+            "type": "verdict",
+            "node": 4,
+            "state": "inconclusive",
+            "rung": "replicate",
+            "metric": "cvr_auc",
+            "scores": [0.531, 0.532, 0.530],
+            "seeds": [1, 2, 3],
+            "band": [0.52, 0.54],
+            "delta_mean": 0.002,
+            "attribution": "unclear",
+            "producer": "measure",
+            "summary": _s("node 4 inconclusive: replicate pass but attribution unclear"),
+        }
+    )
+
     events.append(
         {
             "type": "lesson_written",
@@ -527,8 +593,6 @@ def write(run_dir: Path | str, speed: float = 20.0, instant: bool = False) -> st
                 time.sleep(delay)
             payload = dict(ev)
             etype = payload.pop("type")
-            if MEASURED & payload.keys():
-                payload.setdefault("producer", "measure")
             if etype == "heartbeat":
                 worker = payload.pop("worker")
                 log.heartbeat(worker, **payload)

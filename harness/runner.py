@@ -428,6 +428,7 @@ class Runner:
                 result_path=result_path,
                 checkpoint_path=self._latest_checkpoint(workspace),
                 env=env,
+                producer="measure" if metrics else None,
             )
 
         event_returncode = completed.returncode

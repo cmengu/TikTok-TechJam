@@ -134,3 +134,14 @@ def test_script_starts_after_run_started():
     assert SCRIPT[0]["type"] == "hypothesis_queued"
     assert SCRIPT[-1]["type"] == "run_ended"
     assert all(ev["type"] != "run_started" for ev in SCRIPT)
+
+
+def test_full_rung_verdicts_carry_attribution(fake_run_dir: Path):
+    events = _read_jsonl(fake_run_dir / "events.jsonl")
+    full = [
+        e for e in events
+        if e["type"] == "verdict" and e.get("rung") == "replicate"
+    ]
+    pairs = {(e.get("attribution"), e["state"]) for e in full}
+    assert ("clear", "promoted") in pairs
+    assert ("unclear", "inconclusive") in pairs

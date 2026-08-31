@@ -237,8 +237,10 @@ class Queue:
         if key in self._seen:
             self.events.emit(
                 "rule_trip",
-                rule="duplicate",
-                id=hyp.id,
+                rule_id="duplicate",
+                statement=f"duplicate hypothesis {hyp.id}",
+                severity="fail",
+                round=0,
                 summary=f"duplicate hypothesis {hyp.id}",
             )
             return False
@@ -1084,14 +1086,8 @@ class Tree:
                 except Exception:
                     pass
             elif self._best_reported > 0:
-                self.events.emit(
-                    "prediction", node=self.incumbent.id, metric=self.measure.metric,
-                    value=self._best_reported, best_reported=self._best_reported,
-                    producer="measure",
-                    summary=(
-                        f"prediction {self._best_reported:.4f} "
-                        "(baseline holdout cache, no promotion)"
-                    ),
+                self.measure.emit_cached_prediction(
+                    self.incumbent, self._best_reported
                 )
         inc_id = self.incumbent.id if self.incumbent else None
         counts = {"nodes": len(self.nodes), "promotions": self._promotions, "queue_left": len(self.queue)}

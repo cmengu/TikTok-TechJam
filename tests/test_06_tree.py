@@ -221,6 +221,21 @@ class FakeMeasure:
             best_reported=best_reported,
         )
 
+    def emit_cached_prediction(self, node, value):  # noqa: ANN001
+        assert self.events is not None
+        self.events.emit(
+            "prediction",
+            node=node.id,
+            metric=self.metric,
+            value=float(value),
+            best_reported=float(value),
+            producer="measure",
+            summary=(
+                f"prediction {float(value):.4f} "
+                "(baseline holdout cache, no promotion)"
+            ),
+        )
+
     def maybe_refresh(self):
         return None
 
@@ -353,7 +368,7 @@ def test_dedupe(tmp_path: Path):
     finally:
         events.close()
     rows = _read_events(tmp_path / "dd")
-    trips = [e for e in rows if e["type"] == "rule_trip" and e.get("rule") == "duplicate"]
+    trips = [e for e in rows if e["type"] == "rule_trip" and e.get("rule_id") == "duplicate"]
     assert len(trips) == 1
 
 

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 
 import pytest
 
+from helpers import placeholder_protocol
+from harness.events import EventLog
+from harness.measure import PROMOTE_FLOOR, Measure, SeedCache
 from harness.overfit import (
     gap_alarm,
     ladder_queries,
@@ -16,6 +20,7 @@ from harness.overfit import (
     split_rank_corr,
 )
 from harness.outputs import claim_level, report
+from harness.types import Cost, Node, RunResult
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "fake-events.jsonl"
@@ -91,11 +96,125 @@ def test_rank_corr_returns_none_below_three():
     assert rho == pytest.approx(1.0)
 
 
-def test_seed_sign_flip_downgrades():
+def _node(nid: int = 1) -> Node:
+    return Node(
+        id=nid,
+        parent=None,
+        hypothesis_id="h-m",
+        commit=None,
+        state="running",
+        rung="screen",
+        kind="draft",
+        scores={},
+        seeds=[],
+        cost=Cost(0.0, 0, 0, "training"),
+        created_seq=nid,
+    )
+
+
+def _result(seed: int, score: float) -> RunResult:
+    return RunResult(
+        node=1,
+        attempt=1,
+        seed=seed,
+        rung="replicate",
+        ok=True,
+        metrics={"cvr_auc": score},
+        failure_class=None,
+        stderr_tail="",
+        gpu_s=0.0,
+        wall_s=0.1,
+        result_path=None,
+        checkpoint_path=None,
+    )
+
+
+def _band():
+    from harness.measure import Band
+
+    rho = 0.5
+    sigma_full = 0.012
+    sd_f = sigma_full * math.sqrt(2.0 * (1.0 - rho))
+    return Band(
+        sigma_screen=0.015,
+        sigma_full=sigma_full,
+        sigma_pair=0.0,
+        ratio=sigma_full / 0.015,
+        rho=rho,
+        sd_delta_screen=0.015 * math.sqrt(2.0 * (1.0 - rho)),
+        sd_delta_full=sd_f,
+        bar=max(PROMOTE_FLOOR, 0.95 * sd_f),
+        source="fixed_pair",
+        n_replicated=0,
+    )
+
+
+def test_seed_sign_flip_downgrades(tmp_path: Path):
     assert seed_consistency([0.02, 0.03, 0.01]) == 1.0
     flipped = seed_consistency([0.02, 0.03, -0.01])
     assert flipped == 2 / 3
     assert flipped < 1.0
+
+    proto = placeholder_protocol(tmp_path)
+    events = EventLog(tmp_path / "run-flip", "flip", proto)
+    inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
+    # Mixed signs: replicate_verdict would fail_sign; the monitor routes to
+    # inconclusive (then retire on the third visit of the same node).
+    mixed = [_result(1, 0.52), _result(2, 0.53), _result(3, 0.49)]
+    try:
+        measure = Measure(events, proto, _band(), metric="cvr_auc")
+        node = _node(1)
+        first = measure.verdict(node, mixed, inc, "replicate", attribution="clear")
+        second = measure.verdict(node, mixed, inc, "replicate", attribution="clear")
+        third = measure.verdict(node, mixed, inc, "replicate", attribution="clear")
+        assert first.state == "inconclusive"
+        assert second.state == "inconclusive"
+        assert third.state == "retired"
+    finally:
+        events.close()
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "run-flip" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    states = [e["state"] for e in rows if e["type"] == "verdict"]
+    assert states == ["inconclusive", "inconclusive", "retired"]
+
+
+def test_gap_alarm_blocks_promotion_without_oracle_gain(tmp_path: Path):
+    proto = placeholder_protocol(tmp_path)
+    events = EventLog(tmp_path / "run-gap", "gap", proto)
+    inc = SeedCache({1: 0.50, 2: 0.50, 3: 0.50})
+    passing = [_result(1, 0.53), _result(2, 0.53), _result(3, 0.53)]
+    try:
+        measure = Measure(events, proto, _band(), metric="cvr_auc")
+        widening = [(1, 0.02), (2, 0.01), (3, 0.00)]
+        for nid, oracle in widening:
+            v = measure.verdict(
+                _node(nid), passing, inc, "replicate",
+                attribution="clear", oracle_delta=oracle,
+            )
+            assert v.state == "promoted"
+        blocked = measure.verdict(
+            _node(4), passing, inc, "replicate",
+            attribution="clear", oracle_delta=0.0,
+        )
+        assert blocked.state == "rejected"
+        allowed = measure.verdict(
+            _node(5), passing, inc, "replicate",
+            attribution="clear", oracle_delta=0.01,
+        )
+        assert allowed.state == "promoted"
+    finally:
+        events.close()
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "run-gap" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    by_node = {e["node"]: e["state"] for e in rows if e["type"] == "verdict"}
+    assert by_node[4] == "rejected"
+    assert by_node[5] == "promoted"
 
 
 def test_ladder_queries_matches_promotions():
