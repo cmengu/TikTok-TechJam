@@ -195,6 +195,18 @@ describe("copy", () => {
       "app.js still hard-codes the since-win line — use DICT.sinceWinTitle",
     );
   });
+
+  it("test_check_labels_are_plain", () => {
+    assert.equal(DICT.checkStatic.word, "free pattern check");
+    assert.equal(DICT.checkLlm.word, "one model reading");
+    assert.equal(bannedRe().test(DICT.checkStatic.word), false);
+    assert.equal(bannedRe().test(DICT.checkLlm.word), false);
+  });
+
+  it("test_rulebook_header_carries_count_slot", () => {
+    assert.ok(DICT.rulebookHeader.word.includes("{n}"));
+    assert.equal(bannedRe().test(DICT.rulebookHeader.word.replace("{n}", "18")), false);
+  });
 });
 
 describe("pre-G2 renderer copy entries", () => {

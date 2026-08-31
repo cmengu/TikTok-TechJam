@@ -12,6 +12,7 @@ import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
+import { buildRulebook, rulebookPageHtml } from "./rulebook.js";
 import { buildLibrary, libraryPageHtml } from "./library.js";
 import { buildIdeas, ideasPageHtml } from "./ideas.js";
 import {
@@ -1275,6 +1276,29 @@ function renderStyleguide() {
   `;
 }
 
+let rulebookFetchGen = 0;
+
+function renderRulebook(state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading the rules…</p>`;
+  const path = currentRoutePath();
+  const gen = ++rulebookFetchGen;
+  fetch("/contract")
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== rulebookFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = rulebookPageHtml(buildRulebook(payload, state));
+    })
+    .catch(() => {
+      if (gen !== rulebookFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = rulebookPageHtml(
+        buildRulebook({ available: false, reason: DICT.rulebookUnavailable.word }, state),
+      );
+    });
+}
+
 let briefFetchGen = 0;
 
 function renderBrief(_state) {
@@ -1490,6 +1514,7 @@ const ROUTES = [
   // its four panels are meant to reflect every event.
   { hash: "protocol", render: renderProtocol, key: (state) => state.run.protocol },
   { hash: "brief", render: renderBrief },
+  { hash: "the-rules", render: renderRulebook },
   { hash: "research", render: renderLibrary },
   { hash: "hypotheses", render: renderIdeas },
   // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match

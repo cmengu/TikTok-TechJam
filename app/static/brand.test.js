@@ -48,6 +48,7 @@ const KNOWN_ROUTES = [
   "audit/reliability",
   "audit/monitors",
   "report",
+  "the-rules",
 ];
 
 describe("brand", () => {

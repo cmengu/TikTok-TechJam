@@ -198,6 +198,17 @@ def api_audit_reliability(run_id: str):
     return reliability(events)
 
 
+@app.get("/contract")
+def api_contract():
+    try:
+        import harness.verify as verify
+
+        rules = verify.load_rules(verify.RULES_PATH)
+        return {"available": True, "rules": rules}
+    except (ImportError, OSError, ValueError):
+        return {"available": False, "reason": "the contract file is unreadable"}
+
+
 @app.get("/runs/{run_id}/audit/monitors")
 def api_audit_monitors(run_id: str):
     events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
