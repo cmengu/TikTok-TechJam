@@ -36,3 +36,4 @@ starter_kit/*.tar.gz
 scripts/patch_*.py
 scripts/apply_*.py
 data/raw
+pytest_full*.txt
