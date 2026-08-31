@@ -182,6 +182,9 @@ MONITORS_KEYS = {
     "ladder_queries",
     "claim_level",
     "claim_reason",
+    "holdout_visits",
+    "holdout_cap",
+    "digests_ok",
 }
 
 
@@ -365,3 +368,26 @@ def test_contract_malformed_degrades(
     body = res.json()
     assert body["available"] is False
     assert body["reason"] == "the contract file is unreadable"
+
+
+def test_monitors_carries_wall_fields(client: TestClient):
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    assert "holdout_visits" in body
+    assert body["holdout_cap"] == 12
+    assert body["holdout_visits"] >= 0
+    assert "digests_ok" in body
+
+
+def test_wall_fields_zero_when_no_holdout(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import app.server as server
+
+    monkeypatch.setattr(server, "_read_jsonl", lambda path: [])
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["holdout_visits"] == 0
+    assert body["holdout_cap"] == 12

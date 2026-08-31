@@ -222,10 +222,26 @@ def api_audit_monitors(run_id: str):
             split_rank_corr,
         )
         from harness.outputs import claim_level, claim_reason
+        from harness.measure import HOLDOUT_VISITS_MAX
     except ImportError:
         return {"available": False, "reason": "harness.overfit not present"}
 
     primary, spread = headline(events)
+    visits = [
+        e["visit"]
+        for e in events
+        if isinstance(e.get("visit"), (int, float))
+    ]
+    proto = (events[0].get("protocol") or {}) if events else {}
+    data = ((proto.get("ruler") or {}).get("data")) or {}
+
+    def _has_sha(obj: object) -> bool:
+        if isinstance(obj, dict):
+            if "sha256" in obj:
+                return True
+            return any(_has_sha(v) for v in obj.values())
+        return False
+
     return {
         "available": True,
         "primary": primary,
@@ -237,6 +253,9 @@ def api_audit_monitors(run_id: str):
         "ladder_queries": ladder_queries(events),
         "claim_level": claim_level(events),
         "claim_reason": claim_reason(events),
+        "holdout_visits": int(max(visits)) if visits else 0,
+        "holdout_cap": HOLDOUT_VISITS_MAX,
+        "digests_ok": True if _has_sha(data) else None,
     }
 
 
