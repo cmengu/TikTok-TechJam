@@ -3,6 +3,7 @@
 import { ideaOutcome } from "./reducer.js";
 import { fmtDelta, stateLabel } from "./copy.js";
 import { escapeHtml } from "./chip.js";
+import { stampHtml } from "./provenance.js";
 
 function tokensFor(ev) {
   const inn = Number(ev?.tokens_in) || 0;
@@ -78,13 +79,13 @@ export function ideasPageHtml(vm) {
     const gain = c.expectedGain == null ? "—" : String(c.expectedGain);
     return `<h3>${escapeHtml(c.pattern || c.id)}</h3>
       <p class="stat-caption">${escapeHtml(c.stage || "")}</p>
-      <p>expected ${escapeHtml(gain)}</p>`;
+      <p>expected ${escapeHtml(gain)} ${stampHtml("forecast")}</p>`;
   });
   const done = shelfHtml("Done", vm.done, (c) => {
     const expected = c.expectedGain == null ? "—" : String(c.expectedGain);
     return `<h3>${escapeHtml(c.pattern || c.id)}</h3>
       <p class="stat-caption">${escapeHtml(c.outcome || "")}</p>
-      <p>expected ${escapeHtml(expected)} · actual ${escapeHtml(fmtDelta(c.actualDelta))}</p>`;
+      <p>expected ${escapeHtml(expected)} ${stampHtml("forecast")} · actual ${escapeHtml(fmtDelta(c.actualDelta))} ${stampHtml("measured")}</p>`;
   });
   const banned = shelfHtml("Banned", vm.banned, (c) => {
     return `<h3>${escapeHtml(c.pattern || c.id)}</h3>

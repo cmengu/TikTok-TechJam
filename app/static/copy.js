@@ -165,6 +165,20 @@ export const DICT = {
     word: "Data fingerprints: recorded at load ✓",
     hint: null,
   },
+  stampMeasured: { word: "measured", hint: null },
+  stampForecast: { word: "forecast", hint: null },
+  stampHover: {
+    word: "Numbers on this dashboard come from the measurement layer. A model's number is only ever a forecast, and the log rejects anything else at the gate.",
+    hint: null,
+  },
+  provenanceTile: {
+    word: "Numbers reported: {n} measured · {m} forecasts",
+    hint: null,
+  },
+  provenanceCaption: {
+    word: "0 exceptions possible — the gate refuses them.",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {

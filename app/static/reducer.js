@@ -2,6 +2,8 @@
 
 // Mirrors harness/types.py. No Python at run time (purity rule below), so
 // these are copied by hand — keep in sync if those tuples change.
+import { stampFor } from "./provenance.js";
+
 export const EVENT_TYPES = [
   "run_started",
   "node_created",
@@ -166,6 +168,8 @@ export const initial = () => ({
   /** Current incumbent node id (null until first promotion / incumbent_changed). */
   incumbent: null,
 
+  provenance: { measured: 0, forecasts: 0 },
+
   log: [],
   feed: [],
   feedGaps: [],
@@ -207,6 +211,19 @@ export function reduce(state, ev) {
   }
 
   let next = { ...state, lastSeq: ev.seq };
+
+  const stamp = stampFor(ev);
+  if (stamp === "measured") {
+    next.provenance = {
+      ...state.provenance,
+      measured: (state.provenance?.measured || 0) + 1,
+    };
+  } else if (stamp === "forecast") {
+    next.provenance = {
+      ...state.provenance,
+      forecasts: (state.provenance?.forecasts || 0) + 1,
+    };
+  }
 
   if (!EVENT_TYPES.includes(ev.type)) {
     return {
