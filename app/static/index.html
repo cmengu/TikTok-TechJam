@@ -1133,6 +1133,60 @@
     .stage-receipt { display: inline-block; }
     .stage-receipt summary { cursor: pointer; list-style: none; }
     .stage-receipt summary::-webkit-details-marker { display: none; }
+    #tour-replay {
+      margin-left: auto;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      border-radius: 999px;
+      width: 1.75rem;
+      height: 1.75rem;
+      cursor: pointer;
+    }
+    #tour-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 18, 16, 0.35);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: var(--s5);
+      z-index: 40;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #tour-overlay { background: rgba(20, 18, 16, 0.5); }
+    }
+    .tour-card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 10px;
+      padding: 24px;
+      max-width: 36ch;
+    }
+    .tour-actions {
+      display: flex;
+      gap: var(--s3);
+      margin-top: var(--s4);
+    }
+    .tour-actions button {
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      border-radius: var(--r-ctl);
+      padding: 0.35rem 0.8rem;
+      cursor: pointer;
+    }
+    .tour-spotlight {
+      position: relative;
+      z-index: 41;
+      box-shadow: 0 0 0 3px var(--canvas), 0 0 0 5px var(--ink);
+      animation: tour-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes tour-pulse {
+      0%, 100% { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 5px var(--ink); }
+      50% { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 8px var(--ink-faint); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tour-spotlight { animation: none; }
+    }
 
     /* .trail — intended: <ol class="trail"><li>…</li></ol> */
     .trail {
@@ -1245,6 +1299,7 @@
         <span id="hdr-spend"></span>
         <span id="hdr-interventions"></span>
         <span id="hdr-elapsed-budget"></span>
+        <button type="button" id="tour-replay" aria-label="Replay the first-run tour">?</button>
       </header>
       <div id="meta">loading…</div>
       <div id="view"></div>

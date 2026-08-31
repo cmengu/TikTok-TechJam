@@ -13,6 +13,12 @@ import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmt
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
+import {
+  TOUR_STOPS,
+  shouldShowTour,
+  markTourDone,
+  tourOverlayHtml,
+} from "./tour.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
 import { buildRulebook, rulebookPageHtml } from "./rulebook.js";
@@ -1361,7 +1367,10 @@ function renderBrief(_state) {
   view.innerHTML = `<p class="panel-empty">loading game plan…</p>`;
   const path = currentRoutePath();
   const gen = ++briefFetchGen;
-  if (!runId) return;
+  if (!runId) {
+    view.innerHTML = `<p class="empty">game plan unavailable</p>`;
+    return;
+  }
   fetch(`/runs/${runId}/brief`)
     .then((res) => res.json())
     .then((payload) => {
@@ -1417,7 +1426,10 @@ function fetchAudit(label, url, build, html) {
   const view = requireView();
   view.innerHTML = `<p class="panel-empty">loading ${label}…</p>`;
   const path = currentRoutePath();
-  if (!runId) return;
+  if (!runId) {
+    view.innerHTML = `<p class="empty">${label} unavailable</p>`;
+    return;
+  }
   fetch(url)
     .then((res) => res.json())
     .then((payload) => {
@@ -1460,7 +1472,10 @@ function renderReport(_state) {
   view.innerHTML = `<p class="panel-empty">loading summary…</p>`;
   const path = currentRoutePath();
   const gen = ++reportFetchGen;
-  if (!runId) return;
+  if (!runId) {
+    view.innerHTML = `<p class="empty">summary unavailable</p>`;
+    return;
+  }
   Promise.all([
     fetch(`/runs/${runId}/report`).then((res) => res.json()),
     fetch(`/runs/${runId}/audit/monitors`)
@@ -1489,7 +1504,10 @@ function renderMonitors(_state) {
   view.innerHTML = `<p class="panel-empty">loading monitors…</p>`;
   const path = currentRoutePath();
   const gen = ++monitorsFetchGen;
-  if (!runId) return;
+  if (!runId) {
+    view.innerHTML = `<p class="panel-empty">monitors unavailable</p>`;
+    return;
+  }
   fetch(`/runs/${runId}/audit/monitors`)
     .then((res) => res.json())
     .then((payload) => {
@@ -1632,6 +1650,7 @@ function renderRoute() {
   }
   lastRenderedHash = route.hash;
   route.render(state, path);
+  applyTourHighlight();
 }
 
 function updateMeta(state) {
@@ -1742,6 +1761,90 @@ function followNewestRun() {
   }, 2000);
 }
 
+let tourIndex = 0;
+let tourOpen = false;
+
+function tourAnchorEl(anchor) {
+  if (!anchor) return null;
+  if (anchor.startsWith("data-")) return document.querySelector(`[${anchor}]`);
+  return document.getElementById(anchor) || document.querySelector(`.${anchor}`);
+}
+
+function clearTourHighlight() {
+  for (const el of document.querySelectorAll(".tour-spotlight")) {
+    el.classList.remove("tour-spotlight");
+  }
+}
+
+function applyTourHighlight() {
+  clearTourHighlight();
+  if (!tourOpen) return;
+  const stop = TOUR_STOPS[tourIndex];
+  tourAnchorEl(stop.anchor)?.classList.add("tour-spotlight");
+}
+
+function drawTour() {
+  let el = document.getElementById("tour-overlay");
+  if (!tourOpen) {
+    el?.remove();
+    clearTourHighlight();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "tour-overlay";
+    document.body.appendChild(el);
+  }
+  const stop = TOUR_STOPS[tourIndex];
+  el.innerHTML = tourOverlayHtml(stop, tourIndex, TOUR_STOPS.length);
+  if (location.hash !== `#/${stop.route}`) {
+    location.hash = `#/${stop.route}`;
+  }
+  requestAnimationFrame(applyTourHighlight);
+}
+
+function openTour(fromStart) {
+  if (fromStart) tourIndex = 0;
+  tourOpen = true;
+  drawTour();
+}
+
+function dismissTour() {
+  tourOpen = false;
+  markTourDone(window.localStorage);
+  document.getElementById("tour-overlay")?.remove();
+  clearTourHighlight();
+}
+
+function tourNext() {
+  if (tourIndex >= TOUR_STOPS.length - 1) {
+    dismissTour();
+    return;
+  }
+  tourIndex += 1;
+  drawTour();
+}
+
+function initTour() {
+  const replay = document.getElementById("tour-replay");
+  replay?.addEventListener("click", () => openTour(true));
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest?.("[data-tour]");
+    if (!btn) return;
+    if (btn.dataset.tour === "next") tourNext();
+    if (btn.dataset.tour === "skip") dismissTour();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (!tourOpen) return;
+    if (ev.key === "Escape") dismissTour();
+    if (ev.key === "ArrowRight") tourNext();
+    if (ev.key === "ArrowLeft" && tourIndex > 0) {
+      tourIndex -= 1;
+      drawTour();
+    }
+  });
+}
+
 // --- entry point: takes a source, either a live run or a plain array of
 // events. Nothing below this function knows which kind it got — the Report
 // screen (later; parked this batch) is "the same renderer fed a finished
@@ -1762,9 +1865,18 @@ async function main() {
   try {
     initClickToCopy();
     initRunTreeClicks();
-    if (!location.hash) location.hash = `#/${DEFAULT_ROUTE}`;
+    initTour();
     runId = await resolveRunId();
+    const showTour = shouldShowTour(window.localStorage);
+    if (showTour) {
+      tourIndex = 0;
+      tourOpen = true;
+      location.hash = `#/${TOUR_STOPS[0].route}`;
+    } else if (!location.hash) {
+      location.hash = `#/${DEFAULT_ROUTE}`;
+    }
     renderApp(store.getState()); // initial paint: meta + route before first event
+    if (showTour) drawTour();
     startApp({ runId });
     followNewestRun();
   } catch (err) {
