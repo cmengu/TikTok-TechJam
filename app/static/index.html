@@ -528,6 +528,64 @@
       font-weight: 600;
     }
 
+    /* --- journey strip (D2): seven stage chips before the dossier --- */
+    .journey-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--s2);
+      margin-bottom: var(--s4);
+    }
+    .stage {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      background: var(--sunken);
+      color: var(--ink-muted);
+      font-size: var(--fs-label);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stage--done {
+      background: var(--pos-wash);
+      color: var(--pos);
+      border-color: transparent;
+    }
+    .stage--current {
+      background: var(--warn-wash);
+      color: var(--warn);
+      border-color: transparent;
+      animation: stage-pulse 1.4s ease-in-out infinite;
+    }
+    .stage--failed {
+      background: var(--crit-wash);
+      color: var(--crit);
+      border-color: transparent;
+    }
+    .stage--skipped {
+      opacity: 0.55;
+    }
+    .stage--pending {
+      opacity: 0.7;
+    }
+    .journey-retry {
+      margin-left: var(--s2);
+      font-size: var(--fs-label);
+      color: var(--warn);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    @keyframes stage-pulse {
+      50% { opacity: 0.55; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stage--current {
+        animation: none;
+      }
+    }
+
     /* --- node dossier (Task 8): header line, state history, verdicts
        (each run through band.js's verdictReading — never re-derived here),
        reliability arrays, scores/seeds. --- */

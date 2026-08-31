@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { initial, reduce } from "./reducer.js";
-import { buildJourney, STAGES } from "./journey.js";
+import { buildJourney, journeyStripHtml, STAGES } from "./journey.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(
@@ -104,5 +104,16 @@ describe("journey", () => {
     const b = buildJourney(state, 3);
     assert.deepEqual(a, b);
     assert.equal(STAGES.length, 7);
+  });
+
+  it("test_dossier_contains_journey_strip", () => {
+    const state = fold(loadFixture());
+    const html = journeyStripHtml(buildJourney(state, 3));
+    const stages = [...html.matchAll(/class="stage stage--(\w+)"/g)].map(
+      (m) => m[1],
+    );
+    assert.equal(stages.length, 7);
+    assert.ok(stages.every((s) => s === "done"));
+    assert.match(html, /class="journey-strip"/);
   });
 });

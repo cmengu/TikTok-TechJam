@@ -147,3 +147,26 @@ export function buildJourney(state, nodeId) {
     decision: decisionWord,
   };
 }
+
+/** HTML leaf widget for the dossier pipeline strip (D2 exception). */
+export function journeyStripHtml(journey) {
+  if (!journey?.stages?.length) return "";
+  const chips = journey.stages
+    .map(
+      (s) =>
+        `<span class="stage stage--${s.status}" data-stage="${s.id}">${escapeHtml(s.label)}</span>`,
+    )
+    .join("");
+  const retry =
+    journey.loops > 0
+      ? `<span class="journey-retry">retry ${journey.loops} of 3</span>`
+      : "";
+  return `<div class="journey-strip">${chips}${retry}</div>`;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
