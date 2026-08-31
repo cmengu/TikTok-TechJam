@@ -165,6 +165,14 @@ export const DICT = {
     word: "Data fingerprints: recorded at load ✓",
     hint: null,
   },
+  claimReasonNoWins: {
+    word: "no accepted wins on the log yet",
+    hint: "how much to trust the headline number",
+  },
+  claimReasonWins: {
+    word: "{k} of {n} accepted wins carry a hidden-check reading",
+    hint: "how much to trust the headline number",
+  },
   scoreSource: {
     word: "from the measurement layer",
     hint: null,
@@ -276,18 +284,30 @@ const STATE_LABELS = {
   failed: DICT.failed,
 };
 
+// Plural forms are listed explicitly: the sweep matches on \b word
+// boundaries, so "promotions" sailed past a list that only knew "promoted"
+// (fix list item 4).
 export const BANNED = [
   "hypothesis",
   "hypotheses",
   "replicate",
+  "replicates",
   "oracle",
+  "oracles",
   "holdout",
+  "holdouts",
   "rung",
+  "rungs",
   "verdict",
+  "verdicts",
   "promoted",
+  "promotion",
+  "promotions",
   "inconclusive",
   "attribution",
+  "attributions",
   "incumbent",
+  "incumbents",
   "v_sem",
   "leaked",
   "retired",
@@ -295,6 +315,22 @@ export const BANNED = [
 
 function passThrough(input) {
   return { word: String(input), hint: null };
+}
+
+// The harness writes claim_reason in its own vocabulary (harness/outputs.py).
+// Translate the two known shapes; anything unrecognised passes through and
+// the jargon sweep is the guard against new leaks.
+const CLAIM_REASON_WINS_RE = /^(\d+) of (\d+) promotions carry oracle_delta$/;
+
+export function claimReasonLabel(reason) {
+  if (reason == null || reason === "") return "";
+  const s = String(reason);
+  if (s === "no promotions on the log") return DICT.claimReasonNoWins.word;
+  const m = s.match(CLAIM_REASON_WINS_RE);
+  if (m) {
+    return DICT.claimReasonWins.word.replace("{k}", m[1]).replace("{n}", m[2]);
+  }
+  return s;
 }
 
 export function stateLabel(state) {

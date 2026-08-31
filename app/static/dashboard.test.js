@@ -17,7 +17,7 @@ describe("dashboard strip builders", () => {
       claim_reason: "1 of 1 promotions carry oracle_delta",
     });
     assert.equal(rung.level, "L4-v");
-    assert.equal(rung.reason, "1 of 1 promotions carry oracle_delta");
+    assert.equal(rung.reason, "1 of 1 accepted wins carry a hidden-check reading");
   });
 
   it("test_rung_badge_is_a_dash_while_unavailable", () => {
@@ -172,17 +172,23 @@ describe("dashboard hero", () => {
     );
   });
 
-  it("test_caption_is_verbatim", () => {
-    const reason = MONITORS.claim_reason;
+  it("test_caption_translates_the_harness_vocabulary", () => {
+    // Fix list item 4: "no promotions on the log" reached the viewer.
     const hero = buildHero(MONITORS, TRACE);
-    assert.equal(hero.caption, reason);
-    assert.equal(hero.caption === reason, true);
-    assert.equal(hero.caption.length, reason.length);
-    const twisted = buildHero(
-      { ...MONITORS, claim_reason: reason + " (approx)" },
+    assert.equal(hero.caption, "1 of 1 accepted wins carry a hidden-check reading");
+    const empty = buildHero(
+      { ...MONITORS, claim_reason: "no promotions on the log" },
       TRACE,
     );
-    assert.notEqual(twisted.caption, reason);
+    assert.equal(empty.caption, "no accepted wins on the log yet");
+  });
+
+  it("test_caption_passes_unknown_reasons_through", () => {
+    const hero = buildHero(
+      { ...MONITORS, claim_reason: "something new the harness said" },
+      TRACE,
+    );
+    assert.equal(hero.caption, "something new the harness said");
   });
 });
 

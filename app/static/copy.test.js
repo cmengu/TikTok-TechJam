@@ -16,6 +16,7 @@ import {
   fmtDuration,
   fmtScore,
   fmtTokens,
+  claimReasonLabel,
   levelLabel,
   moveLabel,
   rungLabel,
@@ -231,5 +232,26 @@ describe("pre-G2 renderer copy entries", () => {
         );
       }
     }
+  });
+});
+
+describe("claimReasonLabel", () => {
+  it("test_no_promotions_translates", () => {
+    assert.equal(
+      claimReasonLabel("no promotions on the log"),
+      "no accepted wins on the log yet",
+    );
+  });
+
+  it("test_counted_promotions_translate", () => {
+    assert.equal(
+      claimReasonLabel("2 of 3 promotions carry oracle_delta"),
+      "2 of 3 accepted wins carry a hidden-check reading",
+    );
+  });
+
+  it("test_unknown_reason_passes_through_and_null_is_empty", () => {
+    assert.equal(claimReasonLabel("hand-written reason"), "hand-written reason");
+    assert.equal(claimReasonLabel(null), "");
   });
 });

@@ -972,7 +972,7 @@ function renderVerdictEntry({ verdict, reading }) {
 }
 
 function renderDossierVerdicts(verdicts) {
-  if (!verdicts.length) return `<p class="panel-empty">no verdicts yet</p>`;
+  if (!verdicts.length) return `<p class="panel-empty">no decisions yet</p>`;
   return `<ul class="dossier-verdicts">${verdicts.map(renderVerdictEntry).join("")}</ul>`;
 }
 

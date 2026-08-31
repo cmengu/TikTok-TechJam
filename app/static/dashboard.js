@@ -1,7 +1,7 @@
 /** F2 dashboard strip + hero view models, plus the hero's HTML leaf.
  * Pure: no DOM, no fetch. */
 
-import { DICT, claimLabel, fmtScore } from "./copy.js";
+import { DICT, claimLabel, claimReasonLabel, fmtScore } from "./copy.js";
 import { escapeHtml, escapeAttr } from "./chip.js";
 import { stampHtml } from "./provenance.js";
 
@@ -19,7 +19,7 @@ export function buildRung(monitorsPayload) {
   }
   return {
     level: monitorsPayload.claim_level,
-    reason: monitorsPayload.claim_reason,
+    reason: claimReasonLabel(monitorsPayload.claim_reason),
   };
 }
 
@@ -74,7 +74,8 @@ function funnelFrom(trace) {
 
 /**
  * buildHero(monitorsPayload, trace) → { score, trust:{word,hint}, caption, funnel }
- * caption is payload.claim_reason byte-for-byte. Unavailable score is "—", never "0.0000".
+ * caption is payload.claim_reason through claimReasonLabel (the harness
+ * writes it in its own vocabulary). Unavailable score is "—", never "0.0000".
  */
 export function buildHero(monitorsPayload, trace) {
   const funnel = funnelFrom(trace);
@@ -90,7 +91,7 @@ export function buildHero(monitorsPayload, trace) {
   return {
     score: fmtScore(monitorsPayload.primary),
     trust: { word: trust.word, hint: trust.hint ?? null },
-    caption: monitorsPayload.claim_reason == null ? "" : String(monitorsPayload.claim_reason),
+    caption: claimReasonLabel(monitorsPayload.claim_reason),
     funnel,
   };
 }
