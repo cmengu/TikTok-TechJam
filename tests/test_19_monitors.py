@@ -17,6 +17,7 @@ from harness.overfit import (
     ladder_queries,
     oracle_gap,
     seed_consistency,
+    seed_consistency_by_node,
     split_rank_corr,
 )
 from harness.outputs import claim_level, claim_reason, report
@@ -264,3 +265,7 @@ def test_claim_reason_is_a_pure_fold():
     before = copy.deepcopy(events)
     assert claim_reason(events) == claim_reason(events)
     assert events == before                           # the fold does not touch its input
+
+
+def test_seed_consistency_populates_on_the_fixture():
+    assert seed_consistency_by_node(_load_fixture()) == [(3, 1.0)]

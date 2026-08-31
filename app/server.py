@@ -172,6 +172,37 @@ def api_audit_reliability(run_id: str):
     return reliability(events)
 
 
+@app.get("/runs/{run_id}/audit/monitors")
+def api_audit_monitors(run_id: str):
+    events = _read_jsonl(_run_dir(run_id) / "events.jsonl")
+    try:
+        from harness.overfit import (
+            gap_alarm,
+            headline,
+            ladder_queries,
+            oracle_gap,
+            seed_consistency_by_node,
+            split_rank_corr,
+        )
+        from harness.outputs import claim_level, claim_reason
+    except ImportError:
+        return {"available": False, "reason": "harness.overfit not present"}
+
+    primary, spread = headline(events)
+    return {
+        "available": True,
+        "primary": primary,
+        "spread": spread,
+        "oracle_gap": oracle_gap(events),
+        "gap_alarm": gap_alarm(events),
+        "seed_consistency": seed_consistency_by_node(events),
+        "rank_corr": split_rank_corr(events),
+        "ladder_queries": ladder_queries(events),
+        "claim_level": claim_level(events),
+        "claim_reason": claim_reason(events),
+    }
+
+
 @app.get("/")
 def index():
     return FileResponse(

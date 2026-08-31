@@ -169,3 +169,75 @@ def test_unknown_run_404(client: TestClient):
     assert res.status_code == 404
     res = client.get("/runs/does-not-exist/heartbeat", params={"stream": False})
     assert res.status_code == 404
+
+
+MONITORS_KEYS = {
+    "available",
+    "primary",
+    "spread",
+    "oracle_gap",
+    "gap_alarm",
+    "seed_consistency",
+    "rank_corr",
+    "ladder_queries",
+    "claim_level",
+    "claim_reason",
+}
+
+
+def test_monitors_returns_every_contract_key(client: TestClient):
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    assert set(body) == MONITORS_KEYS
+    assert body["claim_level"] == "L4-v"
+
+
+def test_monitors_numbers_come_from_the_harness_folds(client: TestClient, runs_dir: Path):
+    from harness.overfit import headline, oracle_gap
+
+    events = [
+        json.loads(line)
+        for line in (runs_dir / "fake-0001" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    primary, spread = headline(events)
+    assert body["primary"] == primary
+    assert body["spread"] == spread
+    assert body["oracle_gap"] == [list(row) for row in oracle_gap(events)]
+
+
+def test_monitors_rank_corr_is_null_below_three_promotions(client: TestClient):
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["rank_corr"] is None
+    assert body["rank_corr"] != 0
+    assert body["rank_corr"] != 0.0
+
+
+def test_monitors_gap_alarm_false_on_a_healthy_run(client: TestClient):
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    assert res.json()["gap_alarm"] is False
+
+
+def test_monitors_is_available_false_not_500_without_overfit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "harness.overfit", None)
+    res = client.get("/runs/fake-0001/audit/monitors")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert "harness.overfit" in body["reason"]
+
+
+def test_monitors_unknown_run_is_404(client: TestClient):
+    res = client.get("/runs/does-not-exist/audit/monitors")
+    assert res.status_code == 404

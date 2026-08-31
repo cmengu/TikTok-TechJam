@@ -4,6 +4,8 @@ import { initial, reduce } from "./reducer.js";
 import { verdictAnnotation } from "./band.js";
 import { buildTree } from "./tree.js";
 import { buildDossier } from "./dossier.js";
+import { buildMonitors } from "./monitors.js";
+import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -276,6 +278,42 @@ function buildPaperTickerPanel(state) {
   `;
 }
 
+let dashboardRung = { level: "—", reason: "—" };
+let dashboardRungFetchGen = 0;
+let dashboardRungInFlight = false;
+
+function ensureDashboardRungFetch() {
+  if (!runId || dashboardRungInFlight) return;
+  const path = currentRoutePath();
+  const gen = ++dashboardRungFetchGen;
+  dashboardRungInFlight = true;
+  fetch(`/runs/${runId}/audit/monitors`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== dashboardRungFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      dashboardRung = buildRung(payload);
+      const el = requireView().querySelector("[data-dashboard-rung]");
+      if (!el) return;
+      el.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+    })
+    .catch(() => {
+      if (gen !== dashboardRungFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      dashboardRung = buildRung({ available: false });
+      const el = requireView().querySelector("[data-dashboard-rung]");
+      if (!el) return;
+      el.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+    })
+    .finally(() => {
+      if (gen === dashboardRungFetchGen) dashboardRungInFlight = false;
+    });
+}
+
+function renderRungStrip(rung) {
+  return `<p>${escapeHtml(rung.level)}</p><p class="panel-note">${escapeHtml(rung.reason)}</p>`;
+}
+
 function renderDashboard(state) {
   const nowMs = Date.now();
   // buildEventsPanel's list is newest-first and can run to hundreds of rows
@@ -286,7 +324,28 @@ function renderDashboard(state) {
   // there keeps new events visible instead of freezing the view.
   const prevScrollEl = requireView().querySelector(".event-scroll");
   const prevScrollTop = prevScrollEl ? prevScrollEl.scrollTop : 0;
+  const lastMove = buildLastMove(state);
+  const cascade = buildCascadeCounter(state);
+  const lastMoveBody = lastMove
+    ? `<p>round ${escapeHtml(String(lastMove.round))} · ${escapeHtml(String(lastMove.kind))} · parent ${escapeHtml(String(lastMove.parent))}</p>
+       <p class="panel-note">${escapeHtml(String(lastMove.reason))}</p>`
+    : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
+    <div class="dashboard-strip">
+      <section data-dashboard-rung>
+        <h2>Rung</h2>
+        ${renderRungStrip(dashboardRung)}
+      </section>
+      <section>
+        <h2>Last move</h2>
+        ${lastMoveBody}
+      </section>
+      <section>
+        <h2>Cascade</h2>
+        <p>ω ${escapeHtml(String(cascade.rejected.omega))} · v_sem ${escapeHtml(String(cascade.rejected.v_sem))} · smoke ${escapeHtml(String(cascade.rejected.smoke))}</p>
+        <p class="panel-note">llm_calls ${escapeHtml(String(cascade.llmCalls))} · runs ${escapeHtml(String(cascade.runs))}</p>
+      </section>
+    </div>
     <div class="dashboard-grid">
       <section>
         <h2>Now running</h2>
@@ -314,6 +373,7 @@ function renderDashboard(state) {
     const nextScrollEl = requireView().querySelector(".event-scroll");
     if (nextScrollEl) nextScrollEl.scrollTop = prevScrollTop;
   }
+  ensureDashboardRungFetch();
 }
 
 // --- Protocol: read-only, all data from state.run.protocol. Two visually
@@ -992,6 +1052,81 @@ function renderStub(label) {
   };
 }
 
+let monitorsFetchGen = 0;
+
+function renderMonitors(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading monitors…</p>`;
+  const path = currentRoutePath();
+  const gen = ++monitorsFetchGen;
+  if (!runId) return;
+  fetch(`/runs/${runId}/audit/monitors`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== monitorsFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const vm = buildMonitors(payload);
+      if (!vm) {
+        view.innerHTML = `<p class="panel-empty">monitors payload unusable</p>`;
+        return;
+      }
+      view.innerHTML = renderMonitorsView(vm);
+    })
+    .catch(() => {
+      if (gen !== monitorsFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="panel-empty">monitors unavailable</p>`;
+    });
+}
+
+function renderMonitorsView(vm) {
+  const numbers = vm.numbers
+    .map(
+      (row) =>
+        `<li><span>${escapeHtml(row.label)}</span> ${escapeHtml(row.text)}` +
+        ` <span class="panel-note">${escapeHtml(row.source)}</span></li>`,
+    )
+    .join("");
+  const gaps = vm.gap.points.length
+    ? vm.gap.points
+        .map(
+          (p) =>
+            `<li>node ${escapeHtml(String(p.node))} gap ${escapeHtml(String(p.gap))}</li>`,
+        )
+        .join("")
+    : `<p class="panel-empty">no oracle gaps</p>`;
+  const seeds = vm.seedEmpty
+    ? `<p class="panel-empty">no seed-consistency rows</p>`
+    : `<ul>${vm.seedConsistency
+        .map(
+          (row) =>
+            `<li>node ${escapeHtml(String(row.node))} ${escapeHtml(row.text)}</li>`,
+        )
+        .join("")}</ul>`;
+  const alarm = vm.gap.alarm ? "alarm" : "quiet";
+  return `
+    <div class="dashboard-grid">
+      <section>
+        <h2>Headline</h2>
+        <ul>${numbers}</ul>
+      </section>
+      <section>
+        <h2>Oracle gap (${escapeHtml(alarm)})</h2>
+        ${vm.gap.points.length ? `<ul>${gaps}</ul>` : gaps}
+      </section>
+      <section>
+        <h2>Seed consistency</h2>
+        ${seeds}
+      </section>
+      <section>
+        <h2>Rung</h2>
+        <p>${escapeHtml(vm.rung.level)}</p>
+        <p class="panel-note">${escapeHtml(vm.rung.reason)}</p>
+      </section>
+    </div>
+  `;
+}
+
 // --- router ---
 const ROUTES = [
   { hash: "dashboard", render: renderDashboard },
@@ -1022,6 +1157,7 @@ const ROUTES = [
   { hash: "audit/replication", render: renderStub("Audit — Replication") },
   { hash: "audit/cost", render: renderStub("Audit — Cost") },
   { hash: "audit/reliability", render: renderStub("Audit — Reliability") },
+  { hash: "audit/monitors", render: renderMonitors },
   { hash: "report", render: renderStub("Report") },
 ];
 // Audit has no content of its own — two of its three children are parked
