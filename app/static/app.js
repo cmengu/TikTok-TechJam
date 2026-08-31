@@ -6,6 +6,8 @@ import { buildTree } from "./tree.js";
 import { buildDossier } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
+import { stateLabel } from "./copy.js";
+import { sentence } from "./feed.js";
 
 // --- store: the only thing that knows about reduce(). Routes and the router
 // only ever see state via getState()/subscribe() — never an event, never an
@@ -170,10 +172,6 @@ function feedKind(ev) {
   return ev.type === "verdict" ? ev.state || "verdict" : ev.type;
 }
 
-function feedLabel(kind) {
-  return kind.replaceAll("_", " ");
-}
-
 function collapseFeed(feed) {
   const groups = [];
   for (const ev of feed) {
@@ -189,19 +187,36 @@ function collapseFeed(feed) {
   return groups;
 }
 
+function chipStateModifier(state) {
+  const map = {
+    promoted: "accepted",
+    rejected: "declined",
+    inconclusive: "retrying",
+    retired: "shelved",
+    leaked: "disqualified",
+    failed: "crashed",
+    screening: "live",
+    running: "live",
+    replicating: "live",
+    debugging: "live",
+  };
+  return map[state] || null;
+}
+
 function buildEventRow(g) {
-  const label = feedLabel(g.kind);
-  if (g.count === 1) {
-    const ev = g.last;
-    const bits = [`#${ev.seq}`, label];
-    if (ev.node != null) bits.push(`node=${ev.node}`);
-    if (ev.class) bits.push(`class=${ev.class}`);
-    if (ev.attempt != null) bits.push(`attempt=${ev.attempt}`);
-    bits.push(`— ${ev.summary || ""}`);
-    return `<li>${escapeHtml(bits.join(" "))}</li>`;
-  }
-  const text = `#${g.first.seq}–#${g.last.seq} ${g.count}× ${label} — ${g.last.summary || ""}`;
-  return `<li>${escapeHtml(text)}</li>`;
+  const ev = g.last;
+  const text =
+    g.count === 1 ? sentence(ev) : `${g.count}× ${sentence(ev)}`;
+  const mod = ev.type === "verdict" ? chipStateModifier(ev.state) : null;
+  const stateChip =
+    mod != null
+      ? `<span class="chip-state chip-state--${mod}">${escapeHtml(stateLabel(ev.state).word)}</span> `
+      : "";
+  const body =
+    ev.node != null
+      ? `<a href="#/run/${escapeAttr(String(ev.node))}">${escapeHtml(text)}</a>`
+      : escapeHtml(text);
+  return `<li>${stateChip}${body}</li>`;
 }
 
 // A gap is a run of seq numbers skipped between two known boundary seqs
