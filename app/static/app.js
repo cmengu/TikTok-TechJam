@@ -6,9 +6,10 @@ import { buildTree } from "./tree.js";
 import { buildDossier } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
-import { stateLabel } from "./copy.js";
-import { sentence } from "./feed.js";
+import { stateLabel, rungLabel, moveLabel } from "./copy.js";
+import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
+import { buildJourney, journeyStripHtml } from "./journey.js";
 
 export { chipHtml };
 
@@ -728,29 +729,57 @@ function runRouteKey(state, path) {
 }
 
 function renderTreeNode(entry, state, selectedId) {
-  const { node, children, orphan } = entry;
-  const isIncumbent = state.incumbent != null && String(state.incumbent) === String(node.id);
-  const isSelected = selectedId != null && String(selectedId) === String(node.id);
+  const { node, children, orphan, plainState, onBestPath, dimmed, loops, edgeLabel } =
+    entry;
+  const isIncumbent =
+    state.incumbent != null && String(state.incumbent) === String(node.id);
+  const isSelected =
+    selectedId != null && String(selectedId) === String(node.id);
+  const isLive = ["screening", "running", "replicating", "debugging"].includes(
+    node.state,
+  );
   const classes = ["tree-node"];
   if (isSelected) classes.push("tree-node-selected");
   if (orphan) classes.push("tree-node-orphan");
+  if (dimmed) classes.push("tree-node-dimmed");
+  if (onBestPath) classes.push("tree-node-best");
+  if (isLive) classes.push("tree-node-live");
   const hypHtml =
     node.hypothesisId != null
       ? escapeHtml(String(node.hypothesisId))
-      : chip("no hypothesis id", "chip-null");
+      : chip("no idea id", "chip-null");
   const badges = [];
-  if (isIncumbent) badges.push(chip("incumbent", "chip-incumbent"));
+  if (isIncumbent) {
+    badges.push(
+      `<span class="chip chip-incumbent">◆ current best</span>`,
+    );
+  }
   if (orphan) badges.push(chip("orphan", "chip-null"));
+  if (loops > 0) {
+    badges.push(
+      `<span class="tree-loop-badge">retry ${escapeHtml(String(loops))}</span>`,
+    );
+  }
+  if (isLive) {
+    badges.push(`<span class="tree-live-dot" aria-label="live"></span>`);
+  }
+  const edgeHtml =
+    edgeLabel != null
+      ? `<span class="tree-edge-label">${escapeHtml(edgeLabel)}</span>`
+      : "";
   const childrenHtml = children.length
-    ? `<ul class="tree-children">${children.map((c) => renderTreeNode(c, state, selectedId)).join("")}</ul>`
+    ? `<ul class="tree-children${onBestPath ? " tree-children-best" : ""}">${children
+        .map((c) => renderTreeNode(c, state, selectedId))
+        .join("")}</ul>`
     : "";
   return `
     <li>
+      ${edgeHtml}
       <div class="${classes.join(" ")}" data-node-id="${escapeAttr(String(node.id))}">
         <span class="tree-node-id">#${escapeHtml(String(node.id))}</span>
-        <span class="tree-node-hyp">hyp ${hypHtml}</span>
-        <span class="tree-node-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
-        <span class="tree-node-state">${escapeHtml(String(node.state ?? "?"))}</span>
+        <span class="tree-node-hyp">idea ${hypHtml}</span>
+        <span class="tree-node-kind">${escapeHtml(moveLabel(node.kind).word)}</span>
+        <span class="tree-node-state">${escapeHtml((plainState && plainState.word) || stateLabel(node.state).word)}</span>
         ${badges.join(" ")}
       </div>
       ${childrenHtml}
@@ -775,13 +804,15 @@ function renderDossierHeader(node) {
   const hypHtml =
     node.hypothesisId != null
       ? escapeHtml(String(node.hypothesisId))
-      : chip("no hypothesis id", "chip-null");
+      : chip("no idea id", "chip-null");
+  const kindLabel = moveLabel(node.kind).word;
+  const state = stateLabel(node.state);
   return `
     <div class="dossier-header">
       <span class="dossier-id">#${escapeHtml(String(node.id))}</span>
-      <span class="dossier-hyp">hyp ${hypHtml}</span>
-      <span class="dossier-kind">${escapeHtml(String(node.kind ?? "?"))}</span>
-      <span class="dossier-state">${escapeHtml(String(node.state ?? "?"))}</span>
+      <span class="dossier-hyp">idea ${hypHtml}</span>
+      <span class="dossier-kind">${escapeHtml(kindLabel)}</span>
+      ${chipHtml(state, chipStateModifier(node.state))}
     </div>
   `;
 }
@@ -792,7 +823,7 @@ function renderDossierHistory(node) {
   const rows = history
     .map(
       (h) =>
-        `<li>${escapeHtml(String(h.state))} <span class="dossier-dim">— seq ${escapeHtml(String(h.seq))} — ${escapeHtml(String(h.t))}</span></li>`,
+        `<li>${escapeHtml(stateLabel(h.state).word)} <span class="dossier-dim">— seq ${escapeHtml(String(h.seq))} — ${escapeHtml(String(h.t))}</span></li>`,
     )
     .join("");
   return `<ol class="dossier-history">${rows}</ol>`;
@@ -824,11 +855,11 @@ function renderVerdictEntry({ verdict, reading }) {
     typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)
       ? `<div>Δ mean: ${fmtNum(verdict.delta_mean)}</div>`
       : `<div>Δ mean: ${chip("not reported", "chip-null")}</div>`;
-  const rungHtml = `<div>rung: ${verdict.rung != null ? escapeHtml(String(verdict.rung)) : chip("not reported", "chip-null")}</div>`;
+  const rungHtml = `<div>test: ${verdict.rung != null ? escapeHtml(rungLabel(verdict.rung).word) : chip("not reported", "chip-null")}</div>`;
   const deltaPerSeedHtml = `<div>Δ per seed: ${fmtSeedValues(verdict.delta_per_seed)}</div>`;
   const attributionHtml =
     verdict.attribution != null
-      ? `<div>attribution: ${escapeHtml(String(verdict.attribution))}</div>`
+      ? `<div>${escapeHtml(verdict.attribution === "clear" ? "explained" : verdict.attribution === "unclear" ? "unexplained" : String(verdict.attribution))}</div>`
       : "";
   // A leak trip is the most important thing a node can carry — visually
   // prominent, not just another line item (Handoff_app.md, "Task 8").
@@ -839,7 +870,7 @@ function renderVerdictEntry({ verdict, reading }) {
   return `
     <li class="dossier-verdict">
       <div class="dossier-verdict-head">
-        <span class="dossier-verdict-state">${escapeHtml(String(verdict.state ?? "?"))}</span>
+        <span class="dossier-verdict-state">${escapeHtml(stateLabel(verdict.state).word)}</span>
         <span class="dossier-dim">metric ${escapeHtml(String(verdict.metric ?? "?"))} · seq ${escapeHtml(String(verdict.seq ?? "?"))} · ${escapeHtml(String(verdict.t ?? ""))}</span>
       </div>
       ${rungHtml}
@@ -906,16 +937,18 @@ function renderDossierScores(node) {
   return `<dl class="kv">${rows}</dl>`;
 }
 
-function renderDossier(dossier) {
+function renderDossier(dossier, journey = null) {
   const { node, verdicts } = dossier;
+  const strip = journey ? journeyStripHtml(journey) : "";
   return `
+    ${strip}
     ${renderDossierHeader(node)}
     <div class="dossier-section">
-      <h3>State history</h3>
+      <h3>History</h3>
       ${renderDossierHistory(node)}
     </div>
     <div class="dossier-section">
-      <h3>Verdicts</h3>
+      <h3>Decisions</h3>
       ${renderDossierVerdicts(verdicts)}
     </div>
     ${renderDossierReliability(node)}
@@ -930,33 +963,52 @@ function renderDossier(dossier) {
   `;
 }
 
+function renderMoveTrail(state) {
+  const rows = buildMoveTrail(state);
+  if (!rows.length) return `<p class="panel-empty">no moves yet</p>`;
+  const items = rows
+    .map((row) => {
+      const body =
+        row.href != null
+          ? `<a href="${escapeAttr(row.href)}">${escapeHtml(row.text)}</a>`
+          : escapeHtml(row.text);
+      return `<li>${body}</li>`;
+    })
+    .join("");
+  return `<ol class="trail move-trail">${items}</ol>`;
+}
+
 function renderRun(state, path) {
   const selectedId = selectedRunNodeId(path);
   const roots = buildTree(state);
   const treeHtml = roots.length
     ? `<ul class="tree-root">${roots.map((r) => renderTreeNode(r, state, selectedId)).join("")}</ul>`
-    : `<p class="panel-empty">no nodes yet</p>`;
+    : `<p class="panel-empty">no attempts yet</p>`;
 
   // An unknown node id must render "no such node" inside the Run screen —
   // never a blank page, never a fall-through to Dashboard.
   let dossierHtml;
   if (selectedId == null) {
-    dossierHtml = `<p class="panel-empty">select a node</p>`;
+    dossierHtml = `<p class="panel-empty">select an attempt</p>`;
   } else if (!Object.prototype.hasOwnProperty.call(state.nodes, selectedId)) {
-    dossierHtml = `<p class="panel-empty">no such node</p>`;
+    dossierHtml = `<p class="panel-empty">no such attempt</p>`;
   } else {
     const dossier = buildDossier(state, selectedId);
-    dossierHtml = dossier ? renderDossier(dossier) : `<p class="panel-empty">no such node</p>`;
+    const journey = buildJourney(state, selectedId);
+    dossierHtml = dossier
+      ? renderDossier(dossier, journey)
+      : `<p class="panel-empty">no such attempt</p>`;
   }
 
   requireView().innerHTML = `
     <div class="run-grid">
       <section class="run-tree-panel">
-        <h2>Run tree</h2>
+        <h2>Attempts</h2>
+        ${renderMoveTrail(state)}
         ${treeHtml}
       </section>
       <section class="run-dossier-panel">
-        <h2>Node dossier</h2>
+        <h2>Attempt</h2>
         ${dossierHtml}
       </section>
     </div>

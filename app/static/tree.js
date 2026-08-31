@@ -1,4 +1,7 @@
-/** Checkpoint 2: pure flat-node-map -> nested tree reader (no DOM, no app.js imports). Contract: context/Handoff_app.md, "Task 7". */
+/** Checkpoint 2 + D3: pure flat-node-map -> nested tree reader (no DOM). */
+
+import { moveLabel, stateLabel } from "./copy.js";
+import { buildJourney } from "./journey.js";
 
 function isPlainObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -8,9 +11,6 @@ function createdSeqOf(node) {
   return node && Number.isFinite(node.createdSeq) ? node.createdSeq : 0;
 }
 
-// state.nodes is keyed by node id; ids may be numbers (as emitted by
-// node_created) or strings — plain-object property access coerces either
-// way, so lookups below never need to normalise the id's original type.
 function hasNode(nodes, id) {
   return (
     id !== null &&
@@ -20,23 +20,128 @@ function hasNode(nodes, id) {
   );
 }
 
-// buildTree(state) -> array of root nodes, each { node, children, orphan }.
-// children is the same shape recursively, ordered by createdSeq. Never
-// throws and never drops a node from state.nodes, no matter how malformed
-// the input — every rule below exists because of a past bug (see
-// Handoff_app.md, "Task 7").
+function bestPathSet(state) {
+  const set = new Set();
+  const nodes = state?.nodes;
+  if (!isPlainObject(nodes) || state.incumbent == null) return set;
+  let id = state.incumbent;
+  const guard = new Set();
+  while (id != null && hasNode(nodes, id) && !guard.has(String(id))) {
+    set.add(String(id));
+    guard.add(String(id));
+    id = nodes[id].parent;
+  }
+  return set;
+}
+
+/** Seq-sorted: each node_created takes the immediately preceding move_selected. */
+function edgeLabelMap(state) {
+  const labels = new Map();
+  const nodes = state?.nodes;
+  if (!isPlainObject(nodes)) return labels;
+
+  const moves = Array.isArray(state.moves) ? state.moves : [];
+  const creations = [];
+  for (const key of Object.keys(nodes)) {
+    const n = nodes[key];
+    if (!isPlainObject(n)) continue;
+    creations.push({
+      seq: createdSeqOf(n),
+      id: n.id ?? key,
+      type: "node_created",
+    });
+  }
+  const timeline = [
+    ...moves.map((m) => ({
+      seq: Number.isFinite(m.seq) ? m.seq : 0,
+      type: "move_selected",
+      move: m,
+    })),
+    ...creations,
+  ].sort((a, b) => a.seq - b.seq || (a.type === "move_selected" ? -1 : 1));
+
+  let lastMove = null;
+  for (const item of timeline) {
+    if (item.type === "move_selected") {
+      lastMove = item.move;
+    } else {
+      labels.set(
+        String(item.id),
+        lastMove != null ? moveLabel(lastMove.kind).word : null,
+      );
+      lastMove = null;
+    }
+  }
+  return labels;
+}
+
+function enrich(entry, state, pathSet, edges) {
+  const node = entry.node;
+  const id = String(node.id);
+  const journey = buildJourney(state, node.id);
+  entry.plainState = stateLabel(node.state);
+  entry.onBestPath = pathSet.has(id);
+  entry.dimmed = ["rejected", "retired", "leaked"].includes(node.state);
+  entry.loops = journey ? journey.loops : 0;
+  entry.edgeLabel = edges.has(id) ? edges.get(id) : null;
+  for (const child of entry.children) enrich(child, state, pathSet, edges);
+  return entry;
+}
+
+/**
+ * moveTargets(state) → [{ move, nodeId }] in move order.
+ * nodeId is the attempt produced by the immediately following node_created, or null.
+ */
+export function moveTargets(state) {
+  const moves = Array.isArray(state?.moves) ? state.moves : [];
+  const nodes = state?.nodes;
+  if (!isPlainObject(nodes)) {
+    return moves.map((move) => ({ move, nodeId: null }));
+  }
+
+  const creations = Object.keys(nodes)
+    .map((key) => {
+      const n = nodes[key];
+      return isPlainObject(n)
+        ? { seq: createdSeqOf(n), id: n.id ?? key }
+        : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.seq - b.seq);
+
+  const sortedMoves = [...moves].sort(
+    (a, b) => (a.seq ?? 0) - (b.seq ?? 0),
+  );
+  const used = new Set();
+  return sortedMoves.map((move) => {
+    const next = creations.find(
+      (c) => c.seq > (move.seq ?? 0) && !used.has(String(c.id)),
+    );
+    if (!next) return { move, nodeId: null };
+    // Ensure no other move sits between this move and the creation.
+    const intervening = sortedMoves.some(
+      (m) =>
+        m !== move &&
+        (m.seq ?? 0) > (move.seq ?? 0) &&
+        (m.seq ?? 0) < next.seq,
+    );
+    if (intervening) return { move, nodeId: null };
+    used.add(String(next.id));
+    return { move, nodeId: next.id };
+  });
+}
+
+// buildTree(state) -> array of root nodes, each { node, children, orphan, …D3 }.
 export function buildTree(state) {
   try {
     if (!isPlainObject(state)) return [];
     const nodes = state.nodes;
     if (!isPlainObject(nodes)) return [];
 
-    // Stable id order: state.nodeOrder (creation order) first, falling back
-    // to whatever Object.keys gives us for any id it missed — nodeOrder is
-    // trusted but not required, since this module must stay total even
-    // against a hand-built or malformed state.
     const allIds = Object.keys(nodes).filter((id) => isPlainObject(nodes[id]));
-    const orderSeed = Array.isArray(state.nodeOrder) ? state.nodeOrder.map(String) : [];
+    const orderSeed = Array.isArray(state.nodeOrder)
+      ? state.nodeOrder.map(String)
+      : [];
     const seenInOrder = new Set();
     const order = [];
     for (const id of orderSeed) {
@@ -52,10 +157,6 @@ export function buildTree(state) {
       }
     }
 
-    // parentId -> [childId, ...], sorted by createdSeq once, up front — each
-    // node contributes to exactly one parent's list (its own `parent`
-    // field), so this map is a proper forest-plus-cycles description of the
-    // graph before any traversal happens.
     const childrenByParent = new Map();
     for (const id of order) {
       const parent = nodes[id].parent;
@@ -76,11 +177,6 @@ export function buildTree(state) {
       const kids = childrenByParent.get(id) || [];
       const children = [];
       for (const cid of kids) {
-        // A node can only appear in one parent's kid list (its own `parent`
-        // field decides which), so "already visited" here means we walked
-        // back into an ancestor via a parent cycle. Cut the edge instead of
-        // recursing again — the node itself is not lost, it is already
-        // present higher up in this same tree.
         if (visited.has(cid)) continue;
         children.push(build(cid));
       }
@@ -89,9 +185,6 @@ export function buildTree(state) {
 
     const roots = [];
 
-    // Pass 1: real roots (parent === null) and orphans (parent id not
-    // present in state.nodes). Orphans are never dropped — silently
-    // dropping data was the queue_reordered bug in batch 1.
     for (const id of order) {
       if (visited.has(id)) continue;
       const parent = nodes[id].parent;
@@ -104,10 +197,6 @@ export function buildTree(state) {
       }
     }
 
-    // Pass 2: whatever is still unvisited belongs to a parent cycle with no
-    // null/missing parent anywhere in it (every member's parent resolves to
-    // another present node, all the way around). Surface it at root level
-    // instead of infinite-looping or dropping it.
     for (const id of order) {
       if (visited.has(id)) continue;
       const entry = build(id);
@@ -115,6 +204,9 @@ export function buildTree(state) {
       roots.push(entry);
     }
 
+    const pathSet = bestPathSet(state);
+    const edges = edgeLabelMap(state);
+    for (const root of roots) enrich(root, state, pathSet, edges);
     return roots;
   } catch (_) {
     return [];

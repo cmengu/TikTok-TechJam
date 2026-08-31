@@ -7,6 +7,7 @@ import {
   moveLabel,
   stateLabel,
 } from "./copy.js";
+import { moveTargets } from "./tree.js";
 
 export function sentence(ev) {
   try {
@@ -159,4 +160,15 @@ function moveSentence(ev) {
     return `Next move: build on attempt ${ev.parent}${reason}.`;
   }
   return `Next move: ${kind.word}${reason}.`;
+}
+
+/** D4 — moves in order with optional attempt links. Newest last. */
+export function buildMoveTrail(state) {
+  return moveTargets(state).map(({ move, nodeId }) => ({
+    text: sentence(move),
+    href:
+      nodeId != null && String(nodeId) !== "null" && String(nodeId) !== "undefined"
+        ? `#/run/${nodeId}`
+        : null,
+  }));
 }

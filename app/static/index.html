@@ -527,6 +527,100 @@
       color: var(--pos);
       font-weight: 600;
     }
+    .tree-node-dimmed {
+      opacity: 0.4;
+    }
+    .tree-node-best {
+      border-color: var(--pos);
+    }
+    .tree-children-best {
+      border-left-color: var(--pos);
+    }
+    .tree-edge-label {
+      display: block;
+      font-size: var(--fs-label);
+      color: var(--ink-muted);
+      margin: 0 0 var(--s1) 0.625rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tree-loop-badge {
+      font-size: var(--fs-label);
+      color: var(--warn);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tree-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--pos);
+      display: inline-block;
+      animation: stage-pulse 1.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tree-live-dot {
+        animation: none;
+      }
+    }
+
+    /* --- journey strip (D2): seven stage chips before the dossier --- */
+    .journey-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--s2);
+      margin-bottom: var(--s4);
+    }
+    .stage {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      background: var(--sunken);
+      color: var(--ink-muted);
+      font-size: var(--fs-label);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stage--done {
+      background: var(--pos-wash);
+      color: var(--pos);
+      border-color: transparent;
+    }
+    .stage--current {
+      background: var(--warn-wash);
+      color: var(--warn);
+      border-color: transparent;
+      animation: stage-pulse 1.4s ease-in-out infinite;
+    }
+    .stage--failed {
+      background: var(--crit-wash);
+      color: var(--crit);
+      border-color: transparent;
+    }
+    .stage--skipped {
+      opacity: 0.55;
+    }
+    .stage--pending {
+      opacity: 0.7;
+    }
+    .journey-retry {
+      margin-left: var(--s2);
+      font-size: var(--fs-label);
+      color: var(--warn);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    @keyframes stage-pulse {
+      50% { opacity: 0.55; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stage--current {
+        animation: none;
+      }
+    }
 
     /* --- node dossier (Task 8): header line, state history, verdicts
        (each run through band.js's verdictReading — never re-derived here),
@@ -977,6 +1071,17 @@
       top: 1.25rem;
       bottom: 0;
       border-left: 1px solid var(--hairline);
+    }
+    .move-trail {
+      margin-bottom: var(--s4);
+    }
+    .move-trail a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .move-trail a:hover {
+      color: var(--pos);
+      text-decoration: underline;
     }
 
     .styleguide {
