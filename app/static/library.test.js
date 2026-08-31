@@ -92,7 +92,7 @@ describe("library", () => {
     assert.equal(wide.ideas.length, 1);
     assert.equal(wide.ideas[0].id, "h-train-1");
     assert.equal(wide.ideas[0].pattern, "lr-schedule");
-    assert.equal(wide.ideas[0].outcome, "promoted");
+    assert.equal(wide.ideas[0].outcome, "accepted");
     const unmatched = lib.find((p) => p.title === "DeepFM");
     assert.deepEqual(unmatched.ideas, []);
   });

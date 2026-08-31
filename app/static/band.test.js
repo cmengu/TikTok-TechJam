@@ -295,7 +295,7 @@ describe("band — verdictAnnotation", () => {
     };
     const { text, reason } = verdictAnnotation(verdict);
     assert.equal(text, null);
-    assert.match(reason, /rung/i, `expected the reason to name the missing rung: ${reason}`);
+    assert.match(reason, /test kind/i, `expected the reason to name the missing test kind: ${reason}`);
   });
 
   it("test_annotation_without_band_gives_a_reason", () => {

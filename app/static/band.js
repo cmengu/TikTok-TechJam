@@ -146,7 +146,7 @@ export function verdictAnnotation(verdict) {
     return {
       text: null,
       reason:
-        "band is fake_run.py's legacy lo/hi pair — the harness reported no threshold this verdict was tested against",
+        "band is fake_run.py's legacy lo/hi pair — the harness reported no threshold this decision was tested against",
     };
   }
 
@@ -155,10 +155,10 @@ export function verdictAnnotation(verdict) {
       text: null,
       reason:
         rung == null
-          ? "verdict carries no rung — which comparison the harness made is unknown"
+          ? "this decision carries no test kind — which comparison the harness made is unknown"
           : "the harness's threshold for this comparison is unavailable",
     };
   }
 
-  return { text: null, reason: "no band was reported for this verdict" };
+  return { text: null, reason: "no band was reported for this decision" };
 }
