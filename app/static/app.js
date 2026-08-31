@@ -6,7 +6,7 @@ import { buildTree } from "./tree.js";
 import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
-import { stateLabel, rungLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
+import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
@@ -328,7 +328,7 @@ function ensureDashboardRungFetch() {
       const view = requireView();
       const rungEl = view.querySelector("[data-dashboard-rung]");
       if (rungEl) {
-        rungEl.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+        rungEl.innerHTML = `<h2>${escapeHtml(DICT.rungHeading.word)}</h2>${renderRungStrip(dashboardRung)}`;
       }
       const heroEl = view.querySelector("[data-dashboard-hero]");
       if (heroEl) {
@@ -345,7 +345,7 @@ function ensureDashboardRungFetch() {
       const view = requireView();
       const rungEl = view.querySelector("[data-dashboard-rung]");
       if (rungEl) {
-        rungEl.innerHTML = `<h2>Rung</h2>${renderRungStrip(dashboardRung)}`;
+        rungEl.innerHTML = `<h2>${escapeHtml(DICT.rungHeading.word)}</h2>${renderRungStrip(dashboardRung)}`;
       }
     })
     .finally(() => {
@@ -428,7 +428,7 @@ function renderDashboard(state) {
     ${liveStatusHtml(state, nowMs)}
     <div class="dashboard-strip">
       <section data-dashboard-rung>
-        <h2>Rung</h2>
+        <h2>${escapeHtml(DICT.rungHeading.word)}</h2>
         ${renderRungStrip(dashboardRung)}
       </section>
       <section>
@@ -927,7 +927,7 @@ function renderVerdictEntry({ verdict, reading }) {
     // comparison is unavailable and why, via band.js's own verdictAnnotation,
     // never invent one here.
     const { reason } = verdictAnnotation(verdict);
-    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || "no band was reported for this decision")}</div>`;
+    thresholdHtml = `<div class="dossier-no-threshold">no threshold available — ${escapeHtml(reason || DICT.bandMissingReason.word)}</div>`;
   }
   const deltaMeanHtml =
     typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)
@@ -937,7 +937,7 @@ function renderVerdictEntry({ verdict, reading }) {
   const deltaPerSeedHtml = `<div>Δ per seed: ${fmtSeedValues(verdict.delta_per_seed)}</div>`;
   const attributionHtml =
     verdict.attribution != null
-      ? `<div>${escapeHtml(verdict.attribution === "clear" ? "explained" : verdict.attribution === "unclear" ? "unexplained" : String(verdict.attribution))}</div>`
+      ? `<div>${escapeHtml(attributionLabel(verdict.attribution))}</div>`
       : "";
   // A leak trip is the most important thing a node can carry — visually
   // prominent, not just another line item (Handoff_app.md, "Task 8").
@@ -1468,7 +1468,7 @@ function renderMonitorsView(vm) {
         ${seeds}
       </section>
       <section>
-        <h2>Rung</h2>
+        <h2>${escapeHtml(DICT.rungHeading.word)}</h2>
         <p>${escapeHtml(vm.rung.level)}</p>
         <p class="panel-note">${escapeHtml(vm.rung.reason)}</p>
       </section>

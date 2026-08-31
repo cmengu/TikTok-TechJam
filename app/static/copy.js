@@ -77,6 +77,26 @@ export const DICT = {
     word: "noise bar",
     hint: "smaller-than-this is luck",
   },
+  rungHeading: {
+    word: "Testing stage",
+    hint: "how much to trust the headline number",
+  },
+  bandLegacyReason: {
+    word: "the noise bar came from the demo script's old format — no real threshold was reported",
+    hint: "smaller-than-this is luck",
+  },
+  bandMissingReason: {
+    word: "no noise bar was reported for this decision",
+    hint: "smaller-than-this is luck",
+  },
+  bandUnknownKindReason: {
+    word: "this decision carries no test kind — which comparison was made is unknown",
+    hint: "smaller-than-this is luck",
+  },
+  bandUnavailableReason: {
+    word: "the threshold for this comparison is unavailable",
+    hint: "smaller-than-this is luck",
+  },
   incumbent: {
     word: "current best",
     hint: "the model every attempt must beat",
@@ -167,6 +187,10 @@ export function levelLabel(level) {
 export function rungLabel(rung) {
   if (rung == null) return passThrough(rung);
   return DICT[rung] ?? passThrough(rung);
+}
+
+export function attributionLabel(x) {
+  return DICT[x]?.word ?? "unexplained";
 }
 
 export function claimLabel(level) {
