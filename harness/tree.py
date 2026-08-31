@@ -943,16 +943,32 @@ class Tree:
         elif self._initial_commit:
             self.workspace.checkout(self._initial_commit)
 
-    def _commit_hyp(self, node, hyp, traceback, debug_k):  # noqa: ANN001
+    def _commit_hyp(self, node, hyp, traceback, debug_k) -> bool:  # noqa: ANN001
         if self.workspace is None:
-            return
+            return True
         self._checkout_for_hyp(hyp)
         try:
             diff_path = self.coder.materialise(hyp, self.incumbent or node, traceback)
-        except Exception:
-            diff_path = hyp.patch
+        except Exception as exc:
+            if hyp.patch is not None:
+                # A hand-supplied patch path still stands in for the coder.
+                diff_path = hyp.patch
+            else:
+                # The idea was never applied. Measuring now would score the
+                # incumbent under this hypothesis's name and write a false
+                # lesson (seen on the first real KuaiRand run). Fail the
+                # node instead; select() may schedule a debug repair.
+                self.events.emit(
+                    "failure",
+                    node=node.id,
+                    summary=f"patch apply failed for {hyp.id}: {exc}"[:200],
+                    **{"class": "patch_apply_failed"},
+                )
+                self._set_state(node, "failed")
+                return False
         if diff_path is not None:
             node.commit = self.workspace.commit_node(node.id, Path(diff_path), debug_k=debug_k)
+        return True
 
     def _handle_failure(self, node, hyp, result) -> bool:  # noqa: ANN001
         fc = result.failure_class or "crash"
@@ -992,7 +1008,8 @@ class Tree:
         node.kind = "debug"  # type: ignore[assignment]
         if node.state in ("failed",):
             self._set_state(node, "debugging")
-        self._commit_hyp(node, hyp, None, self._debug_depth[node.id])
+        if not self._commit_hyp(node, hyp, None, self._debug_depth[node.id]):
+            return True  # move consumed; the node sits in failed for the next repair
         self._node_attempt[node.id] = self._node_attempt.get(node.id, 1) + 1
         if node.state in ("debugging",):
             self._set_state(node, "running", f"node {node.id} debug retry {self._debug_depth[node.id]}")
@@ -1061,15 +1078,16 @@ class Tree:
                 scores={}, seeds=[], cost=Cost(0.0, 0, 0, "training"), created_seq=nid,
             )
             self.nodes[nid] = node
-        self._commit_hyp(node, hyp, None, None)
+        committed = self._commit_hyp(node, hyp, None, None)
         self.events.emit(
             "node_created", id=nid, parent=parent, kind=kind,
             hypothesis_id=hyp.id, commit=node.commit,
             summary=f"node {nid} created as {kind}",
         )
         self._nodes_done += 1
-        self._run_ladder(node, hyp)
-        self._maybe_fork(node)
+        if committed:
+            self._run_ladder(node, hyp)
+            self._maybe_fork(node)
         stats = family_stats(self._read_log())
         if self.queue:
             self.queue.rerank(stats)
