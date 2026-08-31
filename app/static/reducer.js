@@ -156,6 +156,12 @@ export const initial = () => ({
   /** attribution_checked keyed by node — the observables behind clear/unclear. */
   attribution: { byNode: {} },
 
+  /**
+   * Ideas slice (LuxMax E0): every hypothesis_queued event stored whole under
+   * its id, order of first sighting. Joined to nodes via node.hypothesisId.
+   */
+  ideas: { byId: {}, order: [] },
+
   /** Current incumbent node id (null until first promotion / incumbent_changed). */
   incumbent: null,
 
@@ -410,6 +416,13 @@ export function reduce(state, ev) {
         started: false,
       };
       next.queue = [...state.queue, entry];
+      // Ideas slice: store the event whole; first sighting wins on duplicate id.
+      if (ev.id != null && state.ideas.byId[ev.id] == null) {
+        next.ideas = {
+          byId: { ...state.ideas.byId, [ev.id]: ev },
+          order: [...state.ideas.order, ev.id],
+        };
+      }
       break;
     }
 
@@ -577,4 +590,16 @@ export function reduce(state, ev) {
     next.feed = capPush(next.feed, ev, FEED_CAP);
   }
   return next;
+}
+
+/** Latest verdict for the attempt that was built from this idea, else null. */
+export function ideaOutcome(state, ideaId) {
+  if (!state?.nodes || ideaId == null) return null;
+  for (const id of state.nodeOrder || []) {
+    const node = state.nodes[id];
+    if (node && node.hypothesisId === ideaId) {
+      return node.latestVerdict ?? null;
+    }
+  }
+  return null;
 }

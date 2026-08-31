@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { initial, reduce, EVENT_TYPES, STATES } from "./reducer.js";
+import { initial, reduce, EVENT_TYPES, STATES, ideaOutcome } from "./reducer.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(
@@ -594,3 +594,64 @@ describe("reducer — Phase 2 (F1: vocabulary and slices)", () => {
     assert.ok(state.nodes[3].latestVerdict.oracle_delta > 0);
   });
 });
+
+describe("reducer — E0 ideas slice", () => {
+  it("test_ideas_slice_from_fixture", () => {
+    const events = loadFixture();
+    const queued = events.filter((e) => e.type === "hypothesis_queued");
+    assert.equal(queued.length, 6);
+    const state = fold(events);
+    assert.equal(state.ideas.order.length, 6);
+    assert.deepEqual(
+      state.ideas.order,
+      queued.map((e) => e.id),
+    );
+    for (const ev of queued) {
+      // Stored whole — same object reference the reducer received.
+      assert.equal(state.ideas.byId[ev.id], ev);
+      assert.deepEqual(state.ideas.byId[ev.id], ev);
+    }
+  });
+
+  it("test_idea_outcome_join", () => {
+    const state = fold(loadFixture());
+    const outcome = ideaOutcome(state, "h-train-1");
+    assert.ok(outcome);
+    assert.equal(outcome.state, "promoted");
+    assert.equal(ideaOutcome(state, "h-train-2"), null);
+    assert.equal(ideaOutcome(state, "h-obj-2"), null);
+  });
+
+  it("test_old_fixture_counts_unmoved", () => {
+    const state = fold(loadFixture());
+    assert.equal(state.nodeOrder.length, 4);
+    deepEqual(state.unknown, {});
+  });
+
+  it("test_duplicate_idea_id_keeps_first", () => {
+    let state = initial();
+    const first = {
+      type: "hypothesis_queued",
+      seq: 1,
+      id: "h-dup",
+      stage: "features",
+      mechanism: "a",
+      summary: "first",
+    };
+    const second = {
+      type: "hypothesis_queued",
+      seq: 2,
+      id: "h-dup",
+      stage: "features",
+      mechanism: "b",
+      summary: "second",
+    };
+    state = reduce(state, first);
+    state = reduce(state, second);
+    assert.equal(state.ideas.order.length, 1);
+    assert.equal(state.ideas.byId["h-dup"], first);
+    assert.equal(state.ideas.byId["h-dup"].summary, "first");
+    assert.notEqual(state.ideas.byId["h-dup"].summary, "second");
+  });
+});
+
