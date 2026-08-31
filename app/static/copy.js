@@ -210,6 +210,16 @@ export const DICT = {
     word: "Credit refused — the score moved but the stated mechanism's observables did not. This gain is not written into memory.",
     hint: null,
   },
+  receiptFree: { word: "free checks", hint: "three free gates before any GPU is spent" },
+  receiptSmoke: { word: "quick run", hint: null },
+  receiptStopFree: {
+    word: "Stopped at the free check — 0 model readings, 0 test runs spent.",
+    hint: null,
+  },
+  receiptSemantic: {
+    word: "all {n} judgment rules carried in one model reading",
+    hint: null,
+  },
 };
 
 const STATE_LABELS = {

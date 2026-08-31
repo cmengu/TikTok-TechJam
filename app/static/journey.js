@@ -1,6 +1,6 @@
 /** D1 — seven-stage attempt journey as a pure fold. No DOM. */
 
-import { stateLabel } from "./copy.js";
+import { stateLabel, DICT } from "./copy.js";
 import { escapeHtml } from "./chip.js";
 
 export const STAGES = [
@@ -149,14 +149,99 @@ export function buildJourney(state, nodeId) {
   };
 }
 
+const LEVEL_ORDER = ["omega", "v_sem", "smoke"];
+
+function levelLabel(level) {
+  if (level === "omega") return DICT.receiptFree.word;
+  if (level === "v_sem") return DICT.checkLlm.word;
+  if (level === "smoke") return DICT.receiptSmoke.word;
+  return "";
+}
+
+function stoppedWord(level) {
+  if (level === "omega") return "free";
+  if (level === "v_sem") return "reading";
+  if (level === "smoke") return "quick run";
+  return null;
+}
+
+export function buildReceipt(state, contractPayload, nodeId) {
+  const rows =
+    state?.cascade?.byNode?.[nodeId] ??
+    state?.cascade?.byNode?.[String(nodeId)] ??
+    null;
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const trips = (state.reliability?.ruleTrips || []).filter(
+    (t) => String(t.node) === String(nodeId),
+  );
+  const levels = LEVEL_ORDER.map((level) => {
+    const row = rows.find((r) => r.level === level);
+    if (!row) return null;
+    const ids = Array.isArray(row.trips) ? row.trips : [];
+    const tripped = ids.map((id) => {
+      const ev = trips.find((t) => t.rule_id === id || t.rule === id);
+      return { id, statement: ev?.statement || String(id) };
+    });
+    return { label: levelLabel(level), passed: row.passed === true, tripped };
+  }).filter(Boolean);
+  let readings = 0;
+  let runs = 0;
+  for (const row of rows) {
+    readings += Number(row.llm_calls) || 0;
+    runs += Number(row.runs) || 0;
+  }
+  let stoppedAt = null;
+  for (const row of rows) {
+    if (row.passed === false) {
+      stoppedAt = stoppedWord(row.level);
+      break;
+    }
+  }
+  let semanticLine = null;
+  const rules =
+    contractPayload?.available === true && Array.isArray(contractPayload.rules)
+      ? contractPayload.rules
+      : null;
+  if (rules) {
+    const n = rules.filter((r) => r.check === "llm").length;
+    semanticLine = DICT.receiptSemantic.word.replace("{n}", String(n));
+  }
+  return {
+    levels,
+    spend: { readings, runs },
+    stoppedAt,
+    semanticLine,
+  };
+}
+
+export function receiptHtml(receipt) {
+  if (!receipt) return "";
+  const quotes = receipt.levels
+    .flatMap((lv) => lv.tripped)
+    .map((t) => `<blockquote>${escapeHtml(t.statement)}</blockquote>`)
+    .join("");
+  const stop =
+    receipt.stoppedAt === "free"
+      ? `<p>${escapeHtml(DICT.receiptStopFree.word)}</p>`
+      : "";
+  const spend = `<p class="panel-note">${escapeHtml(String(receipt.spend.readings))} readings · ${escapeHtml(String(receipt.spend.runs))} runs</p>`;
+  const semantic = receipt.semanticLine
+    ? `<p class="stat-caption">${escapeHtml(receipt.semanticLine)}</p>`
+    : "";
+  return `${quotes}${stop}${spend}${semantic}`;
+}
+
 /** HTML leaf widget for the dossier pipeline strip (D2 exception). */
-export function journeyStripHtml(journey) {
+export function journeyStripHtml(journey, receipt) {
   if (!journey?.stages?.length) return "";
   const chips = journey.stages
-    .map(
-      (s) =>
-        `<span class="stage stage--${s.status}" data-stage="${s.id}">${escapeHtml(s.label)}</span>`,
-    )
+    .map((s) => {
+      const chip = `<span class="stage stage--${s.status}" data-stage="${s.id}">${escapeHtml(s.label)}</span>`;
+      if (s.id === "free-checks" && receipt) {
+        return `<details class="stage-receipt"><summary>${chip}</summary>${receiptHtml(receipt)}</details>`;
+      }
+      return chip;
+    })
     .join("");
   const retry =
     journey.loops > 0
