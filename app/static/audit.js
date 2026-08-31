@@ -117,10 +117,11 @@ export function doubleChecksPageHtml(vm) {
 export function spendPageHtml(vm) {
   const tiles = vm.slices
     .map(
-      (s) => `<div class="stat">
+      // The ledger key ({slice}.tokens_in) is for the code, not the viewer —
+      // it lives on the hover only (fix list item 10).
+      (s) => `<div class="stat" title="${escapeHtml(s.slice)}.tokens_in">
         <span class="stat-value">${escapeHtml(String(s.tokens_in))}</span>
         <span class="stat-caption">${escapeHtml(s.label)}</span>
-        <span class="stat-src">${escapeHtml(s.slice)}.tokens_in</span>
       </div>`,
     )
     .join("");
