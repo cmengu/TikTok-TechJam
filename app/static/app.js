@@ -7,7 +7,7 @@ import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildClaimCard, claimCardHtml } from "./claimcard.js";
 import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
-import { buildRung, buildLastMove, buildCascadeCounter, buildHero, provenanceCounts } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, provenanceCounts } from "./dashboard.js";
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
@@ -365,7 +365,7 @@ function ensureDashboardRungFetch() {
       }
       const heroEl = view.querySelector("[data-dashboard-hero]");
       if (heroEl) {
-        heroEl.innerHTML = renderHeroHtml(
+        heroEl.innerHTML = heroHtml(
           buildHero(dashboardMonitors, buildTrace(store.getState())),
         );
       }
@@ -390,27 +390,6 @@ function renderRungStrip(rung) {
   return `<p>${escapeHtml(rung.level)}</p><p class="panel-note">${escapeHtml(rung.reason)}</p>`;
 }
 
-function renderHeroHtml(hero) {
-  const hint =
-    hero.trust.hint != null && hero.trust.hint !== ""
-      ? ` data-hint="${escapeAttr(hero.trust.hint)}"`
-      : "";
-  const funnel = hero.funnel
-    .map(
-      (s) =>
-        `<a class="funnel-step" href="${escapeAttr(s.href)}"><span class="funnel-count">${escapeHtml(String(s.count))}</span> ${escapeHtml(s.label)}</a>`,
-    )
-    .join('<span class="funnel-arrow">→</span>');
-  return `
-    <div class="stat">
-      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>${stampHtml("measured")}
-      <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
-      <span class="stat-src">monitors.primary</span>
-    </div>
-    <p class="dashboard-hero-caption">${escapeHtml(hero.caption)}</p>
-    <div class="funnel">${funnel}</div>
-  `;
-}
 
 const LIVE_NODE_STATES = new Set([
   "screening",
@@ -456,7 +435,7 @@ function renderDashboard(state) {
     : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
     <section class="card dashboard-hero" data-dashboard-hero>
-      ${renderHeroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
       ${provenanceTileHtml(provenanceCounts(state))}
     </section>
     ${liveStatusHtml(state, nowMs)}

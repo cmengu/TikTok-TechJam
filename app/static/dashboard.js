@@ -1,6 +1,9 @@
-/** F2 dashboard strip + hero view models. Pure: no DOM, no fetch, no HTML. */
+/** F2 dashboard strip + hero view models, plus the hero's HTML leaf.
+ * Pure: no DOM, no fetch. */
 
 import { claimLabel, fmtScore } from "./copy.js";
+import { escapeHtml, escapeAttr } from "./chip.js";
+import { stampHtml } from "./provenance.js";
 
 function isPlainObject(x) {
   return x !== null && typeof x === "object" && !Array.isArray(x);
@@ -95,4 +98,31 @@ export function buildHero(monitorsPayload, trace) {
 export function provenanceCounts(state) {
   const p = state?.provenance || {};
   return { measured: p.measured || 0, forecasts: p.forecasts || 0 };
+}
+
+// The hero's HTML leaf. The "measured" stamp is provenance for a number that
+// exists — before the first measurement the score is "\u2014" and a stamp
+// glued to a dash would claim provenance for nothing, so no value means no
+// stamp (fix list item 2).
+export function heroHtml(hero) {
+  const hint =
+    hero.trust.hint != null && hero.trust.hint !== ""
+      ? ` data-hint="${escapeAttr(hero.trust.hint)}"`
+      : "";
+  const funnel = hero.funnel
+    .map(
+      (s) =>
+        `<a class="funnel-step" href="${escapeAttr(s.href)}"><span class="funnel-count">${escapeHtml(String(s.count))}</span> ${escapeHtml(s.label)}</a>`,
+    )
+    .join('<span class="funnel-arrow">\u2192</span>');
+  const stamp = hero.score === "\u2014" ? "" : stampHtml("measured");
+  return `
+    <div class="stat">
+      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>${stamp}
+      <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
+      <span class="stat-src">monitors.primary</span>
+    </div>
+    <p class="dashboard-hero-caption">${escapeHtml(hero.caption)}</p>
+    <div class="funnel">${funnel}</div>
+  `;
 }

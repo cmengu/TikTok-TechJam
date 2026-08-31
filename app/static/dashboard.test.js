@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml } from "./dashboard.js";
 
 function move(round, kind, parent, reason) {
   return { type: "move_selected", round, kind, parent, reason };
@@ -183,5 +183,23 @@ describe("dashboard hero", () => {
       TRACE,
     );
     assert.notEqual(twisted.caption, reason);
+  });
+});
+
+describe("dashboard hero html", () => {
+  it("test_hero_before_first_measurement_has_no_stamp", () => {
+    // Fix list item 2: "\u2014 / measured" claimed provenance for a number
+    // that does not exist yet.
+    const hero = buildHero({ available: false }, TRACE);
+    const html = heroHtml(hero);
+    assert.ok(html.includes("\u2014"));
+    assert.ok(!html.includes("stamp"));
+    assert.ok(!html.includes("measured"));
+  });
+
+  it("test_hero_with_a_score_keeps_the_stamp", () => {
+    const html = heroHtml(buildHero(MONITORS, TRACE));
+    assert.ok(html.includes("0.5270"));
+    assert.ok(html.includes('class="stamp stamp--measured"'));
   });
 });
