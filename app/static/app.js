@@ -10,6 +10,7 @@ import { stateLabel, rungLabel, moveLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
+import { buildBrief, briefPageHtml } from "./brief.js";
 
 export { chipHtml };
 
@@ -1154,6 +1155,33 @@ function renderStyleguide() {
   `;
 }
 
+let briefFetchGen = 0;
+
+function renderBrief(_state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading game plan…</p>`;
+  const path = currentRoutePath();
+  const gen = ++briefFetchGen;
+  if (!runId) return;
+  fetch(`/runs/${runId}/brief`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== briefFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      const vm = buildBrief(payload);
+      if (!vm) {
+        view.innerHTML = `<p class="empty">game plan unavailable</p>`;
+        return;
+      }
+      view.innerHTML = briefPageHtml(vm);
+    })
+    .catch(() => {
+      if (gen !== briefFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = `<p class="empty">game plan unavailable</p>`;
+    });
+}
+
 let monitorsFetchGen = 0;
 
 function renderMonitors(_state) {
@@ -1240,7 +1268,7 @@ const ROUTES = [
   // text) within milliseconds on an active run. Dashboard has no key because
   // its four panels are meant to reflect every event.
   { hash: "protocol", render: renderProtocol, key: (state) => state.run.protocol },
-  { hash: "brief", render: renderStub("Brief") },
+  { hash: "brief", render: renderBrief },
   { hash: "research", render: renderStub("Research") },
   { hash: "hypotheses", render: renderStub("Hypotheses") },
   // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
