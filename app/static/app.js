@@ -7,7 +7,7 @@ import { buildDossier } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildRung, buildLastMove, buildCascadeCounter } from "./dashboard.js";
 import { stateLabel, rungLabel, moveLabel } from "./copy.js";
-import { sentence } from "./feed.js";
+import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml } from "./chip.js";
 import { buildJourney, journeyStripHtml } from "./journey.js";
 
@@ -963,36 +963,52 @@ function renderDossier(dossier, journey = null) {
   `;
 }
 
+function renderMoveTrail(state) {
+  const rows = buildMoveTrail(state);
+  if (!rows.length) return `<p class="panel-empty">no moves yet</p>`;
+  const items = rows
+    .map((row) => {
+      const body =
+        row.href != null
+          ? `<a href="${escapeAttr(row.href)}">${escapeHtml(row.text)}</a>`
+          : escapeHtml(row.text);
+      return `<li>${body}</li>`;
+    })
+    .join("");
+  return `<ol class="trail move-trail">${items}</ol>`;
+}
+
 function renderRun(state, path) {
   const selectedId = selectedRunNodeId(path);
   const roots = buildTree(state);
   const treeHtml = roots.length
     ? `<ul class="tree-root">${roots.map((r) => renderTreeNode(r, state, selectedId)).join("")}</ul>`
-    : `<p class="panel-empty">no nodes yet</p>`;
+    : `<p class="panel-empty">no attempts yet</p>`;
 
   // An unknown node id must render "no such node" inside the Run screen —
   // never a blank page, never a fall-through to Dashboard.
   let dossierHtml;
   if (selectedId == null) {
-    dossierHtml = `<p class="panel-empty">select a node</p>`;
+    dossierHtml = `<p class="panel-empty">select an attempt</p>`;
   } else if (!Object.prototype.hasOwnProperty.call(state.nodes, selectedId)) {
-    dossierHtml = `<p class="panel-empty">no such node</p>`;
+    dossierHtml = `<p class="panel-empty">no such attempt</p>`;
   } else {
     const dossier = buildDossier(state, selectedId);
     const journey = buildJourney(state, selectedId);
     dossierHtml = dossier
       ? renderDossier(dossier, journey)
-      : `<p class="panel-empty">no such node</p>`;
+      : `<p class="panel-empty">no such attempt</p>`;
   }
 
   requireView().innerHTML = `
     <div class="run-grid">
       <section class="run-tree-panel">
-        <h2>Run tree</h2>
+        <h2>Attempts</h2>
+        ${renderMoveTrail(state)}
         ${treeHtml}
       </section>
       <section class="run-dossier-panel">
-        <h2>Node dossier</h2>
+        <h2>Attempt</h2>
         ${dossierHtml}
       </section>
     </div>
