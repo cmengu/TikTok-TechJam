@@ -17,6 +17,7 @@ import {
   fmtScore,
   fmtTokens,
   claimReasonLabel,
+  fmtPublished,
   levelLabel,
   moveLabel,
   rungLabel,
@@ -253,5 +254,33 @@ describe("claimReasonLabel", () => {
   it("test_unknown_reason_passes_through_and_null_is_empty", () => {
     assert.equal(claimReasonLabel("hand-written reason"), "hand-written reason");
     assert.equal(claimReasonLabel(null), "");
+  });
+});
+
+describe("fmtPublished", () => {
+  it("test_metric_map_reads_as_pairs", () => {
+    assert.equal(
+      fmtPublished({ gauc: 0.6674, ndcg_at_5: 0.5357, primary: 0.6016 }),
+      "gauc 0.6674 \u00b7 ndcg@5 0.5357 \u00b7 primary 0.6016",
+    );
+  });
+
+  it("test_scalars_pass_through", () => {
+    assert.equal(fmtPublished(0.4834), "0.4834");
+    assert.equal(fmtPublished("synthetic-baseline-v1"), "synthetic-baseline-v1");
+  });
+
+  it("test_object_never_reaches_string", () => {
+    // Refuse twin for fix list item 5: any structured value, however nested,
+    // must never render as "[object Object]".
+    const gnarly = [
+      { valid: { gauc: 0.6, deep: { deeper: 1 } } },
+      { oracle_ceiling: { valid: 0.8484, test: 0.8645 } },
+      [{ a: 1 }, { b: [2, { c: 3 }] }],
+      {},
+    ];
+    for (const value of gnarly) {
+      assert.ok(!fmtPublished(value).includes("[object Object]"));
+    }
   });
 });

@@ -9,7 +9,7 @@ import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
 import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, provenanceCounts } from "./dashboard.js";
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
-import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
+import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
@@ -602,6 +602,13 @@ function buildScoringBlock(scoring) {
   `;
 }
 
+// Published values can be per-metric maps — route them through
+// fmtPublished so an object never reaches String() (fix list item 5).
+function renderPublished(value) {
+  if (value === null || value === undefined) return chip("not set", "chip-null");
+  return escapeHtml(fmtPublished(value));
+}
+
 function buildBaselineBlock(baseline) {
   const published = baseline?.published || {};
   const reproduced = baseline?.reproduced || {};
@@ -610,7 +617,7 @@ function buildBaselineBlock(baseline) {
     .map(
       (name) => `<tr>
         <td>${escapeHtml(name)}</td>
-        <td>${renderScalar(published[name])}</td>
+        <td>${renderPublished(published[name])}</td>
         <td>${formatReproduced(reproduced[name])}</td>
       </tr>`,
     )

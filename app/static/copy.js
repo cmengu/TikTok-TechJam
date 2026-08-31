@@ -376,6 +376,23 @@ export function fmtDelta(x) {
   return `+${body}`;
 }
 
+// Baseline "published" values in the protocol can be scalars or per-metric
+// maps (valid: {gauc, ndcg_at_5, primary}). A map must never reach String()
+// — that renders "[object Object]" (fix list item 5). Metric keys read as
+// written in the protocol, with "_at_" restored to "@" (ndcg_at_5 → ndcg@5).
+export function fmtPublished(value) {
+  if (value == null) return "";
+  if (Array.isArray(value)) {
+    return value.map((v) => fmtPublished(v)).join(", ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([k, v]) => `${k.replaceAll("_at_", "@")} ${fmtPublished(v)}`)
+      .join(" · ");
+  }
+  return String(value);
+}
+
 export function fmtTokens(n) {
   if (n == null || (typeof n === "number" && Number.isNaN(n))) return "—";
   if (n === 0) return "0";
