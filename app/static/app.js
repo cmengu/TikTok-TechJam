@@ -6,7 +6,8 @@ import { buildTree } from "./tree.js";
 import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
-import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero, provenanceCounts } from "./dashboard.js";
+import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
@@ -377,7 +378,7 @@ function renderHeroHtml(hero) {
     .join('<span class="funnel-arrow">→</span>');
   return `
     <div class="stat">
-      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>
+      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>${stampHtml("measured")}
       <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
       <span class="stat-src">monitors.primary</span>
     </div>
@@ -431,6 +432,7 @@ function renderDashboard(state) {
   requireView().innerHTML = `
     <section class="card dashboard-hero" data-dashboard-hero>
       ${renderHeroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+      ${provenanceTileHtml(provenanceCounts(state))}
     </section>
     ${liveStatusHtml(state, nowMs)}
     <div class="dashboard-strip">
@@ -935,7 +937,7 @@ function renderVerdictEntry({ verdict, reading }) {
   }
   const deltaMeanHtml =
     typeof verdict.delta_mean === "number" && Number.isFinite(verdict.delta_mean)
-      ? `<div>Δ mean: ${fmtNum(verdict.delta_mean)}</div>`
+      ? `<div>Δ mean: ${fmtNum(verdict.delta_mean)} ${stampHtml("measured")}</div>`
       : `<div>Δ mean: ${chip("not reported", "chip-null")}</div>`;
   const rungHtml = `<div>test: ${verdict.rung != null ? escapeHtml(rungLabel(verdict.rung).word) : chip("not reported", "chip-null")}</div>`;
   const deltaPerSeedHtml = `<div>Δ per seed: ${fmtSeedValues(verdict.delta_per_seed)}</div>`;
@@ -1459,7 +1461,7 @@ function renderMonitorsView(vm) {
   const numbers = vm.numbers
     .map(
       (row) =>
-        `<li><span>${escapeHtml(row.label)}</span> ${escapeHtml(row.text)}` +
+        `<li><span>${escapeHtml(row.label)}</span> ${escapeHtml(row.text)} ${stampHtml("measured")}` +
         ` <span class="panel-note">${escapeHtml(row.source)}</span></li>`,
     )
     .join("");

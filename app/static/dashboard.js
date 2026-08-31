@@ -91,3 +91,8 @@ export function buildHero(monitorsPayload, trace) {
     funnel,
   };
 }
+
+export function provenanceCounts(state) {
+  const p = state?.provenance || {};
+  return { measured: p.measured || 0, forecasts: p.forecasts || 0 };
+}
