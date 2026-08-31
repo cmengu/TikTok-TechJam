@@ -259,6 +259,32 @@ def api_audit_monitors(run_id: str):
     }
 
 
+@app.get("/runs/{run_id}/feedback")
+def api_feedback(run_id: str):
+    path = _run_dir(run_id) / "lessons.jsonl"
+    if not path.is_file():
+        return {
+            "available": False,
+            "reason": "no failures yet — the run writes this page itself",
+        }
+    try:
+        from harness.feedback import feedback_from, load_lessons, render
+    except ImportError:
+        return {
+            "available": False,
+            "reason": "no failures yet — the run writes this page itself",
+        }
+    lessons = load_lessons(path)
+    fb = feedback_from(lessons)
+    return {
+        "available": True,
+        "weak": list(fb.weak_components),
+        "directions": list(fb.directions),
+        "forbidden": list(fb.forbidden),
+        "text": render(fb),
+    }
+
+
 @app.get("/runs/{run_id}/brief")
 def api_brief(run_id: str):
     events = _read_jsonl(_run_dir(run_id) / "events.jsonl")

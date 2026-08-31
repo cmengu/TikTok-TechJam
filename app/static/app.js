@@ -15,6 +15,7 @@ import { buildJourney, journeyStripHtml } from "./journey.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
 import { buildRulebook, rulebookPageHtml } from "./rulebook.js";
+import { buildMemory, memoryPageHtml } from "./memory.js";
 import { buildLibrary, libraryPageHtml } from "./library.js";
 import { buildIdeas, ideasPageHtml } from "./ideas.js";
 import {
@@ -1279,6 +1280,35 @@ function renderStyleguide() {
   `;
 }
 
+let memoryFetchGen = 0;
+
+function renderMemory(state) {
+  const view = requireView();
+  view.innerHTML = `<p class="panel-empty">loading what the run has learned…</p>`;
+  const path = currentRoutePath();
+  const gen = ++memoryFetchGen;
+  if (!runId) {
+    view.innerHTML = memoryPageHtml(
+      buildMemory(state, { available: false, reason: DICT.memoryEmpty.word }),
+    );
+    return;
+  }
+  fetch(`/runs/${runId}/feedback`)
+    .then((res) => res.json())
+    .then((payload) => {
+      if (gen !== memoryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = memoryPageHtml(buildMemory(state, payload));
+    })
+    .catch(() => {
+      if (gen !== memoryFetchGen) return;
+      if (currentRoutePath() !== path) return;
+      view.innerHTML = memoryPageHtml(
+        buildMemory(state, { available: false, reason: DICT.memoryEmpty.word }),
+      );
+    });
+}
+
 let rulebookFetchGen = 0;
 
 function renderRulebook(state) {
@@ -1518,6 +1548,7 @@ const ROUTES = [
   { hash: "protocol", render: renderProtocol, key: (state) => state.run.protocol },
   { hash: "brief", render: renderBrief },
   { hash: "the-rules", render: renderRulebook },
+  { hash: "learned", render: renderMemory },
   { hash: "research", render: renderLibrary },
   { hash: "hypotheses", render: renderIdeas },
   // "run" matches both "#/run" and "#/run/<nodeId>" — ROUTES used to match
