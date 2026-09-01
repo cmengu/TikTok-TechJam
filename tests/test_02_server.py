@@ -460,3 +460,105 @@ def test_list_runs_carries_liveness_fields(client: TestClient):
     # last_signal is the newest stamp across events and heartbeats — at
     # least as new as the run's start.
     assert row["last_signal"] >= row["started"]
+
+
+# --- Vercel adapter: an ended run's stream must terminate, not tail -----
+
+
+def _drain(response) -> list[dict]:
+    """Consume a StreamingResponse's SSE frames until the stream closes."""
+
+    async def _consume() -> list[dict]:
+        got: list[dict] = []
+        async for chunk in response.body_iterator:
+            text = chunk.decode("utf-8")
+            assert text.startswith("data: ")
+            assert text.endswith("\n\n")
+            got.append(json.loads(text[len("data: ") :].strip()))
+        return got
+
+    return asyncio.run(asyncio.wait_for(_consume(), timeout=3.0))
+
+
+def _mock_request() -> AsyncMock:
+    request = AsyncMock()
+    request.is_disconnected = AsyncMock(return_value=False)
+    return request
+
+
+def test_ended_run_event_stream_terminates(client: TestClient, runs_dir: Path):
+    """fake-0001 carries run_ended, so the SSE stream must replay every
+    event that exists and then CLOSE instead of tailing forever (the
+    serverless snapshot viewer would otherwise hang until timeout)."""
+    from app.server import get_events
+
+    res = get_events("fake-0001", since=0, stream=True, request=_mock_request())
+    got = _drain(res)  # hangs (TimeoutError) if the stream tails forever
+    on_disk = [
+        json.loads(line)
+        for line in (runs_dir / "fake-0001" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert got == on_disk
+    assert any(ev.get("type") == "run_ended" for ev in got)
+
+
+def test_ended_run_heartbeat_stream_terminates(client: TestClient, runs_dir: Path):
+    """The heartbeat stream keys off the same run_ended fact on the
+    events log — an ended run's heartbeat stream closes too."""
+    from app.server import get_heartbeat
+
+    res = get_heartbeat("fake-0001", since=0, stream=True, request=_mock_request())
+    _drain(res)  # terminating at all is the assertion
+
+
+def test_snapshot_host_stream_terminates_without_run_ended(
+    client: TestClient, runs_dir: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """On a serverless host (VERCEL env set) no run is ever live: even a
+    record with no run_ended (a crashed run) replays and closes."""
+    monkeypatch.setenv("VERCEL", "1")
+    path = runs_dir / "fake-0001" / "events.jsonl"
+    kept = [
+        line
+        for line in path.read_text().splitlines()
+        if line.strip() and json.loads(line).get("type") != "run_ended"
+    ]
+    path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    from app.server import get_events
+
+    res = get_events("fake-0001", since=0, stream=True, request=_mock_request())
+    got = _drain(res)
+    assert len(got) == len(kept)
+    assert not any(ev.get("type") == "run_ended" for ev in got)
+
+
+def test_live_run_stream_still_tails(client: TestClient, runs_dir: Path):
+    """Locally (no VERCEL env), a run without run_ended keeps tailing —
+    the stream must NOT close after replay."""
+    path = runs_dir / "fake-0001" / "events.jsonl"
+    kept = [
+        line
+        for line in path.read_text().splitlines()
+        if line.strip() and json.loads(line).get("type") != "run_ended"
+    ]
+    path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    from app.server import get_events
+
+    res = get_events("fake-0001", since=0, stream=True, request=_mock_request())
+
+    async def _expect_open() -> None:
+        count = 0
+        with pytest.raises(asyncio.TimeoutError):
+
+            async def _consume() -> None:
+                nonlocal count
+                async for _ in res.body_iterator:
+                    count += 1
+
+            await asyncio.wait_for(_consume(), timeout=1.5)
+        assert count == len(kept)  # replayed everything, then stayed open
+
+    asyncio.run(_expect_open())
