@@ -1,0 +1,5 @@
+# Serverless (Vercel) runtime deps for the dashboard snapshot viewer.
+# Local dev keeps using the .venv from pyproject.toml — this file only
+# pins what api/index.py -> app/server.py actually imports.
+fastapi==0.141.1
+pyyaml==6.0.3

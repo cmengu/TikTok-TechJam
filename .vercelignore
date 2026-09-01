@@ -1,0 +1,38 @@
+# Vercel upload filter: once this file exists it REPLACES .gitignore for
+# CLI deploys, so it must re-exclude everything bulky. The bundle should
+# be only code + the committed run records (~1.4 MB) + papers thumbs.
+
+# Environments / caches
+.git
+.venv
+venv
+.worktrees
+node_modules
+__pycache__
+*.pyc
+.pytest_cache
+*.egg-info
+dist
+build
+.DS_Store
+.env
+.env.*
+
+# Task data — the KuaiRand dataset and raw caches must NEVER upload
+data/kuairand
+data/raw
+data/cache
+*.parquet
+starter_kit/KuaiRand-Pure
+starter_kit/*.tar.gz
+
+# Run bulk: attempts/ checkpoints and workspace/ nested clones stay
+# local; the judge-readable record (events/lessons/heartbeat/patches)
+# is committed and ships.
+runs/*/attempts
+runs/*/workspace
+
+# Local-only working notes and video build artefacts
+context
+video/cards
+pytest_full*.txt
