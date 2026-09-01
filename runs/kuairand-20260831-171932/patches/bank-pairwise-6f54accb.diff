@@ -1,0 +1,113 @@
+Looking at the hypothesis, I need to:
+1. Add a function to sample pairwise items grouped by user (positive vs negative)
+2. Add a pairwise ranking loss method to FM using BPR (Bayesian Personalized Ranking)
+3. Update the training loop to use user-grouped pairwise sampling instead of pointwise batches
+
+```diff
+--- template.py
++++ template.py
+@@ -50,6 +50,40 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _sample_user_pairs(xtr: np.ndarray, ytr: np.ndarray, rng: np.random.Generator, batch_size: int = 8192):
++    """Sample pairwise ranking pairs grouped by user for BPR training.
++    
++    Yields batches of (x_pos, x_neg) pairs where positive items have high labels
++    and negative items have low labels, sampled within each user.
++    """
++    user_ids = xtr[:, 0]
++    unique_users = np.unique(user_ids)
++    
++    pairs_x_pos = []
++    pairs_x_neg = []
++    
++    for user_id in unique_users:
++        user_mask = user_ids == user_id
++        user_indices = np.where(user_mask)[0]
++        user_labels = ytr[user_indices]
++        
++        pos_indices = user_indices[user_labels > 0.5]
++        neg_indices = user_indices[user_labels <= 0.5]
++        
++        if len(pos_indices) > 0 and len(neg_indices) > 0:
++            for _ in range(len(pos_indices)):
++                pairs_x_pos.append(xtr[rng.choice(pos_indices)])
++                pairs_x_neg.append(xtr[rng.choice(neg_indices)])
++                
++                if len(pairs_x_pos) >= batch_size:
++                    yield np.array(pairs_x_pos), np.array(pairs_x_neg)
++                    pairs_x_pos, pairs_x_neg = [], []
++    
++    if len(pairs_x_pos) > 0:
++        yield np.array(pairs_x_pos), np.array(pairs_x_neg)
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -89,6 +123,51 @@ class FM:
+         return float(
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
++
++    def step_pairwise(self, x_pos: np.ndarray, x_neg: np.ndarray) -> float:
++        """BPR pairwise ranking loss: score(pos) > score(neg).
++        
++        Optimizes: -log(sigmoid(z_pos - z_neg))
++        """
++        bsz = len(x_pos)
++        
++        z_pos, e_pos, s_pos = self.logits(x_pos)
++        z_neg, e_neg, s_neg = self.logits(x_neg)
++        
++        margin = z_pos - z_neg
++        sigmoid_margin = sigmoid(margin)
++        
++        g_margin = -(1.0 - sigmoid_margin) / bsz
++        g_pos = g_margin.astype(np.float32)
++        g_neg = -g_margin.astype(np.float32)
++        
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        
++        np.add.at(gW, x_pos, g_pos[:, None])
++        np.add.at(gV, x_pos, g_pos[:, None, None] * (s_pos[:, None, :] - e_pos))
++        
++        np.add.at(gW, x_neg, g_neg[:, None])
++        np.add.at(gV, x_neg, g_neg[:, None, None] * (s_neg[:, None, :] - e_neg))
++        
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        
++        self.b -= self.lr * g_pos.sum()
++        
++        loss = float(-np.mean(np.log(sigmoid_margin + 1e-9)))
++        return loss
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -130,11 +209,8 @@ def main() -> None:
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
++    
+     for ep in range(1, epochs + 1):
+         losses = []
+-        idx = rng.permutation(len(ytr))
+-        for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++        for x_pos, x_neg in _sample_user_pairs(xtr, ytr, rng, batch):
++            losses.append(model.step_pairwise(x_pos, x_neg))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+```

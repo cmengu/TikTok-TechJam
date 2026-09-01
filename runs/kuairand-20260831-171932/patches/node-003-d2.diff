@@ -1,0 +1,108 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..29e1b65 100644
+--- a/template.py
++++ b/template.py
+@@ -82,6 +82,37 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _sample_pairwise_data(
++    rows: list[dict[str, str]],
++    rng: np.random.Generator,
++) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
++    """Sample positive-negative pairs grouped by user for BPR training.
++    
++    Groups rows by user_id, then for each positive item (long_view >= 1),
++    samples a negative item (long_view < 1) from the same user.
++    
++    Returns: (positive_rows, negative_rows) where indices correspond to pairs.
++    """
++    grouped = {}
++    for row in rows:
++        uid = row["user_id"]
++        if uid not in grouped:
++            grouped[uid] = {"pos": [], "neg": []}
++        if float(row.get("long_view", 0)) >= 1.0:
++            grouped[uid]["pos"].append(row)
++        else:
++            grouped[uid]["neg"].append(row)
++    
++    pos_rows, neg_rows = [], []
++    for uid, group in grouped.items():
++        if group["pos"] and group["neg"]:
++            for pos in group["pos"]:
++                neg = group["neg"][rng.integers(0, len(group["neg"]))]
++                pos_rows.append(pos)
++                neg_rows.append(neg)
++    return pos_rows, neg_rows
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -128,6 +159,46 @@ class FM:
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
+ 
++    def step_pairwise(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """BPR step: maximize score(positive) > score(negative).
++        
++        Bayesian Personalized Ranking (BPR) objective with pairwise ranking loss.
++        For each pair, loss = -log(sigmoid(score_pos - score_neg)).
++        """
++        bsz = len(X_pos)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        
++        # Margin: positive score - negative score
++        margin = z_pos - z_neg
++        
++        # Gradient: d(-log(sigmoid(margin)))/d(margin) = -sigmoid(-margin)
++        sig_margin = sigmoid(margin)
++        g = (sig_margin - 1.0) / bsz
++        
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        
++        # Gradients for positive and negative samples
++        np.add.at(gW, X_pos, g[:, None])
++        np.add.at(gV, X_pos, g[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gW, X_neg, -g[:, None])
++        np.add.at(gV, X_neg, -g[:, None, None] * (s_neg[:, None, :] - e_neg))
++        
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        self.b -= self.lr * g.sum()
++        
++        return float(-np.mean(np.log(sig_margin + 1e-9)))
++
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+ 
+@@ -173,10 +244,16 @@ def main() -> None:
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        # Sample pairwise data grouped by user
++        pos_rows, neg_rows = _sample_pairwise_data(train_rows, rng)
++        xpos, _ = _encode_rows(pos_rows, vocabs, unk, offsets, edges, fields)
++        xneg, _ = _encode_rows(neg_rows, vocabs, unk, offsets, edges, fields)
++        
++        idx = rng.permutation(len(xpos))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            batch_idx = idx[i : i + batch]
++            losses.append(model.step_pairwise(xpos[batch_idx], xneg[batch_idx]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+ 

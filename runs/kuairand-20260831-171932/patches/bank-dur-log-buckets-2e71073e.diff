@@ -1,0 +1,16 @@
+--- a/template.py
++++ b/template.py
+@@ -49,7 +49,11 @@ def _build_vocabs(
+ 
+ 
+ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+-    return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
++    durations_arr = np.asarray(durations, dtype=np.float64)
++    # Log-scale quantiles for finer resolution at lower durations (< 60s)
++    # where most videos concentrate; long_view is duration-dependent confound (Gao et al. 2022)
++    log_durations = np.log(durations_arr)
++    log_quantiles = np.quantile(log_durations, np.linspace(0, 1, n + 1)[1:-1])
++    return np.exp(log_quantiles)
+ 
+ 
+ def _encode_rows(

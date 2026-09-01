@@ -1,0 +1,130 @@
+Looking at the code, I need to convert the pointwise binary cross-entropy loss to a pairwise BPR (Bayesian Personalized Ranking) loss, grouped by user. The key changes are:
+
+1. Group training data by user
+2. Sample positive (high label) and negative (low label) item pairs per user  
+3. Replace pointwise step() with pairwise BPR ranking loss (log-sigmoid of score difference)
+4. Update gradients for both positive and negative items with opposite signs
+
+```diff
+--- template.py
++++ template.py
+@@ -128,6 +128,37 @@ class FM:
+             z, e, s = self.logits(X)
+             g = ((sigmoid(z) - y) / bsz).astype(np.float32)
+             gV = np.zeros_like(self.V)
+             gW = np.zeros_like(self.W)
+             np.add.at(gW, X, g[:, None])
+             np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
+             gV += self.l2 * self.V
+             gW += self.l2 * self.W
+             self.t += 1
+             b1, b2, eps = 0.9, 0.999, 1e-8
+             for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+                 M *= b1
+                 M += (1 - b1) * G
+                 Vv *= b2
+                 Vv += (1 - b2) * (G * G)
+                 P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+             self.b -= self.lr * g.sum()
+             return float(
+                 -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+             )
+
++    def step_bpr(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """Bayesian Personalized Ranking: rank positive items higher than negative items."""
++        bsz = len(X_pos)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        z_diff = z_pos - z_neg
++        sig_diff = sigmoid(z_diff)
++        loss = -np.mean(np.log(sig_diff + 1e-9))
++        g_pos = ((sig_diff - 1.0) / bsz).astype(np.float32)
++        g_neg = ((1.0 - sig_diff) / bsz).astype(np.float32)
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        np.add.at(gW, X_pos, g_pos[:, None])
++        np.add.at(gV, X_pos, g_pos[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gW, X_neg, g_neg[:, None])
++        np.add.at(gV, X_neg, g_neg[:, None, None] * (s_neg[:, None, :] - e_neg))
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        self.b -= self.lr * g_pos.sum() - self.lr * g_neg.sum()
++        return float(loss)
++
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+
+@@ -136,6 +167,41 @@ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -
+         writer = csv.writer(fh)
+         writer.writerow(["row_id", "user_id", "video_id", "score"])
+         for i, (row, score) in enumerate(zip(rows, scores)):
+             writer.writerow([i, row["user_id"], row["video_id"], f"{float(score):.6g}"])
+ 
+ 
++def _group_by_user(
++    rows: list[dict[str, str]], y: np.ndarray
++) -> dict[str, tuple[list[dict[str, str]], np.ndarray]]:
++    """Group rows and labels by user_id."""
++    groups: dict[str, tuple[list[dict[str, str]], list[float]]] = {}
++    for row, label in zip(rows, y):
++        uid = row["user_id"]
++        if uid not in groups:
++            groups[uid] = ([], [])
++        groups[uid][0].append(row)
++        groups[uid][1].append(label)
++    return {uid: (row_list, np.array(labels, dtype=np.float32)) 
++            for uid, (row_list, labels) in groups.items()}
++
++
++def _prepare_bpr_pairs(
++    rows: list[dict[str, str]],
++    y: np.ndarray,
++    rng: np.random.Generator,
++    threshold: float = 0.5,
++    max_pairs_per_user: int = 10,
++) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
++    """Sample BPR pairs (positive, negative) grouped by user."""
++    pos_rows, neg_rows = [], []
++    user_groups = _group_by_user(rows, y)
++    for uid, (user_rows, user_y) in user_groups.items():
++        pos_idx = np.where(user_y > threshold)[0]
++        neg_idx = np.where(user_y <= threshold)[0]
++        if len(pos_idx) == 0 or len(neg_idx) == 0:
++            continue
++        n_pairs = min(len(pos_idx) * len(neg_idx), max_pairs_per_user)
++        for _ in range(n_pairs):
++            pos_rows.append(user_rows[rng.choice(pos_idx)])
++            neg_rows.append(user_rows[rng.choice(neg_idx)])
++    return pos_rows, neg_rows
++
++
+ def _checkpoint_blob(model: FM) -> bytes:
+     buf = io.BytesIO()
+     np.savez(buf, V=model.V, W=model.W, b=np.asarray(model.b))
+@@ -162,12 +228,13 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        pos_rows, neg_rows = _prepare_bpr_pairs(train_rows, ytr, rng)
++        x_pos, _ = _encode_rows(pos_rows, vocabs, unk, offsets, edges, fields)
++        x_neg, _ = _encode_rows(neg_rows, vocabs, unk, offsets, edges, fields)
++        idx = rng.permutation(len(x_pos))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            losses.append(model.step_bpr(x_pos[idx[i : i + batch]], x_neg[idx[i : i + batch]]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+```

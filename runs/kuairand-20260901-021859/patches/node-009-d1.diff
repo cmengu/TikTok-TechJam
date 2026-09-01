@@ -1,0 +1,164 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..896fd4c 100644
+--- a/template.py
++++ b/template.py
+@@ -6,13 +6,14 @@ import csv
+ import io
+ import os
+ import sys
++from datetime import datetime
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "dow", "days_seen_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -28,11 +29,40 @@ def _active_fields() -> tuple[str, ...]:
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _row_tokens(
++    row: dict[str, str],
++    fields: tuple[str, ...],
++    edges: np.ndarray,
++    user_first_seen: dict[str, str] | None = None,
++    days_seen_edges: np.ndarray | None = None,
++) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name == "dow":
++            # Extract day of week from date column (0=Monday, 6=Sunday)
++            date_str = row.get("date", "2000-01-01")
++            try:
++                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
++                tokens.append(str(date_obj.weekday()))
++            except (ValueError, KeyError):
++                tokens.append("0")
++        elif name == "days_seen_bucket":
++            # Days since user was first seen (computed from training data only)
++            if user_first_seen is None or days_seen_edges is None:
++                tokens.append("0")
++            else:
++                user_id = row["user_id"]
++                first_seen_str = user_first_seen.get(user_id, row.get("date", "2000-01-01"))
++                current_date_str = row.get("date", "2000-01-01")
++                try:
++                    first_date = datetime.strptime(first_seen_str, "%Y-%m-%d")
++                    current_date = datetime.strptime(current_date_str, "%Y-%m-%d")
++                    days_diff = (current_date - first_date).days
++                    tokens.append(str(int(np.searchsorted(days_seen_edges, days_diff))))
++                except (ValueError, KeyError):
++                    tokens.append("0")
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -48,6 +78,24 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _build_vocabs(
++    train_rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    user_first_seen: dict[str, str] | None = None,
++    days_seen_edges: np.ndarray | None = None,
++):
++    vocabs = [dict() for _ in fields]
++    for row in train_rows:
++        for i, v in enumerate(_row_tokens(row, fields, edges, user_first_seen, days_seen_edges)):
++            if v not in vocabs[i]:
++                vocabs[i][v] = len(vocabs[i])
++    unk = [len(v) for v in vocabs]
++    field_dims = [len(v) + 1 for v in vocabs]
++    offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
++    return vocabs, unk, offsets
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -55,33 +103,21 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    user_first_seen: dict[str, str] | None = None,
++    days_seen_edges: np.ndarray | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, user_first_seen, days_seen_edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
+-def _build_vocabs(
+-    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+-):
+-    vocabs = [dict() for _ in fields]
+-    for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
+-            if v not in vocabs[i]:
+-                vocabs[i][v] = len(vocabs[i])
+-    unk = [len(v) for v in vocabs]
+-    field_dims = [len(v) + 1 for v in vocabs]
+-    offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+-    return vocabs, unk, offsets
+-
+-
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -164,11 +200,36 @@ def main() -> None:
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++
++    # Compute user first seen dates from training data only
++    user_first_seen: dict[str, str] = {}
++    for row in train_rows:
++        user_id = row["user_id"]
++        date_str = row.get("date", "2000-01-01")
++        if user_id not in user_first_seen:
++            user_first_seen[user_id] = date_str
++
++    # Compute days since user first seen for bucketing
++    days_diffs: list[float] = []
++    for row in train_rows:
++        user_id = row["user_id"]
++        first_seen_str = user_first_seen.get(user_id, row.get("date", "2000-01-01"))
++        current_date_str = row.get("date", "2000-01-01")
++        try:
++            first_date = datetime.strptime(first_seen_str, "%Y-%m-%d")
++            current_date = datetime.strptime(current_date_str, "%Y-%m-%d")
++            days_diff = (current_date - first_date).days
++            days_diffs.append(float(days_diff))
++        except ValueError:
++            days_diffs.append(0.0)
++
++    days_seen_edges = _bucket_edges(days_diffs) if days_diffs else np.array([])
++
++    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields, user_first_seen, days_seen_edges)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, user_first_seen, days_seen_edges)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, user_first_seen, days_seen_edges)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

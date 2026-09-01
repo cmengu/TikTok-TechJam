@@ -1,0 +1,10 @@
+--- a/template.py
++++ b/template.py
+@@ -46,3 +46,6 @@
+ 
+ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+-    return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
++    durations_arr = np.asarray(durations, dtype=np.float64)
++    # Log-scaled quantile positions for more resolution at lower durations
++    log_quantiles = np.logspace(np.log10(0.01), 0, n + 1)[1:-1]
++    return np.quantile(durations_arr, log_quantiles)

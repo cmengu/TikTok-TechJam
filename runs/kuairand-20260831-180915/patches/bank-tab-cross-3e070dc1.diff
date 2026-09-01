@@ -1,0 +1,40 @@
+--- a/template.py
++++ b/template.py
+@@ -17,7 +17,18 @@ def _env_int(name: str, default: int) -> int:
+ 
+ def _active_fields() -> tuple[str, ...]:
+     raw = os.environ.get("FEATURES", "base")
+     if raw.strip() in ("", "base"):
+         return FIELDS
+-    return tuple(part.strip() for part in raw.split(",") if part.strip())
++    
++    parts = [part.strip() for part in raw.split(",") if part.strip()]
++    
++    # Add explicit cross-product features if tab-cross is specified
++    if "tab-cross" in parts:
++        if "user_id" in parts and "tab" in parts:
++            parts.append("user_id_x_tab")
++        if "tab" in parts and "dur_bucket" in parts:
++            parts.append("tab_x_dur_bucket")
++    
++    return tuple(parts)
+ 
+ 
+ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+@@ -25,11 +36,18 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif "_x_" in name:
++            # Cross-product feature: combine two base features
++            field1, field2 = name.split("_x_", 1)
++            if field2 == "dur_bucket":
++                v1 = row[field1]
++                v2 = str(int(np.searchsorted(edges, float(row["duration_ms"]))))
++            else:
++                v1 = row[field1]
++                v2 = row[field2]
++            tokens.append(f"{v1}_{v2}")
+         else:
+             tokens.append(row[name])
+     return tokens

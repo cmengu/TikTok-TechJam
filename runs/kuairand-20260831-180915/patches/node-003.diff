@@ -1,0 +1,122 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..f21b1f2 100644
+--- a/template.py
++++ b/template.py
+@@ -55,7 +55,7 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
+-) -> tuple[np.ndarray, np.ndarray | None]:
++) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+@@ -65,7 +65,10 @@ def _encode_rows(
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+-    return x, y
++    user_ids = None
++    if rows and "user_id" in rows[0]:
++        user_ids = np.array([row["user_id"] for row in rows], dtype=object)
++    return x, y, user_ids
+ 
+ 
+ def _build_vocabs(
+@@ -105,7 +108,73 @@ class FM:
+         inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+         return self.b + self.W[X].sum(1) + inter, e, s
+ 
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
++    def step(self, X: np.ndarray, y: np.ndarray, user_ids: np.ndarray | None = None) -> float:
++        if user_ids is not None:
++            return self._step_bpr(X, y, user_ids)
++        else:
++            return self._step_pointwise(X, y)
++
++    def _step_bpr(self, X: np.ndarray, y: np.ndarray, user_ids: np.ndarray) -> float:
++        """BPR: in-batch pairwise ranking loss grouped by user."""
++        z, e, s = self.logits(X)
++        
++        # Group indices by user
++        user_groups = {}
++        for idx, uid in enumerate(user_ids):
++            if uid not in user_groups:
++                user_groups[uid] = {'pos': [], 'neg': []}
++            if y[idx] > 0.5:
++                user_groups[uid]['pos'].append(idx)
++            else:
++                user_groups[uid]['neg'].append(idx)
++        
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        total_loss = 0.0
++        pair_count = 0
++        
++        for uid, groups in user_groups.items():
++            for pos_idx in groups['pos']:
++                for neg_idx in groups['neg']:
++                    margin = z[pos_idx] - z[neg_idx]
++                    sig_margin = sigmoid(margin)
++                    
++                    # BPR loss: -log(sigmoid(margin))
++                    loss = -np.log(np.clip(sig_margin, 1e-9, 1.0))
++                    total_loss += loss
++                    pair_count += 1
++                    
++                    # Gradient of -log(sigmoid(margin)) w.r.t. margin
++                    grad_margin = sig_margin - 1.0
++                    
++                    # Accumulate gradients for W
++                    np.add.at(gW, X[pos_idx], grad_margin)
++                    np.add.at(gW, X[neg_idx], -grad_margin)
++                    
++                    # Accumulate gradients for V
++                    np.add.at(gV, X[pos_idx], grad_margin * (s[pos_idx, None] - e[pos_idx]))
++                    np.add.at(gV, X[neg_idx], -grad_margin * (s[neg_idx, None] - e[neg_idx]))
++        
++        if pair_count == 0:
++            return 0.0
++        
++        gV /= pair_count
++        gW /= pair_count
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        
++        return float(total_loss / pair_count)
++
++    def _step_pointwise(self, X: np.ndarray, y: np.ndarray) -> float:
++        """Pointwise log-loss (sigmoid cross-entropy)."""
+         bsz = len(y)
+         z, e, s = self.logits(X)
+         g = ((sigmoid(z) - y) / bsz).astype(np.float32)
+@@ -167,8 +236,8 @@ def main() -> None:
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr, user_ids_tr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
++    xva, _, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+@@ -176,7 +245,9 @@ def main() -> None:
+         idx = rng.permutation(len(ytr))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            batch_indices = idx[i : i + batch]
++            batch_user_ids = user_ids_tr[batch_indices] if user_ids_tr is not None else None
++            losses.append(model.step(xtr[batch_indices], ytr[batch_indices], batch_user_ids))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+ 

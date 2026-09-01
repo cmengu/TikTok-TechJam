@@ -1,0 +1,91 @@
+--- a/template.py
++++ b/template.py
+@@ -113,6 +113,62 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _compute_target_encodings(
++    rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> tuple[dict[str, dict[str, float]], float]:
++    """Compute out-of-fold Micci-Barreca target encodings per field.
++
++    For each unique value of field, computes smoothed mean of long_view
++    excluding rows with that value (out-of-fold).
++
++    Args:
++        rows: Training rows with 'long_view' labels
++        fields: Field names to encode
++        smoothing: Regularization parameter lambda
++
++    Returns:
++        ({field: {value: encoding}}, global_mean)
++    """
++    if not rows or "long_view" not in rows[0]:
++        return {f: {} for f in fields}, 0.0
++
++    targets = np.array([float(row["long_view"]) for row in rows])
++    global_mean = float(np.mean(targets))
++
++    encodings = {}
++    for field in fields:
++        field_enc = {}
++        groups = {}
++        for i, row in enumerate(rows):
++            val = row[field]
++            if val not in groups:
++                groups[val] = []
++            groups[val].append(i)
++
++        for val, indices in groups.items():
++            count = len(indices)
++            total = float(np.sum(targets[indices]))
++
++            for row_idx in indices:
++                oof_sum = total - targets[row_idx]
++                oof_count = count - 1
++
++                if oof_count > 0:
++                    oof_mean = oof_sum / oof_count
++                else:
++                    oof_mean = global_mean
++
++                smoothed = (oof_count * oof_mean + smoothing * global_mean) / (oof_count + smoothing)
++                if val not in field_enc:
++                    field_enc[val] = smoothed
++
++        encodings[field] = field_enc
++
++    return encodings, global_mean
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -213,6 +269,26 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
++    te_fields = ("user_id", "video_id", "author_id")
++    te_encodings, te_global_mean = _compute_target_encodings(train_rows, te_fields, smoothing=1.0)
++
++    for row in train_rows:
++        for field in te_fields:
++            val = row[field]
++            enc_val = te_encodings[field].get(val, te_global_mean)
++            row[f"{field}_te"] = f"{enc_val:.6g}"
++
++    for row in valid_rows:
++        for field in te_fields:
++            val = row[field]
++            enc_val = te_encodings[field].get(val, te_global_mean)
++            row[f"{field}_te"] = f"{enc_val:.6g}"
++
++    te_vocabs, te_unk, te_offsets = _build_vocabs(train_rows, edges, te_fields + tuple(f"{f}_te" for f in te_fields))
++    xtr_te, _ = _encode_rows(train_rows, te_vocabs, te_unk, te_offsets, edges, te_fields + tuple(f"{f}_te" for f in te_fields))
++    xva_te, _ = _encode_rows(valid_rows, te_vocabs, te_unk, te_offsets, edges, te_fields + tuple(f"{f}_te" for f in te_fields))
++    xtr, xva = xtr_te, xva_te
++
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

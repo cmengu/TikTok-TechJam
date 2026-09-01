@@ -1,0 +1,117 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..5194778 100644
+--- a/template.py
++++ b/template.py
+@@ -12,7 +12,7 @@ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_id_te", "video_id_te", "author_id_te")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -25,6 +25,10 @@ def _active_fields() -> tuple[str, ...]:
+     raw = os.environ.get("FEATURES", "base")
+     if raw.strip() in ("", "base"):
+         return FIELDS
++    if raw.strip() == "base+te":
++        return FIELDS
++    if raw.strip() == "base-te":
++        return tuple(f for f in FIELDS if not f.endswith("_te"))
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+@@ -82,6 +86,83 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _compute_target_encoding_stats(
++    rows: list[dict[str, str]],
++    encode_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++) -> tuple[dict[str, dict[str, tuple[float, int]]], float]:
++    """Compute target encoding statistics for categorical features.
++    
++    For each (field, category) pair, computes the sum and count of labels.
++    Used for Micci-Barreca (2001) out-of-fold target encoding.
++    
++    Returns:
++        - stats: dict[field][category] = (sum, count)
++        - global_mean: mean of all labels
++    """
++    if not rows or "long_view" not in rows[0]:
++        return {}, 0.0
++    
++    global_mean = float(np.mean([float(r["long_view"]) for r in rows]))
++    
++    stats = {}
++    for field in encode_fields:
++        stats[field] = {}
++        for row in rows:
++            cat = row.get(field)
++            if cat is None:
++                continue
++            label = float(row["long_view"])
++            if cat not in stats[field]:
++                stats[field][cat] = [0.0, 0]
++            stats[field][cat][0] += label
++            stats[field][cat][1] += 1
++    
++    return stats, global_mean
++
++
++def _add_target_encoded_features(
++    rows: list[dict[str, str]],
++    encode_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++    smoothing: float = 1.0,
++) -> None:
++    """Add out-of-fold target-encoded features to rows (modifies in place).
++    
++    For each field in encode_fields, adds a new field "{field}_te" containing
++    the smoothed out-of-fold mean of long_view for that category value.
++    
++    The row's own label never contributes to its encoding (out-of-fold principle).
++    Encodings are smoothed toward the global rate using the Micci-Barreca formula:
++        encoded = (count * oofold_mean + alpha * global_mean) / (count + alpha)
++    
++    Citation: Micci-Barreca (2001), "A Preprocessing Scheme for High-Cardinality
++    Categorical Attributes in Classification and Prediction Problems"
++    """
++    
++    if not rows or "long_view" not in rows[0]:
++        return
++    
++    stats, global_mean = _compute_target_encoding_stats(rows, encode_fields)
++    
++    for row in rows:
++        for field in encode_fields:
++            cat = row.get(field)
++            label = float(row.get("long_view", 0.0))
++            
++            if field not in stats or cat not in stats[field]:
++                row[f"{field}_te"] = str(global_mean)
++                continue
++            
++            sum_val, count = stats[field][cat]
++            oofold_sum, oofold_count = sum_val - label, count - 1
++            
++            if oofold_count > 0:
++                oofold_mean = oofold_sum / oofold_count
++                encoded = (count * oofold_mean + smoothing * global_mean) / (count + smoothing)
++            else:
++                encoded = global_mean
++            row[f"{field}_te"] = str(float(encoded))
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -161,6 +242,8 @@ def main() -> None:
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
++    _add_target_encoded_features(train_rows)
++    _add_target_encoded_features(valid_rows)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])

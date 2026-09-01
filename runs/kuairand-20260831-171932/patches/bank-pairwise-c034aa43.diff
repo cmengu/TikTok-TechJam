@@ -1,0 +1,90 @@
+--- a/template.py
++++ b/template.py
+@@ -66,19 +66,45 @@ class FM:
+             (e**2).sum((1, 2)))
+         return self.b + self.W[X].sum(1) + inter, e, s
+ 
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
++    def step(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """BPR: in-batch pairwise ranking loss grouped by user."""
+         bsz = len(y)
+-        z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        
++        # Margin: positive should rank higher than negative
++        margin = z_pos - z_neg
++        sig_margin = sigmoid(margin)
++        
++        # BPR loss: -log(sigmoid(margin))
++        loss = -np.mean(np.log(sig_margin + 1e-9))
++        
++        # Gradient of loss w.r.t. margin
++        g_margin = (sig_margin - 1.0) / bsz
++        
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
+-        np.add.at(gW, X, g[:, None])
+-        np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
++        
++        # Positive items: gradient flows forward
++        np.add.at(gW, X_pos, g_margin[:, None])
++        np.add.at(gV, X_pos, g_margin[:, None, None] * (s_pos[:, None, :] - e_pos))
++        
++        # Negative items: gradient flows backward
++        np.add.at(gW, X_neg, -g_margin[:, None])
++        np.add.at(gV, X_neg, -g_margin[:, None, None] * (s_neg[:, None, :] - e_neg))
++        
+         gV += self.l2 * self.V
+         gW += self.l2 * self.W
++        
+         self.t += 1
+         b1, b2, eps = 0.9, 0.999, 1e-8
+         for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+             M *= b1
+             M += (1 - b1) * G
+             Vv *= b2
+             Vv += (1 - b2) * (G * G)
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+-        self.b -= self.lr * g.sum()
+-        return float(
+-            -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+-        )
++        self.b -= self.lr * g_margin.sum()
++        return float(loss)
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+@@ -122,13 +148,32 @@ def main() -> None:
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
++    
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
+         losses = []
+-        for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++        
++        # Group by user for pairwise ranking
++        user_idx = {}
++        for row_i, row in enumerate(train_rows):
++            uid = row["user_id"]
++            if uid not in user_idx:
++                user_idx[uid] = ([], [])
++            if ytr[row_i] > 0.5:
++                user_idx[uid][0].append(row_i)
++            else:
++                user_idx[uid][1].append(row_i)
++        
++        # Create pairwise batches per user
++        for uid, (pos_idx, neg_idx) in user_idx.items():
++            if not pos_idx or not neg_idx:
++                continue
++            for j in range(0, min(len(pos_idx), len(neg_idx)), batch):
++                batch_pos = pos_idx[j : j + batch]
++                batch_neg = neg_idx[j : j + batch]
++                losses.append(model.step(xtr[batch_pos], xtr[batch_neg]))
++        
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

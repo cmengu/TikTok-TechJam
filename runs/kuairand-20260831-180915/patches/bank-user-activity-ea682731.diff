@@ -1,0 +1,99 @@
+--- template.py
++++ template.py
+@@ -12,7 +12,7 @@ import sys
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_activity_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -28,13 +28,32 @@ def _active_fields() -> tuple[str, ...]:
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _user_activity_buckets(
++    rows: list[dict[str, str]], n: int = 8
++) -> tuple[dict[str, str], np.ndarray]:
++    """Count impressions per user and bucket into quantiles."""
++    user_counts: dict[str, int] = {}
++    for row in rows:
++        uid = row["user_id"]
++        user_counts[uid] = user_counts.get(uid, 0) + 1
++    
++    counts = np.array(list(user_counts.values()), dtype=np.float64)
++    edges = np.quantile(counts, np.linspace(0, 1, n + 1)[1:-1])
++    
++    user_buckets = {uid: str(int(np.searchsorted(edges, float(count)))) 
++                    for uid, count in user_counts.items()}
++    return user_buckets, edges
++
++
++def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray, user_activity_buckets: dict[str, str] | None = None) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name == "user_activity_bucket":
++            tokens.append(user_activity_buckets.get(row["user_id"], "0") if user_activity_buckets else "0")
+         else:
+             tokens.append(row[name])
+     return tokens
+ 
+ 
+ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+@@ -48,9 +67,10 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+ 
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    user_activity_buckets: dict[str, str] | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -58,7 +78,7 @@ def _encode_rows(
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, user_activity_buckets)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+@@ -66,11 +86,12 @@ def _encode_rows(
+ 
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    user_activity_buckets: dict[str, str] | None = None,
+ ):
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, user_activity_buckets)):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+     field_dims = [len(v) + 1 for v in vocabs]
+     offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+@@ -137,10 +158,11 @@ def main() -> None:
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    user_activity_buckets, _ = _user_activity_buckets(train_rows)
++    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields, user_activity_buckets)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, user_activity_buckets)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, user_activity_buckets)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
