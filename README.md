@@ -192,73 +192,106 @@ Solo project — all components by the repo owner, with LLM coding assistance.
 
 ## What we took from the literature — eight capabilities
 
-Every mechanism below is implemented and visible in the run logs; each line
-names the paper it came from and the file it lives in.
+Every mechanism below is implemented, and the screenshot beside it is that
+mechanism working in a real run — not a mockup.
 
-**NOVA** (Tencent) — *the architecture gradient*
+### NOVA (Tencent) — the architecture gradient
 
-- **Weak-component feedback.** Each round scores hypothesis families by their
-  measured history, so the proposer is told which part of the pipeline is
-  underperforming rather than guessing. `harness/tree.py` (`family_stats`,
-  `Queue.score_hyp`), surfaced on the **What it learned** page.
-- **Forbidden directions.** Patterns the log has already recorded as failures
-  are refused at proposal time — the agent cannot re-run a known dead end.
-  `harness/agents/researcher.py` (`_refuse_forbidden`, `forbidden(lessons)`).
+**1 · Weak-component feedback.** Families are scored by measured history, so
+the proposer is *told* which part of the pipeline is underperforming instead of
+guessing. **2 · Forbidden directions.** Patterns the log already recorded as
+failures are refused at proposal time — the agent cannot re-run a known dead
+end. The page below writes itself from the run's own lessons, and the code
+block at the bottom is the exact text the proposing model reads next round.
+`harness/tree.py` (`family_stats`, `Queue.score_hyp`),
+`harness/agents/researcher.py` (`_refuse_forbidden`).
 
-**AgentX** (Kuaishou) — *don't trust an unexplained win*
+![What it learned — weak spots, promising directions, banned patterns](docs/images/what-it-learned.png)
 
-- **The attribution brake.** Every hypothesis declares observables and a
-  direction; a candidate that improves the score without moving its own
-  declared observables is refused promotion as `unclear`.
-  `harness/attribute.py`, gated in `harness/measure.py`.
-- **Infrastructure-failure recovery as a first-class path.** A failed patch is
-  retried with the exact git error in hand, then rewritten whole-file, and
-  every step is logged as a `recovery` event rather than a silent death.
-  `harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file
-  fallback), counted on the **Health** page.
+### AgentX (Kuaishou) — don't trust an unexplained win
 
-**AIDE** (Weco) — *the search itself*
+**3 · The attribution brake.** Every hypothesis declares observables and a
+direction. Below is the brake firing on a real attempt: `deep-cross` moved the
+score, but `gauc` and `ndcg_at_5` — the observables its own hypothesis named —
+did not move, so **credit was refused and the gain was never written into
+memory**. `harness/attribute.py`, gated in `harness/measure.py`.
 
-- **Draft / debug / improve tree.** Nodes are drafted from the queue, repaired
-  when they crash, and extended when they win, with greedy keep-or-revert and
-  a fork when the branch stalls. `harness/tree.py`.
+![Attempts — why we believe it, credit refused](docs/images/attribution-refused.png)
 
-**AIRA-dojo** (Meta) — *measure before you believe*
+**4 · Infrastructure failure as a first-class path.** A failed patch is retried
+with the exact git error in hand, then rewritten whole-file, and every step is
+logged rather than dying silently. This run crashed once and **rescued six**
+attempts that would previously have been lost.
+`harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file fallback).
 
-- **Hidden consistent evaluation.** One fixed split, labels physically absent
-  from the candidate's environment, scoring done outside the candidate by the
-  organisers' own `evaluate.py` — pinned by SHA-256 so a changed scorer stops
-  the run instead of quietly changing the numbers. `harness/runner.py`
-  (`_build_env` whitelist), `harness/tasks/kuairand.py`.
-- **Noise-calibrated acceptance.** The bar is derived from the task's own
-  seed-to-seed variance, and a win must hold on every paired seed — their
-  result that "agents overfit validation" was largely evaluation noise, so the
-  ladder refuses to be impressed by one seed. `harness/measure.py`,
-  `harness/overfit.py`.
+![Stability — crashes, rescued 6, rulebook trips 0](docs/images/stability-recoveries.png)
 
-**MLE-STAR** (Google) — *attack the right component*
+### AIRA-dojo (Meta) — measure before you believe
 
-- **Ablation-targeted refinement.** Candidate code blocks are compared so the
-  next change targets the component the measurements blame, instead of
-  rewriting the model wholesale. Feeds the same weak-component signal NOVA's
-  gradient asks for.
+**5 · Hidden consistent evaluation.** One fixed split, labels physically absent
+from the candidate's environment, scoring done outside the candidate — and
+every look at the hidden check counted against a budget. `harness/runner.py`
+(`_build_env` whitelist), `harness/tasks/kuairand.py`.
 
-**MLE-bench** (OpenAI) — *never end with nothing*
+![Health — hidden check visited 0 of 12](docs/images/hidden-check.png)
 
-- **Always-valid submission + runtime watchdog.** Every accepted candidate is
-  immediately re-run on the submission features and written in the kit's
-  schema, with wall-clock limits and stall detection on every attempt;
-  `scripts/rescue_submission.py` covers the case where a run converges without
-  accepting anything. `harness/outputs.py`, `harness/runner.py`.
+**6 · A frozen, hashed protocol.** The data, the splits and the scorer are
+pinned by SHA-256; changing any of them means results are no longer comparable,
+and a changed `evaluate.py` stops the run rather than quietly changing the
+numbers. `harness/protocol.py`, `protocols/kuairand.yaml`.
 
-### Seeing them in the dashboard
+![Rules — hashed, defines comparability](docs/images/frozen-protocol.png)
 
-- **Dashboard** — the funnel (`papers → ideas → attempts → accepted`), the
-  verification stage (**L4-v**: closed loop gated by an external oracle the
-  search cannot game), the intervention counter, and *Score vs current best*
-  showing the accepted delta against the bar it had to clear.
-- **Library** — the paper corpus with page-one covers, each card marked with
-  whether this particular run consulted it.
-- **What it learned** — the lessons the proposer reads next round.
-- **Health / Double-checks / Spend / Stability** — the recovery ledger, the
-  verification cascade, token and compute spend by stage, and seed stability.
+### AIDE (Weco) — the search itself
+
+**7 · Draft / debug / improve tree.** Nodes are drafted from the queue,
+repaired when they crash, and extended when they win, with greedy
+keep-or-revert and a fork when a branch stalls — visible as the move trail
+("new idea — breadth floor", "fix a crash — repair before extend") in the
+Attempts screenshot above. `harness/tree.py`.
+
+### MLE-bench (OpenAI) + MLE-STAR (Google) — never end with nothing, and attack the right component
+
+**8 · Always-valid submission, watchdogs, and honest forecasts.** Every
+accepted candidate is immediately re-run on the submission features and written
+in the kit's schema; wall-clock limits and stall detection cover every attempt;
+`scripts/rescue_submission.py` covers a run that converges without accepting
+anything. MLE-STAR's ablation idea shows up as the forecast-vs-measured
+discipline: each idea carries an *expected* gain, and the page shows what it
+actually delivered beside it — `expected 0.003 (forecast) · actual +0.0000
+(measured)`. `harness/outputs.py`, `harness/runner.py`.
+
+![Ideas — expected forecast vs actual measured](docs/images/ideas-forecast-vs-actual.png)
+
+---
+
+## The dashboard
+
+Every number below is a fold over the append-only event log — the UI computes
+nothing of its own.
+
+**Dashboard** — the funnel (`papers → ideas → attempts → accepted`), the
+verification stage (**L4-v**: a closed loop gated by an external oracle the
+search cannot game), the intervention counter, and *Score vs current best*
+showing the accepted delta against the bar it had to clear.
+
+![Dashboard](docs/images/dashboard.png)
+
+**Library** — the paper corpus with page-one covers, each card marked with
+whether this particular run consulted it.
+
+![Library](docs/images/library.png)
+
+**The rules** — the 18-rule contract the candidate reads and the free checks
+enforce; same document, both sides.
+
+![The rules](docs/images/the-rules.png)
+
+**Game plan** — what the run is trying to do, in plain language.
+
+![Game plan](docs/images/game-plan.png)
+
+**Spend** — tokens by stage, with the compute time called out separately;
+stages that spend nothing say so rather than showing a misleading zero.
+
+![Spend](docs/images/spend.png)
