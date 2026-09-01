@@ -1,0 +1,94 @@
+Looking at this hypothesis, I need to replace the pointwise log-loss objective with pairwise ranking loss (BPR - Bayesian Personalized Ranking), grouping samples by user.
+
+Key changes:
+1. Create helper to group samples by user and form positive/negative pairs
+2. Add `step_pairwise` method to FM that computes BPR loss: `-log(sigmoid(z_pos - z_neg))`
+3. Modify training loop to create pairs and call pairwise step
+
+--- template.py
++++ template.py
+@@ -93,6 +93,35 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _create_bpr_pairs(
++    train_rows: list[dict[str, str]],
++    xtr: np.ndarray,
++    ytr: np.ndarray,
++    rng: np.random.Generator,
++) -> tuple[np.ndarray, np.ndarray]:
++    """Create positive/negative pairs for pairwise ranking objective grouped by user."""
++    user_groups = {}
++    for i, (row, y_val) in enumerate(zip(train_rows, ytr)):
++        user_id = row["user_id"]
++        if user_id not in user_groups:
++            user_groups[user_id] = {"pos": [], "neg": []}
++        if y_val > 0:
++            user_groups[user_id]["pos"].append(i)
++        else:
++            user_groups[user_id]["neg"].append(i)
++    pos_indices, neg_indices = [], []
++    for groups in user_groups.values():
++        for pos_idx in groups["pos"]:
++            if not groups["neg"]:
++                continue
++            neg_idx = rng.choice(groups["neg"])
++            pos_indices.append(pos_idx)
++            neg_indices.append(neg_idx)
++    return xtr[np.array(pos_indices, dtype=np.int32)], xtr[np.array(neg_indices, dtype=np.int32)]
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -118,6 +147,33 @@ class FM:
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
+ 
++    def step_pairwise(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """Pairwise ranking step for Bayesian Personalized Ranking (BPR)."""
++        bsz = len(X_pos)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        diff = z_pos - z_neg
++        sig_diff = sigmoid(diff)
++        loss = float(-np.mean(np.log(sig_diff + 1e-9)))
++        g = (sig_diff - 1.0) / bsz
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        np.add.at(gW, X_pos, g[:, None])
++        np.add.at(gV, X_pos, g[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gW, X_neg, -g[:, None])
++        np.add.at(gV, X_neg, -g[:, None, None] * (s_neg[:, None, :] - e_neg))
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        self.b -= self.lr * g.sum()
++        return loss
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -151,13 +197,13 @@ def main() -> None:
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        X_pos, X_neg = _create_bpr_pairs(train_rows, xtr, ytr, rng)
++        pair_idx = rng.permutation(len(X_pos))
++        X_pos_batch = X_pos[pair_idx]
++        X_neg_batch = X_neg[pair_idx]
+         losses = []
+-        for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++        for i in range(0, len(X_pos_batch), batch):
++            losses.append(model.step_pairwise(X_pos_batch[i : i + batch], X_neg_batch[i : i + batch]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

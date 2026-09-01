@@ -1,0 +1,13 @@
+I need more context to implement this hypothesis correctly. The hypothesis description "weighted category history sequence features" suggests adding user interaction history as features, but I need clarification on:
+
+1. **Which field represents the category?** (author_id, tab, or another field?)
+2. **How should weighting work?** (recency-based, frequency-based, position-based decay?)
+3. **How should history be aggregated?** (all interactions, last N, windowed?)
+4. **Should this be a new virtual field** or modify existing fields?
+
+Could you provide:
+- An example of what the weighted history feature should look like for a sample user trajectory
+- Whether this should integrate as a new FIELDS entry or as computed tokens within existing fields
+- The decay/weighting function to apply (e.g., exponential: 0.9^distance)
+
+Without this specification, any diff would be speculative.

@@ -1,0 +1,16 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..656bb1a 100644
+--- a/template.py
++++ b/template.py
+@@ -45,7 +45,10 @@ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+ 
+ 
+ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+-    return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
++    dur_array = np.asarray(durations, dtype=np.float64)
++    log_durations = np.log(dur_array + 1)
++    log_edges = np.quantile(log_durations, np.linspace(0, 1, n + 1)[1:-1])
++    return np.exp(log_edges) - 1
+ 
+ 
+ def _encode_rows(

@@ -1,0 +1,134 @@
+--- template.py
++++ template.py
+@@ -10,6 +10,7 @@ import os
+ import sys
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+ import report
+@@ -17,6 +18,7 @@ import report
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
+ DEFAULT_EPOCHS = 11
++TARGET_ENCODING_FIELDS = ("user_id", "video_id", "author_id")
++TARGET_ENCODING_SMOOTHING = 1.0
+ 
+ 
+ def _env_int(name: str, default: int) -> int:
+@@ -58,6 +60,69 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_encoding_stats(
++    rows: list[dict[str, str]],
++    groupby_fields: tuple[str, ...],
++) -> tuple[float, dict[str, dict[str, tuple[float, int]]]]:
++    """Compute target encoding statistics: global mean and per-group (sum, count).
++    
++    Reference: Micci-Barreca 2001, A preprocessing scheme for high-cardinality categorical attributes.
++    """
++    global_sum = 0.0
++    global_count = 0
++    stats = {field: {} for field in groupby_fields}
++
++    for row in rows:
++        if "long_view" not in row:
++            continue
++        label = float(row["long_view"])
++        global_sum += label
++        global_count += 1
++
++        for field in groupby_fields:
++            value = row[field]
++            if value not in stats[field]:
++                stats[field][value] = [0.0, 0]
++            stats[field][value][0] += label
++            stats[field][value][1] += 1
++
++    global_mean = global_sum / global_count if global_count > 0 else 0.5
++
++    # Convert to tuples
++    for field in groupby_fields:
++        for value in stats[field]:
++            stats[field][value] = tuple(stats[field][value])
++
++    return global_mean, stats
++
++
++def _encode_target_encoding(
++    value: str,
++    field: str,
++    stats: dict[str, dict[str, tuple[float, int]]],
++    global_mean: float,
++    smoothing: float = TARGET_ENCODING_SMOOTHING,
++    label: float | None = None,
++) -> float:
++    """Apply target encoding with out-of-fold adjustment.
++    
++    The row's own label never contributes (out-of-fold principle).
++    Smoothed toward global rate using Micci-Barreca formula.
++    """
++    if field not in stats or value not in stats[field]:
++        return global_mean
++
++    total_sum, count = stats[field][value]
++
++    # Out-of-fold: exclude this row's contribution to avoid label leakage
++    if label is not None and count > 0:
++        adjusted_sum = total_sum - label
++        adjusted_count = count - 1
++    else:
++        adjusted_sum = total_sum
++        adjusted_count = count
++
++    # Micci-Barreca smoothing: interpolate toward global mean
++    if adjusted_count > 0:
++        group_mean = adjusted_sum / adjusted_count
++        encoded = (adjusted_count * group_mean + smoothing * global_mean) / (adjusted_count + smoothing)
++    else:
++        encoded = global_mean
++
++    return encoded
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -65,6 +130,8 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    target_stats: dict[str, dict[str, tuple[float, int]]] | None = None,
++    global_mean: float | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -75,6 +142,13 @@ def _encode_rows(
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
++
++    # Optionally add target-encoded features to input rows for downstream use
++    if target_stats is not None and global_mean is not None:
++        for row in rows:
++            for field in TARGET_ENCODING_FIELDS:
++                te_key = f"_target_encoding_{field}"
++                row[te_key] = str(_encode_target_encoding(
++                    row[field], field, target_stats, global_mean,
++                    label=float(row.get("long_view", "nan")) if row.get("long_view") else None
++                ))
++
+     return x, y
+@@ -220,6 +294,9 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
++    target_stats = None
++    if any(f in fields for f in TARGET_ENCODING_FIELDS):
++        global_mean, target_stats = _compute_target_encoding_stats(train_rows, TARGET_ENCODING_FIELDS)
++        _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, target_stats, global_mean)
++        _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, target_stats, global_mean)
++
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

@@ -1,33 +1,17 @@
-# Seeded hypothesis bank — KuaiRand-Pure edition (reseeded 31 Aug 2026).
+# Seeded hypothesis bank — KuaiRand-Pure edition (reseeded 1 Sep 2026).
+# 1 Sep reseed: dropped features/target-encoding (rejected, delta -0.092) and
+# features/user-activity-bucket (rejected, delta -0.008) per lessons; added
+# model-class ideas (LightGBM trees, DCNv2-style deep-cross, user-grouped BPR)
+# — the previous bank was 10 knob tweaks on the same FM and its best measured
+# gain (+0.0025) evaporated. lightgbm 4.7.0 and torch 2.13 are verified
+# importable in .venv (the interpreter the chained runs and their candidate
+# subprocesses use).
 # The candidate sees ONLY train.csv columns: row_id, date, user_id, video_id,
 # author_id, tab, duration_ms, long_view — every idea below lives inside those
 # plus train-derived aggregates. The previous bank named Ali-CCP columns
 # (shop, brand, item-category) that do not exist here; those entries are gone.
 # Patches are produced by LLMCoder at run time — entries here are proposals only.
 # Every entry declares observables; at least one is harness-side (task.score).
-
-- id: bank-target-encoding
-  stage: features
-  mechanism: target-encoding
-  pattern: target-encoding
-  description: out-of-fold mean long_view per user_id, video_id and author_id, smoothed toward the global rate; the row's own label never contributes
-  citation: Micci-Barreca 2001, A preprocessing scheme for high-cardinality categorical attributes
-  expected_gain: 0.004
-  expected_gpu_h: 0.15
-  observables:
-    - {name: gauc, direction: positive, source: harness}
-    - {name: ndcg_at_5, direction: positive, source: harness}
-
-- id: bank-user-activity
-  stage: features
-  mechanism: user-activity-bucket
-  pattern: user-activity-bucket
-  description: per-user impression count from train bucketed into ~8 quantile bins as an extra token; separates heavy from light users
-  citation: Covington et al. 2016, Deep Neural Networks for YouTube Recommendations (example-age/activity signals)
-  expected_gain: 0.003
-  expected_gpu_h: 0.1
-  observables:
-    - {name: gauc, direction: positive, source: harness}
 
 - id: bank-video-popularity
   stage: features
@@ -86,14 +70,14 @@
   observables:
     - {name: gauc, direction: positive, source: harness}
 
-- id: bank-pairwise
+- id: bank-pairwise-grouped
   stage: objective
-  mechanism: pairwise
-  pattern: pairwise
-  description: swap pointwise log-loss for an in-batch pairwise ranking objective grouped by user; the metric is a ranking metric
-  citation: BPR, Rendle et al. 2009
-  expected_gain: 0.004
-  expected_gpu_h: 0.2
+  mechanism: pairwise-grouped
+  pattern: pairwise-grouped
+  description: user-grouped in-batch BPR ranking loss; keep FM.logits and the Adam update in FM.step unchanged, but compute the gradient signal from (positive, negative) pairs drawn within the same user_id inside the current batch — group the batch rows by column 0 of X (the user_id token), pair each long_view=1 row with one sampled long_view=0 row of the same user, use sigmoid(z_pos - z_neg) as the pair loss, and keep the existing pointwise log-loss for rows with no in-batch partner so every row still trains; only FM.step changes, the epoch loop and encode path stay as they are
+  citation: BPR, Rendle et al. 2009 (UAI)
+  expected_gain: 0.006
+  expected_gpu_h: 0.25
   observables:
     - {name: gauc, direction: positive, source: harness}
     - {name: ndcg_at_5, direction: positive, source: harness}
@@ -119,3 +103,27 @@
   expected_gpu_h: 0.1
   observables:
     - {name: gauc, direction: positive, source: harness}
+
+- id: bank-lgbm-trees
+  stage: architecture
+  mechanism: lgbm-trees
+  pattern: lgbm-trees
+  description: replace the FM training loop in main() with LightGBM gradient-boosted trees on the already-encoded features; import lightgbm, build lgb.Dataset from the integer token matrix that _encode_rows returns (declare every column categorical via categorical_feature=list(range(x.shape[1]))) plus one numeric duration_ms column, train with objective=binary, num_leaves=63, learning_rate=0.05, n rounds tied to the EPOCHS env knob (about 30 rounds per epoch), seed from SEED; score valid with model.predict and keep _write_preds, report.progress once per epoch-equivalent and report.result exactly as now (lightgbm 4.7.0 is installed in the run venv)
+  citation: LightGBM, Ke et al. 2017 (NeurIPS)
+  expected_gain: 0.01
+  expected_gpu_h: 0.3
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}
+
+- id: bank-deep-cross
+  stage: architecture
+  mechanism: deep-cross
+  pattern: deep-cross
+  description: swap the numpy FM for a small torch DCNv2-style model over the same token ids from _encode_rows; one nn.Embedding table sized by the existing offsets/dim with embedding dim 16, flatten the per-field embeddings into x0, apply two cross layers (x_{l+1} = x0 * (W_l x_l + b_l) + x_l) in parallel with a 2-layer MLP (hidden 64, ReLU), concatenate and project to one logit, BCEWithLogitsLoss, Adam with lr from the LR env knob, epochs and batch from EPOCHS/BATCH, torch.manual_seed(SEED); keep the epoch report.progress calls, checkpointing can save the state_dict bytes, and _write_preds/report.result stay unchanged (torch 2.13 is installed in the run venv)
+  citation: DCN V2, Wang et al. 2021 (WWW)
+  expected_gain: 0.008
+  expected_gpu_h: 0.5
+  observables:
+    - {name: gauc, direction: positive, source: harness}
+    - {name: ndcg_at_5, direction: positive, source: harness}

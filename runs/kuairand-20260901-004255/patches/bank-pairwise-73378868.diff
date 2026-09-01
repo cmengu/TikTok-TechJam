@@ -1,0 +1,89 @@
+--- a/template.py
++++ b/template.py
+@@ -62,6 +62,28 @@ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+ 
++def _prepare_pairwise_data(
++    x: np.ndarray, y: np.ndarray, rng: np.random.Generator
++) -> tuple[np.ndarray, np.ndarray]:
++    """Prepare pairwise training data (BPR): positive items ranked above negative items."""
++    pos_mask = y > 0.5
++    pos_indices = np.where(pos_mask)[0]
++    neg_indices = np.where(~pos_mask)[0]
++
++    if len(pos_indices) == 0 or len(neg_indices) == 0:
++        return np.empty((0, x.shape[1]), dtype=x.dtype), np.empty((0, x.shape[1]), dtype=x.dtype)
++
++    pairs = []
++    for pos_idx in pos_indices:
++        neg_idx = rng.choice(neg_indices)
++        pairs.append((x[pos_idx], x[neg_idx]))
++
++    pos_x = np.array([p[0] for p in pairs], dtype=x.dtype)
++    neg_x = np.array([p[1] for p in pairs], dtype=x.dtype)
++    return pos_x, neg_x
++
++
+ class FM:
+     def __init__(self, dim: int, k: int = 16, lr: float = 0.001, l2: float = 1e-6, seed: int = 0):
+         rng = np.random.default_rng(seed)
+@@ -82,21 +104,28 @@ class FM:
+         inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+         return self.b + self.W[X].sum(1) + inter, e, s
+ 
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
+-        bsz = len(y)
+-        z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++    def step(self, pos_X: np.ndarray, neg_X: np.ndarray) -> float:
++        """BPR step: maximize ranking of positive items over negative items."""
++        bsz = len(pos_X)
++        if bsz == 0:
++            return 0.0
++
++        z_pos, e_pos, s_pos = self.logits(pos_X)
++        z_neg, e_neg, s_neg = self.logits(neg_X)
++
++        # BPR loss: log(sigmoid(z_pos - z_neg))
++        z_diff = z_pos - z_neg
++        sigma = sigmoid(z_diff)
++        g = ((1 - sigma) / bsz).astype(np.float32)
++
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
+-        np.add.at(gW, X, g[:, None])
+-        np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
++        np.add.at(gW, pos_X, g[:, None])
++        np.add.at(gV, pos_X, g[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gW, neg_X, -g[:, None])
++        np.add.at(gV, neg_X, -g[:, None, None] * (s_neg[:, None, :] - e_neg))
++
+         gV += self.l2 * self.V
+         gW += self.l2 * self.W
+         self.t += 1
+         b1, b2, eps = 0.9, 0.999, 1e-8
+         for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+@@ -106,7 +135,7 @@ class FM:
+             Vv += (1 - b2) * (G * G)
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+         self.b -= self.lr * g.sum()
+-        return float(-np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9)))
++        return float(-np.mean(np.log(sigma + 1e-9)))
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -157,9 +186,11 @@ def main() -> None:
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        pos_xtr, neg_xtr = _prepare_pairwise_data(xtr, ytr, rng)
++        idx = rng.permutation(len(pos_xtr))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            batch_idx = idx[i : i + batch]
++            losses.append(model.step(pos_xtr[batch_idx], neg_xtr[batch_idx]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

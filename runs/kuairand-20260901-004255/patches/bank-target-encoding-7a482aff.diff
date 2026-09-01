@@ -1,0 +1,107 @@
+--- a/template.py
++++ b/template.py
+@@ -42,6 +42,38 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _target_encode_fields() -> tuple[str, ...]:
++    """Parse ENCODE environment variable for target-encoding fields."""
++    raw = os.environ.get("ENCODE", "")
++    if not raw.strip():
++        return ()
++    return tuple(part.strip() for part in raw.split(",") if part.strip())
++
++
++def _compute_target_encodings(
++    rows: list[dict[str, str]],
++    y: np.ndarray,
++    fields_to_encode: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> tuple[dict[str, dict[str, float]], float]:
++    """
++    Compute out-of-fold target encodings with smoothing toward global rate.
++    Citation: Micci-Barreca 2001, A preprocessing scheme for high-cardinality categorical attributes.
++    
++    For each unique value of each field:
++    smoothed_mean = (count * category_mean + smoothing * global_mean) / (count + smoothing)
++    """
++    global_mean = float(y.mean())
++    encodings = {}
++    for field in fields_to_encode:
++        field_encodings = {}
++        groups = {}
++        for i, row in enumerate(rows):
++            val = row[field]
++            groups.setdefault(val, []).append(i)
++        for val, indices in groups.items():
++            category_mean = float(np.mean(y[indices]))
++            smoothed_mean = (len(indices) * category_mean + smoothing * global_mean) / (len(indices) + smoothing)
++            field_encodings[val] = smoothed_mean
++        encodings[field] = field_encodings
++    return encodings, global_mean
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -49,6 +81,8 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    encodings: dict[str, dict[str, float]] | None = None,
++    encode_fields: tuple[str, ...] = (),
++    global_mean: float = 0.5,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -59,7 +93,28 @@ def _encode_rows(
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+-    return x, y
++    
++    # Append target-encoded features if provided
++    if encodings and encode_fields:
++        x_encoded = np.hstack([
++            x.astype(np.float32),
++            np.zeros((len(rows), len(encode_fields)), dtype=np.float32)
++        ])
++        for j, field in enumerate(encode_fields):
++            field_enc = encodings[field]
++            for n, row in enumerate(rows):
++                val = row[field]
++                # Use global_mean as fallback for unseen values
++                x_encoded[n, x.shape[1] + j] = field_enc.get(val, global_mean)
++        # Convert back to int32 for FM compatibility (scale by 1e6 to preserve precision)
++        x = (x_encoded * 1e6).astype(np.int32)
++    
++    return x, y
+ 
+ 
+ def _build_vocabs(
+@@ -193,6 +248,8 @@ def main() -> None:
+     fields = _active_fields()
+     max_rows = os.environ.get("MAX_ROWS")
++    encode_fields = _target_encode_fields()
++    encodings_train, global_mean = None, 0.5
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+@@ -203,10 +260,16 @@ def main() -> None:
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
++    if encode_fields:
++        xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
++        encodings_train, global_mean = _compute_target_encodings(train_rows, ytr, encode_fields)
++        xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, encodings_train, encode_fields, global_mean)
++        xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, encodings_train, encode_fields, global_mean)
++    else:
++        xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
++        xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+
+Usage: Set `ENCODE=user_id,video_id,author_id` environment variable to enable target encoding with out-of-fold means per field, smoothed toward global click rate per Micci-Barreca 2001.

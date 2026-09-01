@@ -1,0 +1,137 @@
+--- a/template.py
++++ b/template.py
+@@ -78,26 +78,47 @@ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+ 
++def _create_pairwise_batches_for_user(
++    x: np.ndarray, y: np.ndarray, user_ids: list[str], rng: np.random.Generator
++) -> tuple[np.ndarray, np.ndarray]:
++    """Create pairwise ranking samples grouped by user (BPR).
++    
++    For each user, sample positive/negative pairs and return feature matrices.
++    """
++    unique_users = list(set(user_ids))
++    pairs_x_pos = []
++    pairs_x_neg = []
++    
++    for user_id in unique_users:
++        mask = np.array([uid == user_id for uid in user_ids])
++        user_x = x[mask]
++        user_y = y[mask]
++        
++        pos_indices = np.where(user_y > 0.5)[0]
++        neg_indices = np.where(user_y <= 0.5)[0]
++        
++        if len(pos_indices) == 0 or len(neg_indices) == 0:
++            continue
++        
++        # Sample pairs for this user
++        n_pairs = max(1, min(len(pos_indices), len(neg_indices)))
++        for _ in range(n_pairs):
++            pos_i = rng.choice(pos_indices)
++            neg_i = rng.choice(neg_indices)
++            pairs_x_pos.append(user_x[pos_i])
++            pairs_x_neg.append(user_x[neg_i])
++    
++    if not pairs_x_pos:
++        return np.empty((0, x.shape[1]), dtype=x.dtype), np.empty((0, x.shape[1]), dtype=x.dtype)
++    
++    return np.array(pairs_x_pos, dtype=x.dtype), np.array(pairs_x_neg, dtype=x.dtype)
++
++
+ class FM:
+     def __init__(self, dim: int, k: int = 16, lr: float = 0.001, l2: float = 1e-6, seed: int = 0):
+         rng = np.random.default_rng(seed)
+         self.V = rng.normal(0, 0.01, (dim, k)).astype(np.float32)
+         self.W = np.zeros(dim, dtype=np.float32)
+         self.b = np.float32(0.0)
+         self.lr, self.l2 = lr, l2
+         self.mV = np.zeros_like(self.V)
+         self.vV = np.zeros_like(self.V)
+         self.mW = np.zeros_like(self.W)
+         self.vW = np.zeros_like(self.W)
+         self.t = 0
+ 
+     def logits(self, X: np.ndarray):
+         e = self.V[X]
+         s = e.sum(1)
+         inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+         return self.b + self.W[X].sum(1) + inter, e, s
+ 
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
+-        bsz = len(y)
+-        z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++    def step(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """Pairwise ranking step (BPR - Bayesian Personalized Ranking).
++        
++        Computes ranking loss: -log(sigmoid(score_pos - score_neg))
++        """
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        
++        # Pairwise ranking objective
++        z_diff = z_pos - z_neg
++        sig_diff = sigmoid(z_diff)
++        
++        # Gradient of -log(sigmoid(x)) w.r.t. x: sigmoid(x) - 1
++        g_pos = (sig_diff - 1.0) / len(X_pos)
++        g_neg = (1.0 - sig_diff) / len(X_pos)
++        
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
+-        np.add.at(gW, X, g[:, None])
+-        np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
++        
++        np.add.at(gW, X_pos, g_pos[:, None])
++        np.add.at(gV, X_pos, g_pos[:, None, None] * (s_pos[:, None, :] - e_pos))
++        
++        np.add.at(gW, X_neg, g_neg[:, None])
++        np.add.at(gV, X_neg, g_neg[:, None, None] * (s_neg[:, None, :] - e_neg))
++        
+         gV += self.l2 * self.V
+         gW += self.l2 * self.W
+         self.t += 1
+         b1, b2, eps = 0.9, 0.999, 1e-8
+         for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+             M *= b1
+             M += (1 - b1) * G
+             Vv *= b2
+             Vv += (1 - b2) * (G * G)
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+-        self.b -= self.lr * g.sum()
++        self.b -= self.lr * (g_pos.sum() - g_neg.sum())
+-        return float(
+-            -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+-        )
++        return float(-np.mean(np.log(sig_diff + 1e-9)))
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -142,17 +163,25 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
++    # Extract user IDs for pairwise ranking grouped by user
++    user_ids_tr = [row["user_id"] for row in train_rows]
++
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+         idx = rng.permutation(len(ytr))
+         losses = []
+         for i in range(0, len(idx), batch):
+             batch_idx = idx[i : i + batch]
+             batch_x = xtr[batch_idx]
+             batch_y = ytr[batch_idx]
++            batch_user_ids = [user_ids_tr[j] for j in batch_idx]
++            
++            x_pos, x_neg = _create_pairwise_batches_for_user(
++                batch_x, batch_y, batch_user_ids, rng
++            )
++            if len(x_pos) > 0:
++                losses.append(model.step(x_pos, x_neg))
+-            losses.append(model.step(xtr[batch_idx], ytr[batch_idx]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

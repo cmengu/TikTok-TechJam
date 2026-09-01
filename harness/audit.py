@@ -165,7 +165,9 @@ def reliability(events: list[dict]) -> dict:
             failures_by_class[cls] = failures_by_class.get(cls, 0) + 1
         elif etype == "recovery":
             action = str(ev.get("action", ""))
-            if action in ("retry", "halve_batch"):
+            # patch_retried / fullfile_fallback are the coder's own recovery
+            # ladder (throughput batch): the action was taken, count it ok.
+            if action in ("retry", "halve_batch", "patch_retried", "fullfile_fallback"):
                 recoveries["ok"] += 1
             else:
                 recoveries["failed"] += 1

@@ -1,0 +1,3 @@
+{"defect":"no_gain","delta":0.0,"family":"features/target-encoding","node":2,"pattern":"target-encoding","round":1,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":0.0,"family":"features/hist-cat","node":3,"pattern":"hist-cat","round":2,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":0.0,"family":"features/hist-shop","node":4,"pattern":"hist-shop","round":3,"verdict":"inconclusive"}

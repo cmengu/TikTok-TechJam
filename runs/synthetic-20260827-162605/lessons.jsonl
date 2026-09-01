@@ -1,0 +1,6 @@
+{"node":3,"family":"features/planted_leak","delta":0.41022630926759285,"gpu_min":0.17619432776700705,"diff_summary":"add planted f_leak column to FEATURES"}
+{"node":3,"family":"features/planted_leak","delta":0.3944433574642927,"gpu_min":0.27043191318322596,"diff_summary":"add planted f_leak column to FEATURES"}
+{"node":3,"family":"features/planted_leak","delta":0.37960607839300853,"gpu_min":0.15938109860095817,"diff_summary":"add planted f_leak column to FEATURES"}
+{"node":4,"family":"features/planted_true","delta":0.016956890367181954,"gpu_min":0.20131658680038528,"diff_summary":"add planted f_true column to FEATURES"}
+{"node":4,"family":"features/planted_true","delta":0.01610904584882278,"gpu_min":0.35634022986632774,"diff_summary":"add planted f_true column to FEATURES"}
+{"node":4,"family":"features/planted_true","delta":0.037631252853322805,"gpu_min":0.17596836806624197,"diff_summary":"add planted f_true column to FEATURES"}

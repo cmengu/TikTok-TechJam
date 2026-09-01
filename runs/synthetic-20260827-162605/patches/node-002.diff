@@ -1,0 +1,386 @@
+diff --git a/node-1/attempt-1/__pycache__/report.cpython-312.pyc b/node-1/attempt-1/__pycache__/report.cpython-312.pyc
+new file mode 100644
+index 0000000..8c715e1
+Binary files /dev/null and b/node-1/attempt-1/__pycache__/report.cpython-312.pyc differ
+diff --git a/node-1/attempt-1/checkpoints/step-846.pt b/node-1/attempt-1/checkpoints/step-846.pt
+new file mode 100644
+index 0000000..6728fd0
+Binary files /dev/null and b/node-1/attempt-1/checkpoints/step-846.pt differ
+diff --git a/node-1/attempt-1/checkpoints/step-940.pt b/node-1/attempt-1/checkpoints/step-940.pt
+new file mode 100644
+index 0000000..1055667
+Binary files /dev/null and b/node-1/attempt-1/checkpoints/step-940.pt differ
+diff --git a/node-1/attempt-1/checkpoints/step-948.pt b/node-1/attempt-1/checkpoints/step-948.pt
+new file mode 100644
+index 0000000..297b5f7
+Binary files /dev/null and b/node-1/attempt-1/checkpoints/step-948.pt differ
+diff --git a/node-1/attempt-1/preds.parquet b/node-1/attempt-1/preds.parquet
+new file mode 100644
+index 0000000..c4abd67
+Binary files /dev/null and b/node-1/attempt-1/preds.parquet differ
+diff --git a/node-1/attempt-1/progress.jsonl b/node-1/attempt-1/progress.jsonl
+new file mode 100644
+index 0000000..23efaf3
+--- /dev/null
++++ b/node-1/attempt-1/progress.jsonl
+@@ -0,0 +1,12 @@
++{"step":1,"total":948,"loss":1.2313302755355835,"t":"2026-08-27T16:30:02Z"}
++{"step":94,"total":948,"loss":0.5310262441635132,"t":"2026-08-27T16:30:03Z"}
++{"step":188,"total":948,"loss":0.5384501814842224,"t":"2026-08-27T16:30:04Z"}
++{"step":282,"total":948,"loss":0.26583951711654663,"t":"2026-08-27T16:30:05Z"}
++{"step":376,"total":948,"loss":0.40667015314102173,"t":"2026-08-27T16:30:06Z"}
++{"step":470,"total":948,"loss":0.39916229248046875,"t":"2026-08-27T16:30:07Z"}
++{"step":564,"total":948,"loss":0.5107026696205139,"t":"2026-08-27T16:30:08Z"}
++{"step":658,"total":948,"loss":0.32589876651763916,"t":"2026-08-27T16:30:09Z"}
++{"step":752,"total":948,"loss":0.3204989731311798,"t":"2026-08-27T16:30:10Z"}
++{"step":846,"total":948,"loss":0.3252435624599457,"t":"2026-08-27T16:30:13Z"}
++{"step":940,"total":948,"loss":0.43865644931793213,"t":"2026-08-27T16:30:14Z"}
++{"step":948,"total":948,"loss":0.20471704006195068,"t":"2026-08-27T16:30:14Z"}
+diff --git a/node-1/attempt-1/report.py b/node-1/attempt-1/report.py
+new file mode 100644
+index 0000000..9a754c9
+--- /dev/null
++++ b/node-1/attempt-1/report.py
+@@ -0,0 +1,64 @@
++"""Candidate-side progress/result/checkpoint writers (stdlib only).
++
++Lives outside the harness package so the child never imports harness.*.
++Copied into the workspace next to template.py by the runner.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import time
++from pathlib import Path
++
++
++def _workspace() -> Path:
++    raw = os.environ.get("WORKSPACE")
++    if not raw:
++        raise RuntimeError("WORKSPACE env var is required")
++    path = Path(raw)
++    path.mkdir(parents=True, exist_ok=True)
++    return path
++
++
++def progress(step: int, total: int, loss: float) -> None:
++    ws = _workspace()
++    line = {
++        "step": int(step),
++        "total": int(total),
++        "loss": float(loss),
++        "t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
++    }
++    with (ws / "progress.jsonl").open("a", encoding="utf-8") as f:
++        f.write(json.dumps(line, separators=(",", ":")) + "\n")
++
++
++def result(metrics: dict, preds_path: Path | str) -> None:
++    ws = _workspace()
++    payload = {
++        "metrics": dict(metrics),
++        "preds": str(preds_path),
++        "t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
++    }
++    path = ws / "result.json"
++    tmp = ws / "result.json.tmp"
++    tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
++    tmp.replace(path)
++
++
++class checkpoint:
++    @staticmethod
++    def save(step: int, blob: bytes) -> Path:
++        """Write already-serialized checkpoint bytes; keep last 3 by step."""
++        ws = _workspace()
++        ckpt_dir = ws / "checkpoints"
++        ckpt_dir.mkdir(parents=True, exist_ok=True)
++        out = ckpt_dir / f"step-{int(step)}.pt"
++        out.write_bytes(blob)
++        files = sorted(
++            ckpt_dir.glob("step-*.pt"),
++            key=lambda p: int(p.stem.split("-", 1)[1]),
++        )
++        for old in files[:-3]:
++            old.unlink(missing_ok=True)
++        return out
+diff --git a/node-1/attempt-1/result.json b/node-1/attempt-1/result.json
+new file mode 100644
+index 0000000..1fdeee5
+--- /dev/null
++++ b/node-1/attempt-1/result.json
+@@ -0,0 +1 @@
++{"metrics":{},"preds":"/Users/ngchenmeng/beating-nise/runs/synthetic-20260827-162605/workspace/node-1/attempt-1/preds.parquet","t":"2026-08-27T16:30:14Z"}
+\ No newline at end of file
+diff --git a/node-1/attempt-1/template.py b/node-1/attempt-1/template.py
+new file mode 100644
+index 0000000..9bb7622
+--- /dev/null
++++ b/node-1/attempt-1/template.py
+@@ -0,0 +1,251 @@
++"""Baseline training script the agent edits (run as: python template.py).
++
++Copied into the workspace with report.py; must not import the harness package.
++"""
++
++from __future__ import annotations
++
++import io
++import os
++import sys
++import time
++import traceback
++from pathlib import Path
++
++import numpy as np
++import pyarrow as pa
++import pyarrow.parquet as pq
++import torch
++import torch.nn as nn
++
++import report
++
++BASE_FEATURES = ("user_id", "item_id", "cat_a", "cat_b", "cat_c")
++FAILURE_ENV = "SYNTHETIC_FAIL"
++OOV = 0
++
++
++def _parse_features(raw: str | None) -> list[str]:
++    if not raw or raw.strip() == "base":
++        return list(BASE_FEATURES)
++    parts: list[str] = []
++    for tok in raw.split(","):
++        tok = tok.strip()
++        if not tok:
++            continue
++        if tok == "base":
++            parts.extend(BASE_FEATURES)
++        else:
++            parts.append(tok)
++    seen: set[str] = set()
++    out: list[str] = []
++    for p in parts:
++        if p not in seen:
++            seen.add(p)
++            out.append(p)
++    return out
++
++
++def _fire_failure(mode: str) -> None:
++    if mode == "crash":
++        raise RuntimeError("SYNTHETIC_FAIL=crash")
++    if mode == "oom_cuda":
++        raise RuntimeError("CUDA out of memory")
++    if mode == "oom_host":
++        os.kill(os.getpid(), 9)
++    if mode == "hang":
++        while True:
++            time.sleep(60)
++
++
++class _Model(nn.Module):
++    def __init__(self, n_emb: dict[str, int], emb_dim: int = 8, dropout: float = 0.0):
++        super().__init__()
++        self.embs = nn.ModuleDict(
++            {
++                name: nn.Embedding(n + 1, emb_dim, padding_idx=OOV)
++                for name, n in n_emb.items()
++            }
++        )
++        self.dropout = nn.Dropout(dropout)
++        in_dim = emb_dim * len(n_emb)
++        self.mlp = nn.Sequential(
++            nn.Linear(in_dim, 32),
++            nn.ReLU(),
++            nn.Linear(32, 16),
++            nn.ReLU(),
++        )
++        self.head_click = nn.Linear(16, 1)
++        self.head_cvr = nn.Linear(16, 1)
++
++    def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
++        parts = [self.embs[k](batch[k]) for k in self.embs]
++        x = self.dropout(torch.cat(parts, dim=-1))
++        h = self.mlp(x)
++        return self.head_click(h).squeeze(-1), self.head_cvr(h).squeeze(-1)
++
++
++def _build_vocab(
++    train_cols: dict[str, np.ndarray], features: list[str]
++) -> dict[str, dict[int, int]]:
++    vocabs: dict[str, dict[int, int]] = {}
++    for name in features:
++        if name.startswith("f_"):
++            continue
++        vals = train_cols[name]
++        uniq = np.unique(vals)
++        vocabs[name] = {int(v): i + 1 for i, v in enumerate(uniq.tolist())}
++    return vocabs
++
++
++def _encode(
++    cols: dict[str, np.ndarray],
++    features: list[str],
++    vocabs: dict[str, dict[int, int]],
++    idx: np.ndarray,
++) -> dict[str, torch.Tensor]:
++    batch: dict[str, torch.Tensor] = {}
++    for name in features:
++        if name.startswith("f_"):
++            raw = cols[name][idx].astype(np.float64)
++            buckets = np.clip((raw * 2).astype(np.int64) + 8, 1, 16)
++            batch[name] = torch.tensor(buckets, dtype=torch.long)
++        else:
++            vocab = vocabs[name]
++            mapped = np.fromiter(
++                (vocab.get(int(v), OOV) for v in cols[name][idx]),
++                dtype=np.int64,
++                count=len(idx),
++            )
++            batch[name] = torch.from_numpy(mapped)
++    return batch
++
++
++def _save_checkpoint(step: int, state_dict) -> None:
++    buf = io.BytesIO()
++    torch.save(state_dict, buf)
++    report.checkpoint.save(step, buf.getvalue())
++
++
++def main() -> None:
++    fail = os.environ.get(FAILURE_ENV, "").strip()
++    device_s = os.environ.get("DEVICE", "cpu")
++    seed = int(os.environ.get("SEED", "0"))
++    train_path = Path(os.environ["TRAIN"])
++    valid_path = Path(os.environ["VALID"])
++    workspace = Path(os.environ.get("WORKSPACE", "."))
++    workspace.mkdir(parents=True, exist_ok=True)
++    os.environ["WORKSPACE"] = str(workspace)
++
++    features = _parse_features(os.environ.get("FEATURES"))
++    batch_size = int(os.environ.get("BATCH", "4096"))
++    lr = float(os.environ.get("LR", "1e-3"))
++    epochs = int(os.environ.get("EPOCHS", "1"))
++
++    torch.manual_seed(seed)
++    device = torch.device(device_s)
++
++    train_tbl = pq.read_table(train_path)
++    valid_tbl = pq.read_table(valid_path)
++    train_cols = {c: np.asarray(train_tbl.column(c)) for c in train_tbl.column_names}
++    valid_cols = {c: np.asarray(valid_tbl.column(c)) for c in valid_tbl.column_names}
++
++    emb_features = list(features)
++    vocabs = _build_vocab(
++        train_cols, [f for f in emb_features if not f.startswith("f_")]
++    )
++    n_emb: dict[str, int] = {f: len(vocabs[f]) for f in vocabs}
++    for f in emb_features:
++        if f.startswith("f_"):
++            n_emb[f] = 16
++
++    model = _Model(n_emb, emb_dim=8, dropout=0.0).to(device)
++    opt = torch.optim.Adam(model.parameters(), lr=lr)
++    bce = nn.BCEWithLogitsLoss()
++
++    n = len(train_cols["sample_id"])
++    n_steps = max(1, (n + batch_size - 1) // batch_size * epochs)
++    mid = max(1, n_steps // 2)
++    report_every = max(1, n_steps // 10)
++    step = 0
++    rng = np.random.default_rng(seed)
++    hung = False
++
++    model.train()
++    for _epoch in range(epochs):
++        order = rng.permutation(n)
++        for start in range(0, n, batch_size):
++            idx = order[start : start + batch_size]
++            batch = _encode(train_cols, emb_features, vocabs, idx)
++            batch = {k: v.to(device) for k, v in batch.items()}
++            y_click = torch.tensor(
++                train_cols["click"][idx].astype(np.float32), device=device
++            )
++            y_cvr = torch.tensor(
++                train_cols["conversion"][idx].astype(np.float32), device=device
++            )
++            click_mask = y_click > 0.5
++
++            logit_c, logit_v = model(batch)
++            loss = bce(logit_c, y_click)
++            if click_mask.any():
++                loss = loss + bce(logit_v[click_mask], y_cvr[click_mask])
++
++            opt.zero_grad()
++            loss.backward()
++            opt.step()
++
++            step += 1
++            loss_v = float(loss.detach().cpu())
++            if fail == "nan" and step == 1:
++                loss_v = float("nan")
++
++            if step % report_every == 0 or step == n_steps or step == 1:
++                report.progress(step, n_steps, loss_v)
++                _save_checkpoint(step, model.state_dict())
++
++            if fail == "hang" and step == 1 and not hung:
++                hung = True
++                _fire_failure("hang")
++            if fail in {"crash", "oom_cuda", "oom_host"} and step == mid:
++                _fire_failure(fail)
++
++    if fail == "no_result":
++        sys.exit(0)
++    if fail == "bad_schema":
++        # Incomplete contract: result.json without a real preds file.
++        report.result({}, preds_path=workspace / "preds.parquet")
++        sys.exit(0)
++
++    model.eval()
++    v_n = len(valid_cols["sample_id"])
++    p_click = np.zeros(v_n, dtype=np.float32)
++    p_cvr = np.zeros(v_n, dtype=np.float32)
++    with torch.no_grad():
++        for start in range(0, v_n, batch_size):
++            idx = np.arange(start, min(start + batch_size, v_n))
++            batch = _encode(valid_cols, emb_features, vocabs, idx)
++            batch = {k: v.to(device) for k, v in batch.items()}
++            logit_c, logit_v = model(batch)
++            p_click[idx] = torch.sigmoid(logit_c).cpu().numpy()
++            p_cvr[idx] = torch.sigmoid(logit_v).cpu().numpy()
++
++    preds_path = workspace / "preds.parquet"
++    preds = pa.table(
++        {
++            "sample_id": np.asarray(valid_cols["sample_id"], dtype=np.int64),
++            "p_click": p_click,
++            "p_conversion_given_click": p_cvr,
++        }
++    )
++    pq.write_table(preds, preds_path, compression="zstd")
++    # Harness task.score() is the only numeric authority.
++    report.result({}, preds_path=preds_path)
++
++
++if __name__ == "__main__":
++    try:
++        main()
++    except Exception:
++        traceback.print_exc()
++        sys.exit(1)
+diff --git a/template.py b/template.py
+index 9bb7622..bc52022 100644
+--- a/template.py
++++ b/template.py
+@@ -137,7 +137,7 @@ def main() -> None:
+     workspace.mkdir(parents=True, exist_ok=True)
+     os.environ["WORKSPACE"] = str(workspace)
+ 
+-    features = _parse_features(os.environ.get("FEATURES"))
++    features = _parse_features(os.environ.get("FEATURES") or "base")
+     batch_size = int(os.environ.get("BATCH", "4096"))
+     lr = float(os.environ.get("LR", "1e-3"))
+     epochs = int(os.environ.get("EPOCHS", "1"))

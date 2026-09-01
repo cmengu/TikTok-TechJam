@@ -1,0 +1,121 @@
+--- template.py	(original)
++++ template.py	(modified)
+@@ -60,6 +60,7 @@
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
++    user_ids = np.empty(len(rows), dtype=object)
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
++        user_ids[n] = row["user_id"]
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+-    return x, y
++    return x, y, user_ids
+ 
+ 
+ def _build_vocabs(
+@@ -103,19 +104,56 @@
+         inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+         return self.b + self.W[X].sum(1) + inter, e, s
+ 
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
+-        bsz = len(y)
+-        z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++    def step(self, X: np.ndarray, y: np.ndarray, user_ids: np.ndarray) -> float:
++        """Bayesian Personalized Ranking loss: in-batch pairwise ranking grouped by user."""
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
++        gb = np.float32(0.0)
++        
++        total_loss = 0.0
++        n_pairs = 0
++        
++        # Group items by user and compute pairwise ranking loss
++        unique_users = np.unique(user_ids)
++        for user in unique_users:
++            mask = user_ids == user
++            X_user = X[mask]
++            y_user = y[mask]
++            
++            # Separate positive and negative items for this user
++            pos_indices = np.where(y_user == 1)[0]
++            neg_indices = np.where(y_user == 0)[0]
++            
++            if len(pos_indices) == 0 or len(neg_indices) == 0:
++                continue
++            
++            X_pos = X_user[pos_indices]
++            X_neg = X_user[neg_indices]
++            
++            z_pos, e_pos, s_pos = self.logits(X_pos)
++            z_neg, e_neg, s_neg = self.logits(X_neg)
++            
++            # Pairwise ranking: BPR loss for each (positive, negative) pair
++            for i in range(len(z_pos)):
++                for j in range(len(z_neg)):
++                    delta = z_pos[i] - z_neg[j]
++                    pred = sigmoid(delta)
++                    loss = -np.log(pred + 1e-9)
++                    
++                    # Gradient: d(loss)/d(delta) = sigmoid(delta) - 1
++                    g_delta = (pred - 1.0).astype(np.float32)
++                    
++                    # Accumulate gradients for positive and negative items
++                    np.add.at(gW, X_pos[i], g_delta)
++                    np.add.at(gV, X_pos[i], g_delta[None] * (s_pos[i:i+1] - e_pos[i:i+1]))
++                    np.add.at(gW, X_neg[j], -g_delta)
++                    np.add.at(gV, X_neg[j], -g_delta[None] * (s_neg[j:j+1] - e_neg[j:j+1]))
++                    
++                    gb += g_delta
++                    total_loss += loss
++                    n_pairs += 1
++        
++        if n_pairs == 0:
++            return 0.0
++        
++        # Average gradients by number of pairs
++        gV /= n_pairs
++        gW /= n_pairs
++        gb /= n_pairs
++        
+         gV += self.l2 * self.V
+         gW += self.l2 * self.W
+         self.t += 1
+@@ -126,9 +164,6 @@
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+         self.b -= self.lr * gb
+-        return float(
+-            -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+-        )
++        return float(total_loss / n_pairs)
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -152,10 +187,10 @@
+         offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+         return vocabs, unk, offsets
+ 
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr, user_ids_tr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
++    xva, _, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+@@ -163,7 +198,7 @@
+         idx = rng.permutation(len(ytr))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            batch_idx = idx[i : i + batch]
++            losses.append(model.step(xtr[batch_idx], ytr[batch_idx], user_ids_tr[batch_idx]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

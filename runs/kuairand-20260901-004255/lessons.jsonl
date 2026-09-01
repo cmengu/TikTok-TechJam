@@ -1,0 +1,4 @@
+{"defect":"no_gain","delta":0.0,"family":"features/target-encoding","node":2,"pattern":"target-encoding","round":1,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":-0.00024397990895907995,"family":"features/dur-log-buckets","node":4,"pattern":"dur-log-buckets","round":3,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":-0.016226708971855703,"family":"features/tab-cross","node":5,"pattern":"tab-cross","round":4,"verdict":"rejected"}
+{"defect":"no_gain","delta":-0.0055905545123930605,"family":"features/user-activity-bucket","node":6,"pattern":"user-activity-bucket","round":5,"verdict":"rejected"}

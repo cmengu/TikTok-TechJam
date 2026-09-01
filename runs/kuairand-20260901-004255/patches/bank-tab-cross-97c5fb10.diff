@@ -1,0 +1,31 @@
+--- a/template.py
++++ b/template.py
+@@ -9,7 +9,7 @@ import sys
+ 
+ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_id_x_tab", "tab_x_dur_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -23,11 +23,17 @@ def _active_fields() -> tuple[str, ...]:
+ 
+ 
+ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+     tokens = []
++    # Precompute dur_bucket once for cross features
++    dur_bucket_str = str(int(np.searchsorted(edges, float(row["duration_ms"]))))
+     for name in fields:
+         if name == "dur_bucket":
+-            tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++            tokens.append(dur_bucket_str)
++        elif name == "user_id_x_tab":
++            tokens.append(f"{row['user_id']}_x_{row['tab']}")
++        elif name == "tab_x_dur_bucket":
++            tokens.append(f"{row['tab']}_x_{dur_bucket_str}")
+         else:
+             tokens.append(row[name])
+     return tokens

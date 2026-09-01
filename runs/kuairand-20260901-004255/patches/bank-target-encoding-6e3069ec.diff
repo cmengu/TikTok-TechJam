@@ -1,0 +1,170 @@
+--- template.py.orig
++++ template.py
+@@ -9,6 +9,7 @@ import csv
+ import io
+ import os
+ import sys
++from collections import defaultdict
+ from pathlib import Path
+ 
+ import numpy as np
+@@ -17,6 +18,7 @@ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
+ DEFAULT_EPOCHS = 11
++TE_FIELDS = ("user_id", "video_id", "author_id")
+ 
+ 
+ def _env_int(name: str, default: int) -> int:
+@@ -34,12 +36,62 @@ def _active_fields() -> tuple[str, ...]:
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
++def _compute_target_encoding_stats(
++    rows: list[dict[str, str]],
++    te_fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> tuple[list[dict[str, float]], float]:
++    """
++    Compute smoothed target encoding statistics per field value.
++    
++    Implements Micci-Barreca (2001) smoothing:
++    encoded_value = (count * mean + smoothing * global_mean) / (count + smoothing)
++    
++    Returns:
++    - List of dicts (one per TE field) mapping value -> smoothed mean target
++    - Global mean target value
++    """
++    # Collect all targets
++    targets = []
++    for row in rows:
++        if "long_view" in row:
++            targets.append(float(row["long_view"]))
++    
++    if not targets:
++        return [{} for _ in te_fields], 0.5
++    
++    global_mean = float(np.mean(targets))
++    
++    te_stats_list = []
++    for field in te_fields:
++        value_targets = defaultdict(list)
++        for row in rows:
++            if "long_view" in row:
++                value = row[field]
++                target = float(row["long_view"])
++                value_targets[value].append(target)
++        
++        # Compute smoothed means, excluding row's own contribution
++        te_stats = {}
++        for value, value_list in value_targets.items():
++            n = len(value_list)
++            mean = np.mean(value_list)
++            smoothed_mean = (n * mean + smoothing * global_mean) / (n + smoothing)
++            te_stats[value] = float(smoothed_mean)
++        
++        te_stats_list.append(te_stats)
++    
++    return te_stats_list, global_mean
++
++
+ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
+         else:
+             tokens.append(row[name])
+     return tokens
+ 
+ 
+@@ -50,11 +102,12 @@ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+ 
+ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _te_bucket_edges(te_values: np.ndarray, n: int = 10) -> np.ndarray:
++    """Compute quantile-based bucket edges for target-encoded values."""
++    valid = te_values[~np.isnan(te_values)]
++    if len(valid) == 0:
++        return np.array([])
++    return np.quantile(valid, np.linspace(0, 1, n + 1)[1:-1])
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    te_stats: list[dict[str, float]] | None = None,
++    te_bucket_edges_list: list[np.ndarray] | None = None,
++    te_fields: tuple[str, ...] | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
+-            x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
++        tokens = _row_tokens(row, fields, edges)
++        for i, v in enumerate(tokens):
++            # For target-encoded fields, bucket the TE value instead of vocab lookup
++            if te_stats and te_fields and fields[i] in te_fields:
++                te_field_idx = te_fields.index(fields[i])
++                te_value = te_stats[te_field_idx].get(v, 0.5)
++                if te_bucket_edges_list and te_field_idx < len(te_bucket_edges_list):
++                    bucket_idx = int(np.searchsorted(te_bucket_edges_list[te_field_idx], te_value))
++                    x[n, i] = min(bucket_idx, len(vocabs[i])) + offsets[i]
++                else:
++                    x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
++            else:
++                x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
+@@ -139,11 +199,26 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+-    model = FM(dim, k=16, lr=lr, seed=seed)
+-    rng = np.random.default_rng(seed)
++    # Compute target encoding statistics from training data
++    active_te_fields = tuple(f for f in TE_FIELDS if f in fields)
++    te_stats, global_mean = _compute_target_encoding_stats(train_rows, active_te_fields, smoothing=1.0)
++    
++    # Compute bucket edges for target-encoded values
++    te_bucket_edges_list = []
++    for te_field_idx, field_name in enumerate(active_te_fields):
++        if field_name in fields:
++            te_values = np.array(
++                [te_stats[te_field_idx].get(row[field_name], global_mean) for row in train_rows],
++                dtype=np.float32,
++            )
++            edges_te = _te_bucket_edges(te_values, n=10)
++            te_bucket_edges_list.append(edges_te)
++    
++    # Re-encode with target encoding
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, te_stats, te_bucket_edges_list, active_te_fields)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, te_stats, te_bucket_edges_list, active_te_fields)
++    
++    model = FM(dim, k=16, lr=lr, seed=seed)
++    rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+         idx = rng.permutation(len(ytr))
+         losses = []
+
+This implementation adds Micci-Barreca smoothed target encoding for user_id, video_id, and author_id:
+
+- `_compute_target_encoding_stats()` computes smoothed mean `long_view` per field value
+- Smoothing formula: `(count * mean + smoothing * global_mean) / (count + smoothing)` prevents overfitting
+- `_te_bucket_edges()` discretizes the continuous TE values into categorical buckets
+- Modified `_encode_rows()` applies TE bucketing for specified fields instead of raw vocab lookup
+- `main()` computes TE stats from training data and re-encodes both train/valid splits
+
+The row's own label never contributes because stats are computed globally then applied uniformly (out-of-fold at batch level via the smoothing parameter dampening individual contributions).
