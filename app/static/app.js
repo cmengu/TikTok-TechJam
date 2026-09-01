@@ -373,8 +373,9 @@ function ensureDashboardRungFetch() {
       }
       const heroEl = view.querySelector("[data-dashboard-hero]");
       if (heroEl) {
+        const st = store.getState();
         heroEl.innerHTML = heroHtml(
-          buildHero(dashboardMonitors, buildTrace(store.getState())),
+          buildHero(dashboardMonitors, buildTrace(st), heroLiveContext(st)),
         );
       }
     })
@@ -405,6 +406,16 @@ const LIVE_NODE_STATES = new Set([
   "replicating",
   "debugging",
 ]);
+
+// The empty hero's one sentence is state-aware ("attempt N is running" vs
+// "waiting" vs "run ended") — this is the state it needs, shared by both
+// hero render sites.
+function heroLiveContext(state) {
+  const live = (state.nodeOrder || [])
+    .map((id) => state.nodes[id])
+    .find((n) => n && LIVE_NODE_STATES.has(n.state));
+  return { attempt: live ? live.id : null, runStatus: state.run.status };
+}
 
 function liveStatusHtml(state, nowMs) {
   const live = (state.nodeOrder || [])
@@ -443,7 +454,7 @@ function renderDashboard(state) {
     : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
     <section class="card dashboard-hero" data-dashboard-hero>
-      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state), heroLiveContext(state)))}
       ${provenanceTileHtml(provenanceCounts(state))}
     </section>
     ${liveStatusHtml(state, nowMs)}

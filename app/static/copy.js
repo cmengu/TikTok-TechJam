@@ -177,6 +177,22 @@ export const DICT = {
     word: "from the measurement layer",
     hint: null,
   },
+  // Empty-hero sentences (fix of the "— / no wins yet / from the measurement
+  // layer / no accepted wins on the log yet" stack): before the first
+  // measurement the hero says ONE forward-looking thing, picked by
+  // heroEmptyLabel below.
+  heroNoScoreLive: {
+    word: "no score yet — attempt {n} is running",
+    hint: null,
+  },
+  heroNoScoreWaiting: {
+    word: "no score yet — waiting on the first attempt",
+    hint: null,
+  },
+  heroNoScoreEnded: {
+    word: "run ended with no accepted wins",
+    hint: null,
+  },
   stampMeasured: { word: "measured", hint: null },
   stampForecast: { word: "forecast", hint: null },
   stampHover: {
@@ -406,6 +422,17 @@ export function attributionLabel(x) {
 export function claimLabel(level) {
   if (level == null) return passThrough(level);
   return DICT[level] ?? passThrough(level);
+}
+
+// The one sentence the hero shows when there is no score to show. live is
+// { attempt, runStatus } from the app shell (null when the caller has no
+// state, e.g. old call sites/tests — that reads as "waiting").
+export function heroEmptyLabel(live) {
+  if (live && live.runStatus === "ended") return DICT.heroNoScoreEnded.word;
+  if (live && live.attempt != null) {
+    return DICT.heroNoScoreLive.word.replace("{n}", String(live.attempt));
+  }
+  return DICT.heroNoScoreWaiting.word;
 }
 
 export function fmtScore(x) {
