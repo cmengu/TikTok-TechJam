@@ -11,7 +11,7 @@ import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, pro
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
-import { liveness, stalledText } from "./liveness.js";
+import { backoffDelay, liveness, stalledText } from "./liveness.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
 import {
@@ -1712,17 +1712,28 @@ function stopHeaderTick() {
 // newest-run poller. Unchanged from Phase 2 other than routing through the
 // store instead of a bare module-level `state` variable. ---
 
+// Item 8: a tab opened before the run directory exists gets a 404 on the
+// stream; EventSource does NOT auto-retry a failed connection, so without
+// these handlers the page froze at "not started" forever. Reconnect with
+// exponential backoff; the attempt counter resets on any message, and the
+// since-cursor means each reconnect refolds exactly the events the reducer
+// has not seen — frozen panels come alive as soon as the run appears.
+let eventsAttempt = 0;
+let heartbeatAttempt = 0;
+
 function connectEvents() {
   if (eventsSource) eventsSource.close();
   eventsSource = new EventSource(`/runs/${runId}/events?since=${eventsSince}`);
   eventsSource.onmessage = (raw) => {
+    eventsAttempt = 0;
     const ev = JSON.parse(raw.data);
     store.applyEvent(ev);
     eventsSince = ev.seq;
   };
   eventsSource.onerror = () => {
     eventsSource.close();
-    setTimeout(connectEvents, 500);
+    setTimeout(connectEvents, backoffDelay(eventsAttempt));
+    eventsAttempt += 1;
   };
 }
 
@@ -1732,24 +1743,36 @@ function connectHeartbeat() {
     `/runs/${runId}/heartbeat?since=${heartbeatSince}`,
   );
   heartbeatSource.onmessage = (raw) => {
+    heartbeatAttempt = 0;
     const ev = JSON.parse(raw.data);
     store.applyEvent(ev);
     heartbeatSince = ev.seq;
   };
   heartbeatSource.onerror = () => {
     heartbeatSource.close();
-    setTimeout(connectHeartbeat, 500);
+    setTimeout(connectHeartbeat, backoffDelay(heartbeatAttempt));
+    heartbeatAttempt += 1;
   };
 }
 
+// Item 8's second freeze path: /runs empty (or the server briefly away)
+// used to throw straight out of main() — the app died before its first
+// paint and never looked again. Keep asking with the same backoff.
 async function resolveRunId() {
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("run");
   if (fromQuery) return fromQuery;
-  const res = await fetch("/runs");
-  const runs = await res.json();
-  if (!runs.length) throw new Error("no runs found");
-  return runs[0].run_id;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch("/runs");
+      const runs = await res.json();
+      if (runs.length) return runs[0].run_id;
+      metaEl().textContent = "waiting for the first run to appear…";
+    } catch (_) {
+      metaEl().textContent = "waiting for the server…";
+    }
+    await new Promise((tick) => setTimeout(tick, backoffDelay(attempt)));
+  }
 }
 
 function followNewestRun() {

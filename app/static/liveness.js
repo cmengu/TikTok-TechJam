@@ -42,3 +42,16 @@ function toMs(t) {
   const ms = typeof t === "number" ? t : Date.parse(t);
   return Number.isFinite(ms) ? ms : null;
 }
+
+// --- Fix-list item 8: reconnect schedule for the event streams. A tab
+// opened before the run directory exists gets a 404 and must keep trying —
+// but not hammer the server at a fixed 500ms forever. Exponential from
+// 500ms, capped at 10s; callers reset the attempt count on any message. ---
+
+export const BACKOFF_BASE_MS = 500;
+export const BACKOFF_CAP_MS = 10 * 1000;
+
+export function backoffDelay(attempt) {
+  const n = Number.isFinite(attempt) && attempt > 0 ? attempt : 0;
+  return Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.min(n, 30));
+}

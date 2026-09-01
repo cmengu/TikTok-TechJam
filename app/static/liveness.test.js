@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BANNED } from "./copy.js";
-import { STALL_AFTER_MS, liveness, stalledText } from "./liveness.js";
+import { STALL_AFTER_MS, backoffDelay, liveness, stalledText } from "./liveness.js";
 import { initial, reduce } from "./reducer.js";
 
 const T0 = Date.parse("2026-08-31T16:14:00.000Z");
@@ -101,5 +101,22 @@ describe("reducer lastSignalAt", () => {
     });
     // an older-stamped event never rolls the signal clock backwards
     assert.equal(s.lastSignalAt, "2026-08-31T16:14:05.000Z");
+  });
+});
+
+describe("reconnect backoff", () => {
+  it("test_backoff_grows_and_caps", () => {
+    assert.equal(backoffDelay(0), 500);
+    assert.equal(backoffDelay(1), 1000);
+    assert.equal(backoffDelay(2), 2000);
+    assert.ok(backoffDelay(10) <= 10000);
+    assert.equal(backoffDelay(99), 10000);
+  });
+
+  it("test_backoff_never_returns_nonsense", () => {
+    for (const n of [-1, null, undefined, NaN]) {
+      const d = backoffDelay(n);
+      assert.ok(Number.isFinite(d) && d >= 500 && d <= 10000, String(d));
+    }
   });
 });
