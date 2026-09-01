@@ -1,7 +1,7 @@
 /** E5 Library view model. Pure: no DOM, no fetch. */
 
 import { ideaOutcome } from "./reducer.js";
-import { stateLabel } from "./copy.js";
+import { DICT, stateLabel } from "./copy.js";
 import { escapeHtml, escapeAttr } from "./chip.js";
 import { isCostBookkeeping } from "./trace.js";
 
@@ -64,24 +64,41 @@ function tokensFor(source) {
  */
 export function buildLibrary(state, manifest) {
   const all = state?.research?.sources;
-  if (!Array.isArray(all)) return [];
   // Item 1 de-pollution: cost-bookkeeping rows are spend, not reading.
-  const sources = all.filter((s) => !isCostBookkeeping(s));
-  if (sources.length === 0) return [];
+  const sources = (Array.isArray(all) ? all : []).filter(
+    (s) => !isCostBookkeeping(s),
+  );
   const papers = Array.isArray(manifest) ? manifest : [];
-  return sources.map((source) => {
-    const entry = matchEntry(source?.title, papers);
-    return {
-      title: source?.title ?? "",
-      venue: entry?.venue ?? null,
-      year: entry?.year ?? null,
-      one_liner: entry?.one_liner ?? null,
-      action: actionFor(source, entry),
-      cover: entry?.thumb ? `/papers/${entry.thumb}` : null,
-      ideas: ideasFor(state, source),
-      tokens: tokensFor(source),
-    };
+
+  // Corpus-first: the shelf is what the harness carries, not what one run
+  // happened to open. A run that cited nothing (the researcher only proposes
+  // once the queue drains) used to render an empty page even though every
+  // paper and cover ships with the repo. Manifest papers are always cards;
+  // the run's reading is layered on top, and a source citing a paper the
+  // manifest doesn't know still gets its own card.
+  const rowFor = (entry, source) => ({
+    title: source?.title ?? entry?.title ?? "",
+    venue: entry?.venue ?? null,
+    year: entry?.year ?? null,
+    one_liner: entry?.one_liner ?? null,
+    action: actionFor(source, entry),
+    cover: entry?.thumb ? `/papers/${entry.thumb}` : null,
+    ideas: source ? ideasFor(state, source) : [],
+    tokens: source ? tokensFor(source) : null,
+    consulted: Boolean(source),
   });
+
+  const claimed = new Set();
+  const rows = papers.map((entry) => {
+    const source = sources.find((s) => matchEntry(s?.title, [entry]) != null);
+    if (source) claimed.add(source);
+    return rowFor(entry, source);
+  });
+  for (const source of sources) {
+    if (claimed.has(source)) continue;
+    rows.push(rowFor(matchEntry(source?.title, papers), source));
+  }
+  return rows;
 }
 
 
@@ -137,6 +154,7 @@ export function libraryPageHtml(rows) {
             ${meta ? `<p class="stat-caption">${escapeHtml(meta)}</p>` : ""}
             ${row.one_liner ? `<p class="paper-blurb">${escapeHtml(row.one_liner)}</p>` : ""}
             ${ideaChips ? `<p>${ideaChips}</p>` : ""}
+            ${row.consulted === false ? `<p class="paper-shelf stat-caption" title="${escapeAttr(DICT.paperOnShelf.hint)}">${escapeHtml(DICT.paperOnShelf.word)}</p>` : ""}
           </div>
         </a>`;
     })

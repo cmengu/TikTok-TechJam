@@ -19,6 +19,8 @@ import {
   shouldShowTour,
   markTourDone,
   tourOverlayHtml,
+  tourStopRoute,
+  paneScrollTarget,
 } from "./tour.js";
 import { buildTrace } from "./trace.js";
 import { buildBrief, briefPageHtml } from "./brief.js";
@@ -1908,11 +1910,42 @@ function clearTourHighlight() {
   }
 }
 
+// One pane-scroll per step: renderRoute re-applies the highlight on every
+// store tick, and re-centering each time would fight the reader. The guard
+// resets whenever drawTour moves to another step — and stays unset while the
+// anchor hasn't rendered yet, so a target that streams in late (e.g. the
+// journey strip right after its attempt appears) still gets scrolled to.
+let tourScrolledFor = null;
+
+function scrollTourTargetIntoPane(el) {
+  const pane = document.getElementById("pane");
+  if (!pane || !pane.contains(el)) return;
+  const paneBox = pane.getBoundingClientRect();
+  const box = el.getBoundingClientRect();
+  // Viewport-relative rects survive the scroll-locked body; never add
+  // window scroll offsets on top (the body no longer scrolls — V7's window
+  // assumptions are exactly what broke here).
+  const target = paneScrollTarget({
+    paneTop: paneBox.top,
+    paneHeight: pane.clientHeight,
+    paneScrollTop: pane.scrollTop,
+    elTop: box.top,
+    elHeight: box.height,
+  });
+  if (target != null) pane.scrollTo({ top: target });
+}
+
 function applyTourHighlight() {
   clearTourHighlight();
   if (!tourOpen) return;
   const stop = TOUR_STOPS[tourIndex];
-  tourAnchorEl(stop.anchor)?.classList.add("tour-spotlight");
+  const el = tourAnchorEl(stop.anchor);
+  if (!el) return;
+  el.classList.add("tour-spotlight");
+  if (tourScrolledFor !== tourIndex) {
+    tourScrolledFor = tourIndex;
+    scrollTourTargetIntoPane(el);
+  }
 }
 
 function drawTour() {
@@ -1925,12 +1958,30 @@ function drawTour() {
   if (!el) {
     el = document.createElement("div");
     el.id = "tour-overlay";
+    // The fixed backdrop sits outside the pane, so wheel input over it
+    // chains into the scroll-locked body and dies. Hand it to the pane —
+    // the one scroll surface — so the reader can still move the page while
+    // the tour is up.
+    el.addEventListener(
+      "wheel",
+      (ev) => {
+        const pane = document.getElementById("pane");
+        if (pane) pane.scrollTop += ev.deltaY;
+      },
+      { passive: true },
+    );
     document.body.appendChild(el);
   }
   const stop = TOUR_STOPS[tourIndex];
   el.innerHTML = tourOverlayHtml(stop, tourIndex, TOUR_STOPS.length);
-  if (location.hash !== `#/${stop.route}`) {
-    location.hash = `#/${stop.route}`;
+  tourScrolledFor = null; // new draw = new step (or replay): allow one scroll
+  const route = tourStopRoute(stop, store.getState());
+  if (location.hash !== `#/${route}`) {
+    // Setting the hash fires hashchange → renderRoute → route.render, and
+    // renderRoute re-applies the highlight after the render lands — that is
+    // the "await the route render before measuring" path. The rAF below only
+    // covers the same-hash redraw, where no hashchange will come.
+    location.hash = `#/${route}`;
   }
   requestAnimationFrame(applyTourHighlight);
 }
@@ -2005,7 +2056,7 @@ async function main() {
     if (showTour) {
       tourIndex = 0;
       tourOpen = true;
-      location.hash = `#/${TOUR_STOPS[0].route}`;
+      location.hash = `#/${tourStopRoute(TOUR_STOPS[0], store.getState())}`;
     } else if (!location.hash) {
       location.hash = `#/${DEFAULT_ROUTE}`;
     }

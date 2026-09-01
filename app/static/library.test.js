@@ -99,10 +99,36 @@ describe("library", () => {
     assert.deepEqual(unmatched.ideas, []);
   });
 
-  it("test_empty_library", () => {
-    assert.deepEqual(buildLibrary(initial(), loadManifest()), []);
+  it("test_shelf_stands_without_a_run", () => {
+    // Corpus-first: a run that cited nothing still shows the shelf the
+    // harness carries — every manifest paper, marked unconsulted. Only a
+    // missing manifest yields nothing, because then there is no corpus.
+    const manifest = loadManifest();
+    for (const state of [initial(), null, { research: { sources: [] } }]) {
+      const rows = buildLibrary(state, manifest);
+      assert.equal(rows.length, manifest.length);
+      assert.ok(rows.every((r) => r.consulted === false));
+      assert.ok(rows.every((r) => r.ideas.length === 0));
+    }
     assert.deepEqual(buildLibrary({ research: { sources: [] } }, []), []);
-    assert.deepEqual(buildLibrary(null, loadManifest()), []);
+  });
+
+  it("test_a_consulted_paper_upgrades_its_card", () => {
+    const manifest = loadManifest();
+    const target = manifest[0];
+    const rows = buildLibrary(
+      { research: { sources: [{ title: target.title }] } },
+      manifest,
+    );
+    assert.equal(rows.length, manifest.length);
+    const card = rows.find((r) => r.title === target.title);
+    assert.equal(card.consulted, true);
+    assert.equal(card.venue, target.venue);
+    assert.equal(
+      rows.filter((r) => r.consulted).length,
+      1,
+      "only the cited paper is marked consulted",
+    );
   });
 
   it("test_route_replaced", () => {
