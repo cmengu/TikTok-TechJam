@@ -152,8 +152,6 @@ from the candidate's environment, scoring done outside the candidate — and
 every look at the hidden check counted against a budget. `harness/runner.py`
 (`_build_env` whitelist), `harness/tasks/kuairand.py`.
 
-![Health — hidden check visited 0 of 12](docs/images/health.png)
-
 **6 · A frozen, hashed protocol.** The data, the splits and the scorer are
 pinned by SHA-256; changing any of them means results are no longer comparable,
 and a changed `evaluate.py` stops the run rather than quietly changing the
@@ -297,19 +295,3 @@ provenance stamp. Write-up: `context/Unexplained_win_investigation.md`.
 Solo project — all components by the repo owner, with LLM coding assistance.
 
 ---
-
-## The rest of the dashboard
-
-**The rules** — the 18-rule contract the candidate reads and the free checks
-enforce; same document, both sides.
-
-![The rules](docs/images/the-rules.png)
-
-**Game plan** — what the run is trying to do, in plain language.
-
-![Game plan](docs/images/game-plan.png)
-
-**Spend** — tokens by stage, with compute time called out separately; stages
-that spend nothing say so rather than showing a misleading zero.
-
-![Spend](docs/images/spend.png)
