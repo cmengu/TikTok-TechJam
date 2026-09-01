@@ -227,6 +227,16 @@ export const DICT = {
     word: "all four stages",
     hint: null,
   },
+  // Fix list item 11: endpoints ship with the page, so a 404 from one the
+  // page knows about means the serving process predates the page.
+  staleServer: {
+    word: "this server is older than the page — restart it",
+    hint: null,
+  },
+  staleServerDismiss: {
+    word: "dismiss",
+    hint: null,
+  },
   memoryTitle: {
     word: "What the run has learned",
     hint: null,

@@ -74,6 +74,35 @@ let heartbeatSince = 0;
 
 const metaEl = () => document.getElementById("meta");
 
+// --- Stale-server banner (fix list item 11). Endpoints ship with the page,
+// so a 404 from an endpoint this page knows about means the serving process
+// predates the page — the honest thing to say is "restart it", once and
+// dismissibly, instead of leaving silent empty panels. Every page-content
+// fetch chain routes its Response through flagStaleServer before .json(). ---
+let staleServerDismissed = false;
+
+function flagStaleServer(res) {
+  if (res && res.status === 404 && !staleServerDismissed) {
+    const el = document.getElementById("stale-server-banner");
+    if (el) el.hidden = false;
+  }
+  return res;
+}
+
+function initStaleServerBanner() {
+  const text = document.getElementById("stale-server-text");
+  if (text) text.textContent = DICT.staleServer.word;
+  const btn = document.getElementById("stale-server-dismiss");
+  if (btn) {
+    btn.textContent = DICT.staleServerDismiss.word;
+    btn.addEventListener("click", () => {
+      staleServerDismissed = true;
+      const el = document.getElementById("stale-server-banner");
+      if (el) el.hidden = true;
+    });
+  }
+}
+
 function requireView() {
   const el = document.getElementById("view");
   if (!el) {
@@ -339,7 +368,7 @@ function ensureContract() {
   if (cachedContract != null || ensureContract.inFlight) return;
   ensureContract.inFlight = true;
   fetch("/contract")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       cachedContract = payload;
       renderRoute();
@@ -360,7 +389,7 @@ function ensureDashboardRungFetch() {
   const gen = ++dashboardRungFetchGen;
   dashboardRungInFlight = true;
   fetch(`/runs/${runId}/audit/monitors`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== dashboardRungFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1345,7 +1374,7 @@ function renderMemory(state) {
     return;
   }
   fetch(`/runs/${runId}/feedback`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== memoryFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1368,7 +1397,7 @@ function renderRulebook(state) {
   const path = currentRoutePath();
   const gen = ++rulebookFetchGen;
   fetch("/contract")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== rulebookFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1395,7 +1424,7 @@ function renderBrief(_state) {
     return;
   }
   fetch(`/runs/${runId}/brief`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== briefFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1421,7 +1450,7 @@ function renderLibrary(_state) {
   const path = currentRoutePath();
   const gen = ++libraryFetchGen;
   fetch("/papers/manifest")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== libraryFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1454,7 +1483,7 @@ function fetchAudit(label, url, build, html) {
     return;
   }
   fetch(url)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (currentRoutePath() !== path) return;
       const vm = build(payload);
@@ -1500,9 +1529,9 @@ function renderReport(_state) {
     return;
   }
   Promise.all([
-    fetch(`/runs/${runId}/report`).then((res) => res.json()),
+    fetch(`/runs/${runId}/report`).then(flagStaleServer).then((res) => res.json()),
     fetch(`/runs/${runId}/audit/monitors`)
-      .then((res) => res.json())
+      .then(flagStaleServer).then((res) => res.json())
       .catch(() => null),
   ])
     .then(([reportPayload, monitorsPayload]) => {
@@ -1532,7 +1561,7 @@ function renderMonitors(_state) {
     return;
   }
   fetch(`/runs/${runId}/audit/monitors`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== monitorsFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1970,6 +1999,7 @@ async function main() {
     initRunTreeClicks();
     initRunPicker();
     initTour();
+    initStaleServerBanner();
     runId = await resolveRunId();
     const showTour = shouldShowTour(window.localStorage);
     if (showTour) {

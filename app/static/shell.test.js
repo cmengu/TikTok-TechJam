@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { DICT } from "./copy.js";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX = join(__dirname, "index.html");
 const APP = join(__dirname, "app.js");
@@ -58,6 +60,30 @@ describe("tab-pane shell", () => {
     // renderRoute puts the pane back at the top when the path actually
     // changes — but not on every store tick, which would fight the reader.
     assert.match(src, /pane\.scrollTop = 0/);
+  });
+
+  it("test_stale_server_banner_sits_in_the_fixed_shell", () => {
+    // Fix list item 11: a 404 from an endpoint this page knows about means
+    // the serving process predates the page. One dismissible banner in the
+    // fixed shell (never scrolled away) instead of silent empty panels.
+    const html = loadIndex();
+    const banner = html.indexOf('<div id="stale-server-banner" hidden>');
+    const pane = html.indexOf('<main id="pane"');
+    assert.ok(banner !== -1, "missing stale-server banner markup");
+    assert.ok(banner < pane, "banner must sit above the scroll pane");
+    assert.match(html, /<button type="button" id="stale-server-dismiss"/);
+  });
+
+  it("test_stale_server_string_lives_in_the_dictionary", () => {
+    assert.equal(
+      DICT.staleServer.word,
+      "this server is older than the page — restart it",
+    );
+    const src = readFileSync(APP, "utf8");
+    // Every page-content fetch routes through the 404 check.
+    assert.match(src, /function flagStaleServer/);
+    assert.match(src, /\.then\(flagStaleServer\)/);
+    assert.equal(src.includes("DICT.staleServer.word"), true);
   });
 
   it("test_inner_scroll_containers_survive", () => {
