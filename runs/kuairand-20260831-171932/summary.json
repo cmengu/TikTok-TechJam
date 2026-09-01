@@ -1,0 +1,37 @@
+{
+  "run_id": "kuairand-20260831-171932",
+  "converged": true,
+  "iterations_used": 6,
+  "iteration_cap": 50,
+  "promotions": 0,
+  "manual_interventions": 0,
+  "errors": 8,
+  "recoveries": 0,
+  "validation_best": {
+    "primary": 0.598881381520826,
+    "node": 3,
+    "delta_vs_official_valid": -0.0027
+  },
+  "official_baseline": {
+    "valid": {
+      "gauc": 0.6674,
+      "ndcg_at_5": 0.5357,
+      "primary": 0.6016
+    },
+    "test": {
+      "gauc": 0.661,
+      "ndcg_at_5": 0.5282,
+      "primary": 0.5946
+    }
+  },
+  "resources": {
+    "tokens_in": 355956,
+    "tokens_out": 108993,
+    "tokens_total": 464949,
+    "wall_clock_s": 2923.4,
+    "wall_clock_h": 0.812,
+    "gpu_hours": 0.0,
+    "compute_hours_cpu": 0.254
+  },
+  "submission": "submission/pred.csv"
+}
