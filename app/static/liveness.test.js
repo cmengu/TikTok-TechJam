@@ -4,7 +4,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { BANNED } from "./copy.js";
-import { STALL_AFTER_MS, backoffDelay, liveness, stalledText } from "./liveness.js";
+import {
+  STALL_AFTER_MS,
+  backoffDelay,
+  liveness,
+  runPickerLabel,
+  stalledText,
+} from "./liveness.js";
 import { initial, reduce } from "./reducer.js";
 
 const T0 = Date.parse("2026-08-31T16:14:00.000Z");
@@ -118,5 +124,44 @@ describe("reconnect backoff", () => {
       const d = backoffDelay(n);
       assert.ok(Number.isFinite(d) && d >= 500 && d <= 10000, String(d));
     }
+  });
+});
+
+describe("run picker labels", () => {
+  const NOW = Date.parse("2026-08-31T19:20:00.000Z");
+  const row = (o = {}) => ({
+    run_id: "kuairand-20260831-190212",
+    started: "2026-08-31T19:02:12.000Z",
+    last_signal: "2026-08-31T19:12:59.291Z",
+    ended: false,
+    ...o,
+  });
+
+  it("test_live_run_labels_live", () => {
+    const s = runPickerLabel(row({ last_signal: "2026-08-31T19:19:58.000Z" }), NOW);
+    assert.match(s, /kuairand-20260831-190212/);
+    assert.match(s, /live/);
+  });
+
+  it("test_silent_run_labels_stalled", () => {
+    // the real dead run: last signal 19:12:59, viewed at 19:20 — 7m quiet
+    const s = runPickerLabel(row(), NOW);
+    assert.match(s, /stalled/);
+    assert.doesNotMatch(s, /\blive\b/);
+  });
+
+  it("test_ended_run_labels_ended", () => {
+    const s = runPickerLabel(row({ ended: true }), NOW);
+    assert.match(s, /ended/);
+    assert.doesNotMatch(s, /stalled/);
+  });
+
+  it("test_label_carries_a_started_time", () => {
+    assert.match(runPickerLabel(row(), NOW), /\d{1,2}:\d{2}/);
+  });
+
+  it("test_malformed_row_degrades", () => {
+    assert.equal(typeof runPickerLabel({}, NOW), "string");
+    assert.equal(typeof runPickerLabel(null, NOW), "string");
   });
 });

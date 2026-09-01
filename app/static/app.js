@@ -11,7 +11,7 @@ import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, pro
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
-import { backoffDelay, liveness, stalledText } from "./liveness.js";
+import { backoffDelay, liveness, runPickerLabel, stalledText } from "./liveness.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
 import {
@@ -1775,20 +1775,64 @@ async function resolveRunId() {
   }
 }
 
+function switchRun(nextRunId) {
+  runId = nextRunId;
+  eventsSince = 0;
+  heartbeatSince = 0;
+  store.replaceState(initial());
+  connectEvents();
+  connectHeartbeat();
+}
+
+// Item 9: the run picker. Rebuilt only when the option labels actually
+// change, so an open dropdown is not wiped mid-choice by the 2s poll.
+let pickerSignature = null;
+
+function renderRunPicker(rows) {
+  const el = document.getElementById("hdr-run-picker");
+  if (!el) return;
+  const nowMs = Date.now();
+  const options = rows.map((row) => ({
+    id: row.run_id,
+    label: runPickerLabel(row, nowMs),
+  }));
+  const signature = `${options.map((o) => `${o.id}|${o.label}`).join("\n")}@${runId}`;
+  if (signature === pickerSignature) return;
+  pickerSignature = signature;
+  el.innerHTML = options
+    .map(
+      (o) =>
+        `<option value="${escapeAttr(o.id)}"${o.id === runId ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
+    )
+    .join("");
+}
+
+function initRunPicker() {
+  const el = document.getElementById("hdr-run-picker");
+  if (!el) return;
+  el.addEventListener("change", () => {
+    const picked = el.value;
+    if (!picked || picked === runId) return;
+    // An explicit choice pins the run in the URL — refresh keeps it, and
+    // the newest-run follower stops switching underneath the reader.
+    const params = new URLSearchParams(location.search);
+    params.set("run", picked);
+    history.replaceState(null, "", `?${params}${location.hash}`);
+    switchRun(picked);
+  });
+}
+
 function followNewestRun() {
-  const params = new URLSearchParams(location.search);
-  if (params.get("run")) return; // pinned by URL: never switch
   setInterval(async () => {
     try {
       const res = await fetch("/runs");
       const runs = await res.json();
-      if (runs.length && runs[0].run_id !== runId) {
-        runId = runs[0].run_id;
-        eventsSince = 0;
-        heartbeatSince = 0;
-        store.replaceState(initial());
-        connectEvents();
-        connectHeartbeat();
+      if (!runs.length) return;
+      renderRunPicker(runs);
+      const pinned = new URLSearchParams(location.search).get("run");
+      // Default to the newest run only while nothing is pinned by the URL.
+      if (!pinned && runs[0].run_id !== runId) {
+        switchRun(runs[0].run_id);
       }
     } catch (_) {
       /* server away; try again next tick */
@@ -1900,6 +1944,7 @@ async function main() {
   try {
     initClickToCopy();
     initRunTreeClicks();
+    initRunPicker();
     initTour();
     runId = await resolveRunId();
     const showTour = shouldShowTour(window.localStorage);

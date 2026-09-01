@@ -55,3 +55,31 @@ export function backoffDelay(attempt) {
   const n = Number.isFinite(attempt) && attempt > 0 ? attempt : 0;
   return Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.min(n, 30));
 }
+
+// --- Fix-list item 9: run-picker entry labels. Uses the same staleness
+// signal as the header: a run with no run_ended event and a quiet log is
+// "stalled", not "live". The /runs endpoint supplies started, last_signal
+// and ended per run. ---
+
+export function runPickerLabel(row, nowMs) {
+  if (row == null || typeof row !== "object") return "?";
+  const id = row.run_id ?? "?";
+  const startedMs = toMs(row.started);
+  const started =
+    startedMs != null
+      ? new Date(startedMs).toLocaleString(undefined, {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : "?";
+  let word = "live";
+  if (row.ended) word = "ended";
+  else {
+    const signalMs = toMs(row.last_signal) ?? startedMs;
+    if (signalMs == null || nowMs - signalMs > STALL_AFTER_MS) word = "stalled";
+  }
+  return `${id} · started ${started} · ${word}`;
+}
