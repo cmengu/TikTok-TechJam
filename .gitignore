@@ -57,3 +57,5 @@ pytest_full*.txt
 # The global *.csv rule above must not swallow a run submission — that file
 # IS the deliverable.
 !runs/*/submission/*.csv
+!runs/*/SUMMARY.md
+!runs/*/summary.json
