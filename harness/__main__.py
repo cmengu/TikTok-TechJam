@@ -132,7 +132,7 @@ def _cmd_run(argv: list[str]) -> None:
     from harness.agents.cache import ResearchCache
     from harness.agents.coder import LLMCoder
     from harness.agents.llm import make_llm
-    from harness.agents.researcher import propose
+    from harness.agents.researcher import refill_once
     from harness.measure import Measure
     from harness.runner import Runner
     from harness.tasks import make_task
@@ -230,12 +230,12 @@ def _cmd_run(argv: list[str]) -> None:
                 )
                 cache.node_id = inc.id if inc is not None else None
                 stats = family_stats(tree._read_log())  # noqa: SLF001
-                hyp = propose(llm, brief, inc_summary, stats, _lessons(), cache)
-                if hyp is None:
-                    return
-                hyp_index[hyp.id] = hyp
-                queue.push(hyp)
-                queue.rerank(family_stats(tree._read_log()))  # noqa: SLF001
+                queued = refill_once(
+                    llm, brief, inc_summary, stats, _lessons(), cache,
+                    queue, hyp_index,
+                )
+                if queued:
+                    queue.rerank(family_stats(tree._read_log()))  # noqa: SLF001
 
             tree = Tree(
                 events,

@@ -275,3 +275,49 @@ def propose(
     if events is not None:
         events.drain()
     return hyp
+
+
+REFILL_ATTEMPTS = 2
+
+
+def refill_once(
+    llm,
+    brief: str,
+    incumbent_summary: str,
+    family_stats,
+    lessons: list[dict],
+    cache: ResearchCache,
+    queue,
+    hyp_index: dict[str, Hypothesis],
+    attempts: int = REFILL_ATTEMPTS,
+) -> bool:
+    """Drained-queue hook shared by `python -m harness run` and the tests.
+
+    Asks propose() for up to `attempts` hypotheses until one is actually
+    queued. Two failure modes previously ended the run one proposal early:
+    a single duplicate/schema-reject left the queue empty (queue.push
+    dedupes), and any transport error out of the LLM adapter propagated
+    through Tree.step() and killed the whole run. Both now degrade to
+    "queue still empty", which Tree finishes as empty_queue — honest and
+    non-fatal.
+    """
+    for _ in range(max(1, int(attempts))):
+        try:
+            hyp = propose(
+                llm, brief, incumbent_summary, family_stats, lessons, cache
+            )
+        except Exception as exc:  # noqa: BLE001 — any adapter error = no refill
+            if cache.events is not None:
+                cache.events.emit(
+                    "failure",
+                    node=cache.node_id or 0,
+                    summary=f"researcher propose failed: {exc}"[:200],
+                    **{"class": "researcher_error"},
+                )
+            return False
+        if hyp is None:
+            continue
+        hyp_index[hyp.id] = hyp
+        if queue.push(hyp):
+            return True
+    return False
