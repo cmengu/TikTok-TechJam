@@ -107,3 +107,46 @@ describe("spend page html", () => {
     assert.ok(html.includes("reading papers"));
   });
 });
+
+describe("spend page folds structural zeros", () => {
+  // Fix list item 12: "0 reading papers / 111145 writing code / 0 testing /
+  // 0 tuning" reads as broken data. The researcher never ran, and testing/
+  // tuning carry no words by design (testing's real spend is GPU time).
+  const CODING_ONLY = {
+    researching: { tokens_in: 0.0, tokens_out: 0.0, gpu_h: 0.0 },
+    coding: { tokens_in: 111145.0, tokens_out: 40210.0, gpu_h: 0.0 },
+    training: { tokens_in: 0.0, tokens_out: 0.0, gpu_h: 0.008137365219687732 },
+    tuning: { tokens_in: 0.0, tokens_out: 0.0, gpu_h: 0.0 },
+  };
+
+  it("test_primary_rows_are_only_the_slices_with_words", () => {
+    const html = spendPageHtml(buildSpend(CODING_ONLY));
+    const primary = html.split("<details")[0];
+    assert.ok(primary.includes('title="coding.tokens_in"'));
+    assert.ok(primary.includes("111145"));
+    assert.equal(primary.includes('title="researching.tokens_in"'), false);
+    assert.equal(primary.includes('title="training.tokens_in"'), false);
+    assert.equal(primary.includes('title="tuning.tokens_in"'), false);
+  });
+
+  it("test_one_plain_line_for_gpu_time", () => {
+    const html = spendPageHtml(buildSpend(CODING_ONLY));
+    const primary = html.split("<details")[0];
+    // 0.008137 h ≈ 29s through fmtDuration — a duration, not a bare 0.0.
+    assert.ok(primary.includes("29s of GPU time"));
+  });
+
+  it("test_fold_keeps_the_full_breakdown_with_honest_hints", () => {
+    const html = spendPageHtml(buildSpend(CODING_ONLY));
+    assert.ok(html.includes("<details"));
+    const fold = html.slice(html.indexOf("<details"));
+    assert.ok(fold.includes("all four stages"));
+    assert.ok(fold.includes("reading papers"));
+    assert.ok(fold.includes("writing code"));
+    assert.ok(fold.includes("testing"));
+    assert.ok(fold.includes("tuning"));
+    // Zero rows say why they are zero instead of looking broken.
+    assert.ok(fold.includes("this stage has not run yet"));
+    assert.ok(fold.includes("this stage spends computer time, not words"));
+  });
+});

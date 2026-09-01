@@ -74,6 +74,35 @@ let heartbeatSince = 0;
 
 const metaEl = () => document.getElementById("meta");
 
+// --- Stale-server banner (fix list item 11). Endpoints ship with the page,
+// so a 404 from an endpoint this page knows about means the serving process
+// predates the page — the honest thing to say is "restart it", once and
+// dismissibly, instead of leaving silent empty panels. Every page-content
+// fetch chain routes its Response through flagStaleServer before .json(). ---
+let staleServerDismissed = false;
+
+function flagStaleServer(res) {
+  if (res && res.status === 404 && !staleServerDismissed) {
+    const el = document.getElementById("stale-server-banner");
+    if (el) el.hidden = false;
+  }
+  return res;
+}
+
+function initStaleServerBanner() {
+  const text = document.getElementById("stale-server-text");
+  if (text) text.textContent = DICT.staleServer.word;
+  const btn = document.getElementById("stale-server-dismiss");
+  if (btn) {
+    btn.textContent = DICT.staleServerDismiss.word;
+    btn.addEventListener("click", () => {
+      staleServerDismissed = true;
+      const el = document.getElementById("stale-server-banner");
+      if (el) el.hidden = true;
+    });
+  }
+}
+
 function requireView() {
   const el = document.getElementById("view");
   if (!el) {
@@ -339,7 +368,7 @@ function ensureContract() {
   if (cachedContract != null || ensureContract.inFlight) return;
   ensureContract.inFlight = true;
   fetch("/contract")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       cachedContract = payload;
       renderRoute();
@@ -360,7 +389,7 @@ function ensureDashboardRungFetch() {
   const gen = ++dashboardRungFetchGen;
   dashboardRungInFlight = true;
   fetch(`/runs/${runId}/audit/monitors`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== dashboardRungFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -373,8 +402,9 @@ function ensureDashboardRungFetch() {
       }
       const heroEl = view.querySelector("[data-dashboard-hero]");
       if (heroEl) {
+        const st = store.getState();
         heroEl.innerHTML = heroHtml(
-          buildHero(dashboardMonitors, buildTrace(store.getState())),
+          buildHero(dashboardMonitors, buildTrace(st), heroLiveContext(st)),
         );
       }
     })
@@ -405,6 +435,16 @@ const LIVE_NODE_STATES = new Set([
   "replicating",
   "debugging",
 ]);
+
+// The empty hero's one sentence is state-aware ("attempt N is running" vs
+// "waiting" vs "run ended") — this is the state it needs, shared by both
+// hero render sites.
+function heroLiveContext(state) {
+  const live = (state.nodeOrder || [])
+    .map((id) => state.nodes[id])
+    .find((n) => n && LIVE_NODE_STATES.has(n.state));
+  return { attempt: live ? live.id : null, runStatus: state.run.status };
+}
 
 function liveStatusHtml(state, nowMs) {
   const live = (state.nodeOrder || [])
@@ -443,7 +483,7 @@ function renderDashboard(state) {
     : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
     <section class="card dashboard-hero" data-dashboard-hero>
-      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state), heroLiveContext(state)))}
       ${provenanceTileHtml(provenanceCounts(state))}
     </section>
     ${liveStatusHtml(state, nowMs)}
@@ -1334,7 +1374,7 @@ function renderMemory(state) {
     return;
   }
   fetch(`/runs/${runId}/feedback`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== memoryFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1357,7 +1397,7 @@ function renderRulebook(state) {
   const path = currentRoutePath();
   const gen = ++rulebookFetchGen;
   fetch("/contract")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== rulebookFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1384,7 +1424,7 @@ function renderBrief(_state) {
     return;
   }
   fetch(`/runs/${runId}/brief`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== briefFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1410,7 +1450,7 @@ function renderLibrary(_state) {
   const path = currentRoutePath();
   const gen = ++libraryFetchGen;
   fetch("/papers/manifest")
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== libraryFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1443,7 +1483,7 @@ function fetchAudit(label, url, build, html) {
     return;
   }
   fetch(url)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (currentRoutePath() !== path) return;
       const vm = build(payload);
@@ -1489,9 +1529,9 @@ function renderReport(_state) {
     return;
   }
   Promise.all([
-    fetch(`/runs/${runId}/report`).then((res) => res.json()),
+    fetch(`/runs/${runId}/report`).then(flagStaleServer).then((res) => res.json()),
     fetch(`/runs/${runId}/audit/monitors`)
-      .then((res) => res.json())
+      .then(flagStaleServer).then((res) => res.json())
       .catch(() => null),
   ])
     .then(([reportPayload, monitorsPayload]) => {
@@ -1521,7 +1561,7 @@ function renderMonitors(_state) {
     return;
   }
   fetch(`/runs/${runId}/audit/monitors`)
-    .then((res) => res.json())
+    .then(flagStaleServer).then((res) => res.json())
     .then((payload) => {
       if (gen !== monitorsFetchGen) return;
       if (currentRoutePath() !== path) return;
@@ -1642,6 +1682,18 @@ function highlightSidebar(hash) {
 
 let lastRenderedHash = null;
 let lastRenderedKey;
+// Tracks the last PATH (not hash) painted into the pane, so switching tabs —
+// or attempts within #/run/<id>, where the hash stays "run" — puts the pane
+// back at the top, while store ticks re-rendering the same path never touch
+// the reader's scroll position.
+let lastScrolledPath = null;
+
+function resetPaneScroll(path) {
+  if (path === lastScrolledPath) return;
+  lastScrolledPath = path;
+  const pane = document.getElementById("pane");
+  if (pane) pane.scrollTop = 0;
+}
 
 function renderRoute() {
   const path = currentRoutePath();
@@ -1662,6 +1714,7 @@ function renderRoute() {
   }
   lastRenderedHash = route.hash;
   route.render(state, path);
+  resetPaneScroll(path);
   applyTourHighlight();
 }
 
@@ -1946,6 +1999,7 @@ async function main() {
     initRunTreeClicks();
     initRunPicker();
     initTour();
+    initStaleServerBanner();
     runId = await resolveRunId();
     const showTour = shouldShowTour(window.localStorage);
     if (showTour) {

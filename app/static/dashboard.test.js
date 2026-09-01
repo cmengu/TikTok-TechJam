@@ -203,6 +203,50 @@ describe("dashboard hero html", () => {
     assert.ok(!html.includes("measured"));
   });
 
+  it("test_empty_hero_is_one_quiet_sentence_while_live", () => {
+    // The pre-first-measurement hero stacked four lines: "—" / "no wins
+    // yet" / "from the measurement layer" / "no accepted wins on the log
+    // yet" — a source citation for a number that doesn't exist plus two
+    // captions saying the same thing. No value → no source, no trust chip,
+    // and one forward-looking sentence (user order, 1 Sep).
+    const hero = buildHero({ available: false }, TRACE, {
+      attempt: 3,
+      runStatus: "running",
+    });
+    const html = heroHtml(hero);
+    assert.ok(html.includes("no score yet — attempt 3 is running"));
+    assert.ok(!html.includes("from the measurement layer"));
+    assert.ok(!html.includes("no accepted wins"));
+    assert.ok(!html.includes("no wins yet"));
+    assert.ok(!html.includes("chip-state"));
+  });
+
+  it("test_empty_hero_when_monitors_report_no_primary", () => {
+    // available: true but primary null is the same no-value case.
+    const hero = buildHero(
+      {
+        available: true,
+        primary: null,
+        claim_level: "L3",
+        claim_reason: "no promotions on the log",
+      },
+      TRACE,
+      { attempt: null, runStatus: "running" },
+    );
+    const html = heroHtml(hero);
+    assert.ok(html.includes("no score yet — waiting on the first attempt"));
+    assert.ok(!html.includes("no accepted wins on the log yet"));
+    assert.ok(!html.includes("from the measurement layer"));
+  });
+
+  it("test_empty_hero_after_run_ended_is_honest", () => {
+    const hero = buildHero({ available: false }, TRACE, {
+      attempt: null,
+      runStatus: "ended",
+    });
+    assert.ok(heroHtml(hero).includes("run ended with no accepted wins"));
+  });
+
   it("test_hero_source_is_plain_language_with_raw_key_on_hover", () => {
     // Fix list item 3: the literal "monitors.primary" reached the viewer.
     const html = heroHtml(buildHero(MONITORS, TRACE));

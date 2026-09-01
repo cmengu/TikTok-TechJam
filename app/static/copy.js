@@ -177,6 +177,22 @@ export const DICT = {
     word: "from the measurement layer",
     hint: null,
   },
+  // Empty-hero sentences (fix of the "— / no wins yet / from the measurement
+  // layer / no accepted wins on the log yet" stack): before the first
+  // measurement the hero says ONE forward-looking thing, picked by
+  // heroEmptyLabel below.
+  heroNoScoreLive: {
+    word: "no score yet — attempt {n} is running",
+    hint: null,
+  },
+  heroNoScoreWaiting: {
+    word: "no score yet — waiting on the first attempt",
+    hint: null,
+  },
+  heroNoScoreEnded: {
+    word: "run ended with no accepted wins",
+    hint: null,
+  },
   stampMeasured: { word: "measured", hint: null },
   stampForecast: { word: "forecast", hint: null },
   stampHover: {
@@ -189,6 +205,36 @@ export const DICT = {
   },
   provenanceCaption: {
     word: "0 exceptions possible — the gate refuses them.",
+    hint: null,
+  },
+  // Spend page (fix list item 12): three of four stages read 0 on most runs
+  // — the researcher never ran, and testing/tuning spend computer time, not
+  // words. Primary rows are the stages with words; the rest live in a fold
+  // with these explanations.
+  spendGpuLine: {
+    word: "testing ran {t} of GPU time",
+    hint: "training jobs spend computer time, not words",
+  },
+  spendStageIdle: {
+    word: "this stage has not run yet",
+    hint: null,
+  },
+  spendStageCompute: {
+    word: "this stage spends computer time, not words",
+    hint: null,
+  },
+  spendFoldSummary: {
+    word: "all four stages",
+    hint: null,
+  },
+  // Fix list item 11: endpoints ship with the page, so a 404 from one the
+  // page knows about means the serving process predates the page.
+  staleServer: {
+    word: "this server is older than the page — restart it",
+    hint: null,
+  },
+  staleServerDismiss: {
+    word: "dismiss",
     hint: null,
   },
   memoryTitle: {
@@ -406,6 +452,17 @@ export function attributionLabel(x) {
 export function claimLabel(level) {
   if (level == null) return passThrough(level);
   return DICT[level] ?? passThrough(level);
+}
+
+// The one sentence the hero shows when there is no score to show. live is
+// { attempt, runStatus } from the app shell (null when the caller has no
+// state, e.g. old call sites/tests — that reads as "waiting").
+export function heroEmptyLabel(live) {
+  if (live && live.runStatus === "ended") return DICT.heroNoScoreEnded.word;
+  if (live && live.attempt != null) {
+    return DICT.heroNoScoreLive.word.replace("{n}", String(live.attempt));
+  }
+  return DICT.heroNoScoreWaiting.word;
 }
 
 export function fmtScore(x) {

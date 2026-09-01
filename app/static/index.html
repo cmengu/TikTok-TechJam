@@ -113,6 +113,16 @@
       font-size: var(--fs-body);
       min-height: 100vh;
     }
+    /* Tab panes: the shell (rail + header strip + run picker) is fixed and
+       the body never scrolls — each route scrolls inside .content-pane
+       below. html gets the height chain so 100% resolves all the way down. */
+    html {
+      height: 100%;
+    }
+    .body-scroll-lock {
+      height: 100vh;
+      overflow: hidden;
+    }
     #view h2 {
       font-family: "Instrument Serif", Georgia, serif;
       font-weight: 400;
@@ -145,7 +155,7 @@
     .app {
       display: flex;
       align-items: stretch;
-      min-height: 100vh;
+      height: 100vh;
     }
 
     /* --- sidebar: the dark rail --- */
@@ -153,6 +163,9 @@
       flex: 0 0 228px;
       padding: var(--s5) var(--s3);
       background: var(--rail);
+      /* The rail is part of the fixed shell; on a short window it scrolls
+         itself rather than growing the page. */
+      overflow-y: auto;
     }
     #sidebar ul {
       list-style: none;
@@ -217,7 +230,22 @@
       flex: 1 1 auto;
       min-width: 0;
       max-width: 1400px;
-      padding: var(--s5) var(--s6) var(--s7);
+      /* Bottom padding moved into .content-pane so the scrollable area runs
+         to the window edge instead of stopping 48px short of it. */
+      padding: var(--s5) var(--s6) 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* The one scroll surface every route renders into. min-height: 0 lets
+       the flex item actually shrink below its content — without it the pane
+       grows and the overflow never engages. Inner boxes (.event-scroll,
+       .protocol-scroll) keep their own scrollbars nested inside. */
+    .content-pane {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding-bottom: var(--s7);
     }
 
     /* Header strip: run state · submission light · spend · interventions ·
@@ -311,6 +339,38 @@
     .dashboard-hero-caption {
       margin: var(--s3) 0 0;
       color: var(--ink-muted);
+    }
+    /* Pre-first-measurement hero: the dash is deliberate quiet, not missing
+       data — faint ink, single caption, nothing else. */
+    .dashboard-hero-score--empty {
+      color: var(--ink-faint);
+    }
+    /* Stale-server banner (fix list item 11): warn tokens, sits in the
+       fixed shell between the header strip and the scroll pane. */
+    #stale-server-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--s3);
+      margin-bottom: var(--s3);
+      padding: var(--s2) var(--s3);
+      background: var(--warn-wash);
+      color: var(--warn);
+      border: 1px solid var(--hairline-hi);
+      border-radius: var(--r-ctl);
+    }
+    #stale-server-banner[hidden] {
+      display: none;
+    }
+    #stale-server-dismiss {
+      border: 1px solid var(--hairline-hi);
+      border-radius: var(--r-ctl);
+      background: var(--surface);
+      color: var(--ink-muted);
+      font: inherit;
+      font-size: 0.8125rem;
+      padding: 0.1rem 0.5rem;
+      cursor: pointer;
     }
     .dashboard-live {
       color: var(--ink-muted);
@@ -1384,7 +1444,7 @@
     }
   </style>
 </head>
-<body>
+<body class="body-scroll-lock">
   <div class="app">
     <nav id="sidebar">
       <h1>Lux Max</h1>
@@ -1438,7 +1498,17 @@
         <button type="button" id="tour-replay" aria-label="Replay the first-run tour">?</button>
       </header>
       <div id="meta">loading…</div>
-      <div id="view"></div>
+      <!-- Fix list item 11: shown by flagStaleServer (app.js) when a known
+           endpoint 404s — the server predates the page. Text and button
+           label are filled from copy.js at boot; dismiss hides it for the
+           rest of the session. -->
+      <div id="stale-server-banner" hidden>
+        <span id="stale-server-text"></span>
+        <button type="button" id="stale-server-dismiss"></button>
+      </div>
+      <main id="pane" class="content-pane">
+        <div id="view"></div>
+      </main>
     </div>
   </div>
   <script type="module" src="/static/app.js"></script>
