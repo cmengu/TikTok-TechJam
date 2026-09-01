@@ -7,7 +7,7 @@ lessons it reads before proposing again. Ideas that "win" must survive repeat
 tests on fresh seeds, a hidden check they cannot train on, and an explanation
 test: a gain that can't show *why* it happened is refused.
 
-**Live dashboard:** https://tik-tok-tech-jam-xi.vercel.app — every run in this
+**Live dashboard:** https://luxmaxxing.vercel.app — every run in this
 repo, rendered from its event log.
 
 ---
@@ -33,14 +33,25 @@ accepted improvement.
 |---|---|---|---|
 | Official baseline (validation) | 0.6674 | 0.5357 | 0.6016 |
 | Official baseline (hidden test) | 0.6610 | 0.5282 | 0.5946 |
-| **This run, validation-best** | — | — | **0.5978** |
+| Our reproduction of their FM (validation) | 0.6671 | 0.5358 | 0.6015 |
+| **This run, validation-best** | 0.6607\* | not recorded\* | **0.5978** |
 
 **Absolute delta vs the official validation baseline: −0.0038.**
 
+\* The measurement ladder scores every attempt on the **primary** metric, so
+per-attempt verdicts carry primary only; GAUC and nDCG@5 are computed by the
+organisers' `evaluate.py` on every run but reach the log per-attempt only when
+a hypothesis declares them as observables for the attribution gate. The
+accepted iteration declared GAUC, hence 0.6607 (its screen reading; 0.6507 at
+replicate); it did not declare nDCG@5, so no per-attempt value exists for it.
+Recording the full metric triple on every attempt is a one-line change to the
+verdict payload and the first thing we would fix.
+
 We do not beat the organisers' baseline on absolute score, and we say so
-plainly. Our in-harness reproduction of their FM starts at ≈0.5964 on
-validation — below their 0.6016 — so everything the agent gained was spent
-climbing back toward their starting line. What the agent *did* achieve is a
+plainly. Our port reproduces their FM almost exactly at full strength
+(0.6015 vs 0.6016), but the search trains candidates at a reduced budget for
+speed, so the loop starts from ≈0.5956 — everything the agent gained was
+spent climbing back toward their starting line. What the agent *did* achieve is a
 genuine, fully-certified improvement over its own baseline:
 
 > **Iteration 4 (`dur-log-buckets`) — accepted.** Mean Δ **+0.0022** against a
@@ -152,9 +163,12 @@ provenance stamp. Write-up: `context/Unexplained_win_investigation.md`.
 
 ## Limitations, and what we'd do next
 
-- **We start below the organisers' baseline.** Our FM port reproduces ≈0.5964
-  validation against their 0.6016; closing that gap is the single highest-value
-  fix and would turn the agent's real +0.0022 into a positive absolute delta.
+- **The search runs on a weakened baseline.** Our port reproduces their FM
+  faithfully at full strength (0.6015 vs 0.6016 validation), but the loop
+  trains candidates at a reduced budget for speed, which starts the search at
+  ≈0.5956. Everything the agent gained was spent climbing back. Running the
+  search at full training strength is the single highest-value fix and would
+  turn the agent's real +0.0022 into a positive absolute delta.
 - **The researcher rarely gets a turn.** It only proposes once the seeded
   queue drains, and for most of our history plumbing failures ate the budget
   first. The throughput fixes landed late; the next milestone is a run where
