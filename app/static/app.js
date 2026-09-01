@@ -1813,6 +1813,18 @@ function connectHeartbeat() {
 // Item 8's second freeze path: /runs empty (or the server briefly away)
 // used to throw straight out of main() — the app died before its first
 // paint and never looked again. Keep asking with the same backoff.
+// The run a first-time visitor should land on. This is the scored run — the
+// one with an accepted improvement and a written submission — so the bare
+// domain opens on the work being presented rather than on whichever run
+// happens to be newest. An explicit ?run= always wins, and if this id is not
+// on the server the newest run is used instead.
+export const PREFERRED_RUN = "kuairand-20260831-180915";
+
+function pickDefaultRun(runs) {
+  const preferred = runs.find((r) => r.run_id === PREFERRED_RUN);
+  return preferred ? preferred.run_id : runs[0].run_id;
+}
+
 async function resolveRunId() {
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("run");
@@ -1821,7 +1833,7 @@ async function resolveRunId() {
     try {
       const res = await fetch("/runs");
       const runs = await res.json();
-      if (runs.length) return runs[0].run_id;
+      if (runs.length) return pickDefaultRun(runs);
       metaEl().textContent = "waiting for the first run to appear…";
     } catch (_) {
       metaEl().textContent = "waiting for the server…";
@@ -1885,9 +1897,12 @@ function followNewestRun() {
       if (!runs.length) return;
       renderRunPicker(runs);
       const pinned = new URLSearchParams(location.search).get("run");
-      // Default to the newest run only while nothing is pinned by the URL.
-      if (!pinned && runs[0].run_id !== runId) {
-        switchRun(runs[0].run_id);
+      // Follow the default only while nothing is pinned by the URL — and the
+      // default is the scored run when it exists, so a fresh run starting in
+      // the background does not pull a reader off it.
+      const target = pickDefaultRun(runs);
+      if (!pinned && target !== runId) {
+        switchRun(target);
       }
     } catch (_) {
       /* server away; try again next tick */
