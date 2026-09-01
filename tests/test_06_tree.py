@@ -944,3 +944,75 @@ def test_hand_patch_survives_coder_failure(tmp_path: Path):
 
     assert ok is True
     assert node.state == "screening"        # untouched — the node proceeds
+
+
+def test_drained_queue_reaches_researcher(tmp_path: Path):
+    """Fix 3 (throughput batch): when the queue drains mid-run, refill_queue
+    must reach researcher.propose(), and the proposed hypothesis must become
+    a node. A propose() crash or duplicate must end the run gracefully
+    (empty_queue), never kill it."""
+    from harness.agents.cache import ResearchCache
+    from harness.agents.llm import FakeLLM, Usage
+    from harness.agents.researcher import refill_once
+    from harness.tree import family_stats
+
+    measure = FakeMeasure(script=[_verdict("rejected"), _verdict("rejected")])
+    runner = FakeRunner()
+    tree, events, run_dir, _ws = _make_tree(
+        tmp_path, measure, runner, [_hyp("h-only", mechanism="fz")]
+    )
+    empty_diff = tmp_path / "empty.diff"
+    empty_diff.write_text("", encoding="utf-8")
+    tree.coder = _OkCoder(empty_diff)
+    tree.max_nodes = 5
+
+    payload = {
+        "stage": "features",
+        "mechanism": "row-weighting",
+        "description": "reweight training rows by recency",
+        "citation": "no prior",
+        "expected_gain": 0.01,
+        "expected_gpu_h": 0.1,
+        "claim": {
+            "mechanism": "row-weighting",
+            "observables": [
+                {"name": "gauc", "source": "harness", "direction": "positive"}
+            ],
+        },
+    }
+    # One scripted proposal; the second drain finds the researcher exhausted
+    # (stand-in for a transport error) and must not crash the run.
+    rllm = FakeLLM({"researcher": [(payload, Usage(10, 10))]})
+    cache = ResearchCache(
+        "proto-hash", events=events, path=tmp_path / "cache.jsonl"
+    )
+
+    def refill() -> None:
+        refill_once(
+            rllm,
+            "brief",
+            "incumbent summary",
+            family_stats(tree._read_log()),  # noqa: SLF001
+            [],
+            cache,
+            tree.queue,
+            tree.hyp_index,
+        )
+
+    tree.refill_queue = refill
+    tree.run()
+    events.close()
+
+    assert "researcher" in rllm.prompts  # propose() actually fired
+    rows = _read_events(run_dir)
+    queued = [e for e in rows if e.get("type") == "hypothesis_queued"]
+    assert len(queued) == 2  # the seed hyp + the researcher's proposal
+    proposed = [
+        e
+        for e in rows
+        if e.get("type") == "node_created"
+        and str(e.get("hypothesis_id", "")).startswith("hyp-")
+    ]
+    assert proposed, "researcher proposal never became a node"
+    ended = [e for e in rows if e.get("type") == "run_ended"]
+    assert ended and ended[-1]["reason"] == "empty_queue"
