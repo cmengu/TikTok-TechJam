@@ -1,5 +1,9 @@
 # Lux Max — an autonomous ML research harness
 
+<video src="https://github.com/cmengu/TikTok-TechJam/raw/main/docs/luxmax-demo.mp4" controls width="100%"></video>
+
+▶ [Watch the walkthrough](https://github.com/cmengu/TikTok-TechJam/raw/main/docs/luxmax-demo.mp4) (if the player above doesn't load)
+
 **TikTok TechJam · KuaiRand-Pure track.** Point it at the dataset and walk away:
 it proposes experiments, writes its own code changes, trains and scores them,
 and decides — alone — which improvements are real. Ideas that fail become
@@ -292,6 +296,5 @@ provenance stamp. Write-up: `context/Unexplained_win_investigation.md`.
 - **Bonus benchmarks skipped.** KuaiRand-1k and 27k were deliberately not
   attempted, to protect the deadline.
 
-Solo project — all components by the repo owner, with LLM coding assistance.
 
 ---
