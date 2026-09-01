@@ -105,7 +105,7 @@ Every attempt with its move, its stage, and its verdict — and on the right,
 `deep-cross`: the score moved, but `gauc` and `ndcg_at_5` — the observables its
 own hypothesis declared — did not, so the gain was never written into memory.
 
-![Attempts — why we believe it, credit refused](docs/images/attribution-refused.png)
+![Attempts — why we believe it, credit refused](docs/images/attempts.png)
 
 ---
 
@@ -143,7 +143,7 @@ logged rather than dying silently. This run crashed once and **rescued six**
 attempts that would previously have been lost.
 `harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file fallback).
 
-![Stability — crashes, rescued 6, rulebook trips 0](docs/images/stability-recoveries.png)
+![Stability — crashes, rescued 6, rulebook trips 0](docs/images/stability.png)
 
 ### AIRA-dojo (Meta) — measure before you believe
 
@@ -152,14 +152,14 @@ from the candidate's environment, scoring done outside the candidate — and
 every look at the hidden check counted against a budget. `harness/runner.py`
 (`_build_env` whitelist), `harness/tasks/kuairand.py`.
 
-![Health — hidden check visited 0 of 12](docs/images/hidden-check.png)
+![Health — hidden check visited 0 of 12](docs/images/health.png)
 
 **6 · A frozen, hashed protocol.** The data, the splits and the scorer are
 pinned by SHA-256; changing any of them means results are no longer comparable,
 and a changed `evaluate.py` stops the run rather than quietly changing the
 numbers. `harness/protocol.py`, `protocols/kuairand.yaml`.
 
-![Rules — hashed, defines comparability](docs/images/frozen-protocol.png)
+![Rules — hashed, defines comparability](docs/images/rules-hashed.png)
 
 ### AIDE (Weco) — the search itself
 
@@ -180,7 +180,7 @@ discipline: each idea carries an *expected* gain, and the page shows what it
 actually delivered beside it — `expected 0.003 (forecast) · actual +0.0000
 (measured)`. `harness/outputs.py`, `harness/runner.py`.
 
-![Ideas — expected forecast vs actual measured](docs/images/ideas-forecast-vs-actual.png)
+![Ideas — expected forecast vs actual measured](docs/images/ideas.png)
 
 ---
 
