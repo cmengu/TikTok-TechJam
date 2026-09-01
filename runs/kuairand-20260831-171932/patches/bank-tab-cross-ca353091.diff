@@ -1,0 +1,124 @@
+--- a/template.py
++++ b/template.py
+@@ -8,6 +8,7 @@ import csv
+ import io
+ import os
+ import sys
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+@@ -15,6 +16,7 @@ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++CROSS_FEATURES = (("user_id", "tab"), ("tab", "dur_bucket"))
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -26,12 +28,27 @@ def _env_int(name: str, default: int) -> int:
+ def _active_fields() -> tuple[str, ...]:
+     raw = os.environ.get("FEATURES", "base")
+     if raw.strip() in ("", "base"):
+         return FIELDS
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
++def _active_cross_features() -> tuple[tuple[str, str], ...]:
++    raw = os.environ.get("CROSS_FEATURES")
++    if raw is None or raw.strip() in ("default", "all", ""):
++        return CROSS_FEATURES
++    elif raw.strip() in ("none", "false"):
++        return ()
++    else:
++        # Custom specification: comma-separated pairs like "user_id:tab,tab:dur_bucket"
++        pairs = []
++        for pair in raw.split(","):
++            parts = pair.strip().split(":")
++            if len(parts) == 2:
++                pairs.append((parts[0].strip(), parts[1].strip()))
++        return tuple(pairs)
++
++
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray, cross_features: tuple[tuple[str, str], ...] = ()) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+@@ -39,6 +56,14 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+         else:
+             tokens.append(row[name])
++    
++    # Add explicit cross-product tokens
++    base_tokens = {name: tokens[i] for i, name in enumerate(fields)}
++    for field1, field2 in cross_features:
++        if field1 in base_tokens and field2 in base_tokens:
++            cross_token = f"{base_tokens[field1]}:{base_tokens[field2]}"
++            tokens.append(cross_token)
++    
+     return tokens
+ 
+ 
+@@ -49,17 +74,18 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+ 
+ 
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    cross_features: tuple[tuple[str, str], ...] = (),
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+-    x = np.empty((len(rows), len(fields)), dtype=np.int32)
++    num_features = len(fields) + len(cross_features)
++    x = np.empty((len(rows), num_features), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, cross_features)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+@@ -67,14 +93,15 @@ def _encode_rows(
+ 
+ 
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    cross_features: tuple[tuple[str, str], ...] = (),
+ ):
+-    vocabs = [dict() for _ in fields]
++    num_features = len(fields) + len(cross_features)
++    vocabs = [dict() for _ in range(num_features)]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, cross_features)):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+     field_dims = [len(v) + 1 for v in vocabs]
+     offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+@@ -154,17 +181,18 @@ def main() -> None:
+     workspace = Path(os.environ["WORKSPACE"])
+     fields = _active_fields()
++    cross_features = _active_cross_features()
+     max_rows = os.environ.get("MAX_ROWS")
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields, cross_features)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, cross_features)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, cross_features)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

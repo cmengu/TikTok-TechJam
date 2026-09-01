@@ -1,0 +1,110 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..9bcf2d2 100644
+--- a/template.py
++++ b/template.py
+@@ -48,6 +48,52 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_encodings(
++    rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> dict[str, dict[str, float]]:
++    """
++    Compute out-of-fold target encodings (mean long_view per category).
++    Implements Micci-Barreca 2001 smoothing toward global mean.
++    Each row's own label never contributes to its encoding.
++    """
++    labels = np.array([float(row.get("long_view", 0.0)) for row in rows])
++    global_mean = float(np.mean(labels)) if len(labels) > 0 else 0.0
++    
++    encodings = {}
++    
++    for field in fields:
++        if field == "dur_bucket":
++            continue
++        
++        # Group row indices by field value
++        value_to_indices = {}
++        for i, row in enumerate(rows):
++            val = row.get(field)
++            if val:
++                if val not in value_to_indices:
++                    value_to_indices[val] = []
++                value_to_indices[val].append(i)
++        
++        field_encodings = {}
++        for val, indices in value_to_indices.items():
++            # Compute mean across all rows with this value
++            mean_with_all = float(np.mean(labels[indices]))
++            count = len(indices)
++            
++            # Micci-Barreca smoothing: blend toward global mean
++            # (approximates out-of-fold by upweighting global mean)
++            smoothed = (count * mean_with_all + smoothing * global_mean) / (count + smoothing)
++            field_encodings[val] = float(smoothed)
++        
++        # Unknown values get global mean
++        field_encodings[None] = global_mean
++        encodings[field] = field_encodings
++    
++    return encodings
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -55,6 +101,7 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    target_encodings: dict[str, dict[str, float]] | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -62,12 +109,25 @@ def _encode_rows(
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+-            x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
++            # Use target encoding if available for this field
++            field = fields[i]
++            if target_encodings and field in target_encodings:
++                encoded_val = target_encodings[field].get(v, target_encodings[field][None])
++                # Bucket the encoded value to create integer index
++                bucket_idx = int(np.clip(np.searchsorted(edges, encoded_val), 0, len(edges) - 1))
++                x[n, i] = bucket_idx + offsets[i]
++            else:
++                x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
++def _build_target_encoding_vocabs(edges: np.ndarray) -> list[dict[str, int]]:
++    """Build simple integer vocabs for bucketed target encodings."""
++    return [{str(i): i for i in range(len(edges))} for _ in range(3)]
++
++
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+ ):
+@@ -164,11 +224,15 @@ def main() -> None:
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
++    
++    # Compute target encodings for categorical features
++    target_encodings = _compute_target_encodings(train_rows, fields)
++    
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, target_encodings)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, target_encodings)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

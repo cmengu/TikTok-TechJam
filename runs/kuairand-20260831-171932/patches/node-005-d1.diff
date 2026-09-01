@@ -1,0 +1,43 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..52dd12c 100644
+--- a/template.py
++++ b/template.py
+@@ -16,6 +16,10 @@ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
++def _cross_tokens(base: dict[str, str]) -> dict[str, str]:
++    return {"user_id×tab": f"{base['user_id']}:{base['tab']}", "tab×dur_bucket": f"{base['tab']}:{base['dur_bucket']}"}
++
++
+ def _env_int(name: str, default: int) -> int:
+     raw = os.environ.get(name)
+     return int(raw) if raw else default
+@@ -25,6 +29,8 @@ def _active_fields() -> tuple[str, ...]:
+     raw = os.environ.get("FEATURES", "base")
+     if raw.strip() in ("", "base"):
+         return FIELDS
++    if raw.strip() == "tab-cross":
++        return FIELDS + ("user_id×tab", "tab×dur_bucket")
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+@@ -33,8 +39,17 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray)
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
+-        else:
++        elif name in FIELDS:
+             tokens.append(row[name])
++        elif name.startswith("user_id×") or name.startswith("tab×"):
++            base = {}
++            for field in FIELDS:
++                if field == "dur_bucket":
++                    base[field] = str(int(np.searchsorted(edges, float(row["duration_ms"]))))
++                else:
++                    base[field] = row[field]
++            cross = _cross_tokens(base)
++            tokens.append(cross.get(name, ""))
+     return tokens
+ 
+ 

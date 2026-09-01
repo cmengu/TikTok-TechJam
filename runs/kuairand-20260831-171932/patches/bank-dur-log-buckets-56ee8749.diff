@@ -1,0 +1,28 @@
+--- template.py
++++ template.py
+@@ -41,11 +41,12 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+-            tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++            log_duration = np.log1p(float(row["duration_ms"]))
++            tokens.append(str(int(np.searchsorted(edges, log_duration))))
+         else:
+             tokens.append(row[name])
+     return tokens
+ 
+ 
+ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+@@ -53,7 +54,10 @@ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+     with path.open(newline="", encoding="utf-8") as fh:
+         return list(csv.DictReader(fh))
+ 
+ 
+-def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+-    return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
++def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
++    """Compute log-scaled bucket edges for duration discretization.
++    
++    Provides finer resolution under 60s where most videos concentrate."""
++    log_durations = np.log1p(np.asarray(durations, dtype=np.float64))
++    return np.quantile(log_durations, np.linspace(0, 1, n + 1)[1:-1])

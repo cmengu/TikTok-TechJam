@@ -1,0 +1,193 @@
+--- template.py
++++ template.py
+@@ -1,6 +1,7 @@
+ """KuaiRand FM baseline candidate — numpy + csv only, no valid-label early stop."""
+ 
+ from __future__ import annotations
++from typing import Literal
+ 
+ import csv
+ import io
+@@ -54,6 +55,80 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_encodings(
++    rows: list[dict[str, str]],
++    fields_to_encode: tuple[str, ...],
++) -> tuple[float, dict[str, dict[str, tuple[int, float]]]]:
++    """
++    Compute target-encoding statistics using out-of-fold leave-one-out.
++
++    For each field-value pair, computes count and sum of long_view labels.
++    During prediction, OOF encoding excludes the current row's contribution.
++
++    Micci-Barreca 2001: A preprocessing scheme for high-cardinality categorical attributes.
++
++    Args:
++        rows: training rows with long_view label
++        fields_to_encode: field names to target-encode (e.g., user_id, video_id, author_id)
++
++    Returns:
++        global_mean: mean of long_view across all rows
++        stats: dict mapping field -> value -> (count, sum) for OOF computation
++    """
++    labels = np.array([float(row.get("long_view", 0.0)) for row in rows])
++    global_mean = float(np.mean(labels))
++
++    stats = {}
++    for field in fields_to_encode:
++        field_stats = {}
++        for idx, row in enumerate(rows):
++            value = row[field]
++            if value not in field_stats:
++                field_stats[value] = {"count": 0, "sum": 0.0}
++            field_stats[value]["count"] += 1
++            field_stats[value]["sum"] += labels[idx]
++
++        stats[field] = {v: (s["count"], s["sum"]) for v, s in field_stats.items()}
++
++    return global_mean, stats
++
++
++def _encode_target(
++    row_label: float,
++    field_value: str,
++    field_stats: dict[str, tuple[int, float]],
++    global_mean: float,
++    smoothing: float = 1.0,
++) -> float:
++    """
++    Compute smoothed out-of-fold target encoding for a single field value.
++
++    Smooths OOF mean toward global mean: (oof_count * oof_mean + smoothing * global_mean) / (oof_count + smoothing)
++    """
++    if field_value not in field_stats:
++        return global_mean
++
++    count, total_sum = field_stats[field_value]
++    oof_count = count - 1
++    oof_sum = total_sum - row_label
++
++    if oof_count <= 0:
++        return global_mean
++
++    oof_mean = oof_sum / oof_count
++    smoothed = (oof_count * oof_mean + global_mean * smoothing) / (oof_count + smoothing)
++    return float(smoothed)
++
++
++def _encode_validation_target(
++    field_value: str,
++    field_stats: dict[str, tuple[int, float]],
++    global_mean: float,
++    smoothing: float = 1.0,
++) -> float:
++    """Encode validation/test row: all training data is in fold, so use full count."""
++    if field_value not in field_stats:
++        return global_mean
++    count, total_sum = field_stats[field_value]
++    mean = total_sum / count
++    smoothed = (count * mean + global_mean * smoothing) / (count + smoothing)
++    return float(smoothed)
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -61,6 +136,8 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    te_fields: tuple[str, ...] = (),
++    te_stats: dict[str, dict[str, tuple[int, float]]] | None = None,
++    global_mean: float = 0.0,
++    is_training: bool = False,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -68,12 +145,36 @@ def _encode_rows(
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+-            x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
++            # Check if this field should use target encoding
++            field_name = fields[i] if i < len(fields) else None
++            if field_name in te_fields and te_stats is not None:
++                # Compute target-encoded value
++                label = float(row.get("long_view", 0.0)) if is_training and "long_view" in row else 0.0
++                if is_training:
++                    encoded_val = _encode_target(label, v, te_stats[field_name], global_mean)
++                else:
++                    encoded_val = _encode_validation_target(v, te_stats[field_name], global_mean)
++                # Map encoded float value to vocab index (quantize into buckets)
++                # Use 10 buckets for target encoding
++                te_bucket = min(int(encoded_val * 10), 9)
++                te_key = f"te_bucket_{te_bucket}"
++                x[n, i] = vocabs[i].get(te_key, unk[i]) + offsets[i]
++            else:
++                x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
++def _build_vocabs_with_te(
++    train_rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    te_fields: tuple[str, ...],
++    global_mean: float,
++) -> tuple[list[dict[str, int]], list[int], np.ndarray]:
++    """Build vocabularies including target-encoding buckets."""
++    vocabs = [dict() for _ in fields]
++    for row in train_rows:
++        for i, v in enumerate(_row_tokens(row, fields, edges)):
++            field_name = fields[i] if i < len(fields) else None
++            if field_name in te_fields:
++                # Populate TE buckets
++                for te_bucket in range(10):
++                    te_key = f"te_bucket_{te_bucket}"
++                    if te_key not in vocabs[i]:
++                        vocabs[i][te_key] = len(vocabs[i])
++            else:
++                if v not in vocabs[i]:
++                    vocabs[i][v] = len(vocabs[i])
++    unk = [len(v) for v in vocabs]
++    field_dims = [len(v) + 1 for v in vocabs]
++    offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
++    return vocabs, unk, offsets
++
++
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+ ):
+@@ -144,16 +245,24 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
++
++    # Compute target encodings for high-cardinality fields
++    te_fields = ("user_id", "video_id", "author_id")
++    global_mean, te_stats = _compute_target_encodings(train_rows, te_fields)
++
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+-    dim = int(offsets[-1] + len(vocabs[-1]) + 1)
++    # Rebuild vocabs to include TE buckets
++    vocabs, unk, offsets = _build_vocabs_with_te(train_rows, edges, fields, te_fields, global_mean)
++    dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+     xtr, ytr = _encode_rows(
+-        train_rows, vocabs, unk, offsets, edges, fields
++        train_rows, vocabs, unk, offsets, edges, fields,
++        te_fields=te_fields, te_stats=te_stats, global_mean=global_mean, is_training=True
+     )
+     xva, _ = _encode_rows(
+-        valid_rows, vocabs, unk, offsets, edges, fields
++        valid_rows, vocabs, unk, offsets, edges, fields,
++        te_fields=te_fields, te_stats=te_stats, global_mean=global_mean, is_training=False
+     )
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)

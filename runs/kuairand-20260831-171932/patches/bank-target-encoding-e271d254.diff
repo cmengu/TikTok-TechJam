@@ -1,0 +1,128 @@
+--- a/template.py
++++ b/template.py
+@@ -11,6 +11,9 @@ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
+ DEFAULT_EPOCHS = 11
++TARGET_ENCODE_FIELDS = ("user_id", "video_id", "author_id")
++TARGET_ENCODE_SMOOTHING = 1.0
++
+ 
+ 
+ def _env_int(name: str, default: int) -> int:
+@@ -80,6 +83,82 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _compute_oof_target_encodings(
++    rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    smoothing: float = TARGET_ENCODE_SMOOTHING,
++) -> tuple[dict[str, np.ndarray], float]:
++    """Compute out-of-fold target encodings based on long_view.
++    
++    For each field, computes per-row encoding as the smoothed mean of long_view
++    for all rows with the same field value, excluding the current row.
++    Implements Micci-Barreca 2001 preprocessing scheme for high-cardinality categoricals.
++    """
++    if not rows or "long_view" not in rows[0]:
++        return {}, 0.5
++    
++    labels = np.array([float(row["long_view"]) for row in rows])
++    global_mean = np.mean(labels)
++    
++    encodings = {}
++    for field in fields:
++        field_enc = np.empty(len(rows), dtype=np.float32)
++        
++        # Group row indices by field value
++        groups = {}
++        for i, row in enumerate(rows):
++            val = row[field]
++            if val not in groups:
++                groups[val] = []
++            groups[val].append(i)
++        
++        # For each row, compute mean excluding itself
++        for val, indices in groups.items():
++            indices_arr = np.array(indices, dtype=np.int32)
++            for row_idx in indices:
++                mask = indices_arr != row_idx
++                other_labels = labels[indices_arr[mask]]
++                other_mean = np.mean(other_labels)
++                count = len(other_labels)
++                
++                # Smooth toward global mean
++                smoothed = (count * other_mean + smoothing * global_mean) / (count + smoothing)
++                field_enc[row_idx] = smoothed
++        
++        encodings[field] = field_enc
++    
++    return encodings, global_mean
++
++
++def _apply_static_target_encodings(
++    rows: list[dict[str, str]],
++    train_rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    smoothing: float = TARGET_ENCODE_SMOOTHING,
++) -> dict[str, np.ndarray]:
++    """Apply target encodings from train_rows to any rows (e.g., validation)."""
++    if not train_rows or "long_view" not in train_rows[0]:
++        return {}
++    
++    train_labels = np.array([float(row["long_view"]) for row in train_rows])
++    global_mean = np.mean(train_labels)
++    
++    encodings = {}
++    for field in fields:
++        groups = {}
++        for i, row in enumerate(train_rows):
++            val = row[field]
++            if val not in groups:
++                groups[val] = []
++            groups[val].append(i)
++        
++        field_enc = np.empty(len(rows), dtype=np.float32)
++        for i, row in enumerate(rows):
++            val = row[field]
++            if val in groups:
++                val_labels = train_labels[groups[val]]
++                val_mean = np.mean(val_labels)
++                count = len(val_labels)
++                smoothed = (count * val_mean + smoothing * global_mean) / (count + smoothing)
++                field_enc[i] = smoothed
++            else:
++                field_enc[i] = global_mean
++        encodings[field] = field_enc
++    
++    return encodings
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -155,6 +234,24 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
++    # Compute out-of-fold target encodings for train, static for valid
++    te_train, _ = _compute_oof_target_encodings(train_rows, TARGET_ENCODE_FIELDS)
++    te_valid = _apply_static_target_encodings(valid_rows, train_rows, TARGET_ENCODE_FIELDS)
++    
++    # Append target-encoded features to both train and valid
++    if te_train and TARGET_ENCODE_FIELDS:
++        te_cols = [te_train[f] for f in TARGET_ENCODE_FIELDS if f in te_train]
++        if te_cols:
++            te_matrix = np.column_stack(te_cols).astype(np.float32)
++            xtr = np.column_stack((xtr.astype(np.float32), te_matrix))
++    
++    if te_valid and TARGET_ENCODE_FIELDS:
++        te_cols = [te_valid[f] for f in TARGET_ENCODE_FIELDS if f in te_valid]
++        if te_cols:
++            te_matrix = np.column_stack(te_cols).astype(np.float32)
++            xva = np.column_stack((xva.astype(np.float32), te_matrix))
++    
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
