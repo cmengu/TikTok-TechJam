@@ -535,3 +535,148 @@ def test_strip_fences_plain_text_unchanged():
 
     plain = "--- a/t.py\n+++ b/t.py\n@@ -1,1 +1,1 @@\n-a\n+b"
     assert _strip_fences(plain) == plain
+
+
+# --- Fix 1 (throughput batch): prose sanitizer, bounded retry, full-file fallback ---
+
+# The exact failure shape from runs/kuairand-20260901-004255: the coder leaks a
+# prose sentence before the diff body, and `git apply --recount` dies with
+# "warning: recount: unexpected line: 'This imple…'".
+PROSE_PREAMBLE_DIFF = (
+    "This implementation adds Micci-Barreca smoothed target encoding "
+    "for user_id, video_id, and author_id:\n\n" + GOOD_DIFF
+)
+
+# Prose between the +++ header and the first hunk — git calls this a corrupt
+# patch outright (no recount rescue possible).
+PROSE_BETWEEN_HEADER_AND_HUNK_DIFF = GOOD_DIFF.replace(
+    "@@ -137,7 +137,7 @@",
+    "The hunk below flips the feature flag.\n@@ -137,7 +137,7 @@",
+    1,
+)
+
+PROSE_TRAILER_DIFF = GOOD_DIFF + (
+    "\nThis change wires the new feature through the existing encode path.\n"
+)
+
+# Prose sandwiched between valid hunk-body lines: ambiguous, must fail cleanly
+# BEFORE git apply rather than be guessed at.
+PROSE_INTERIOR_DIFF = GOOD_DIFF.replace(
+    "     batch_size = int(os.environ.get(\"BATCH\", \"4096\"))\n",
+    "Note that the following line stays unchanged.\n"
+    "     batch_size = int(os.environ.get(\"BATCH\", \"4096\"))\n",
+)
+
+FULL_FILE_FALLBACK_SOURCE = '"""candidate rewritten wholesale by the coder."""\n\nX = 1\n'
+
+
+def test_sanitize_strips_prose_preamble(tmp_path: Path):
+    from harness.agents.coder import sanitize_diff
+
+    clean, err = sanitize_diff(PROSE_PREAMBLE_DIFF)
+    assert err is None
+    assert clean.strip() == GOOD_DIFF.strip()
+
+
+def test_sanitize_strips_prose_trailer(tmp_path: Path):
+    from harness.agents.coder import sanitize_diff
+
+    clean, err = sanitize_diff(PROSE_TRAILER_DIFF)
+    assert err is None
+    assert clean.strip() == GOOD_DIFF.strip()
+
+
+def test_sanitize_clean_diff_is_identity(tmp_path: Path):
+    from harness.agents.coder import sanitize_diff
+
+    clean, err = sanitize_diff(GOOD_DIFF)
+    assert err is None
+    assert clean.strip() == GOOD_DIFF.strip()
+
+
+def test_sanitize_interior_prose_fails_cleanly(tmp_path: Path):
+    from harness.agents.coder import sanitize_diff
+
+    clean, err = sanitize_diff(PROSE_INTERIOR_DIFF)
+    assert err is not None
+    assert "prose" in err
+
+
+def test_sanitize_pure_prose_fails_cleanly(tmp_path: Path):
+    from harness.agents.coder import sanitize_diff
+
+    clean, err = sanitize_diff("I would implement target encoding like this.")
+    assert err is not None
+
+
+def test_coder_applies_prose_wrapped_diff_first_try(tmp_path: Path):
+    """The evidence shape: prose + valid diff must apply without burning a retry."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run-prose", "test-run-prose")
+    llm = FakeLLM(
+        {"coder": [(PROSE_BETWEEN_HEADER_AND_HUNK_DIFF, _usage())]}
+    )
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert len(llm.prompts["coder"]) == 1
+    assert ws.commit_node(1, path)
+
+
+def test_coder_falls_back_to_full_file(tmp_path: Path):
+    """Two failing diffs, then a full-file response: the node still materialises."""
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run-ff", "test-run-ff")
+    llm = FakeLLM(
+        {
+            "coder": [
+                (BAD_DIFF, _usage()),
+                (BAD_DIFF, _usage()),
+                (FULL_FILE_FALLBACK_SOURCE, _usage()),
+            ]
+        }
+    )
+    coder = LLMCoder(llm, ws, events=events)
+    path = coder.materialise(_hyp(), _node(), None)
+    assert len(llm.prompts["coder"]) == 3
+    assert "complete" in llm.prompts["coder"][2].lower()
+    sha = ws.commit_node(1, path)
+    assert sha
+    ws.checkout(sha)
+    assert (ws.path / "template.py").read_text(encoding="utf-8") == FULL_FILE_FALLBACK_SOURCE
+
+
+def test_coder_fallback_rejects_broken_python(tmp_path: Path):
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run-ffbad", "test-run-ffbad")
+    llm = FakeLLM(
+        {
+            "coder": [
+                (BAD_DIFF, _usage()),
+                (BAD_DIFF, _usage()),
+                ("def broken(:\n", _usage()),
+            ]
+        }
+    )
+    coder = LLMCoder(llm, ws, events=events)
+    with pytest.raises(RuntimeError):
+        coder.materialise(_hyp(), _node(), None)
+
+
+def test_coder_emits_retry_and_fallback_recovery_events(tmp_path: Path):
+    events = _events(tmp_path)
+    ws = Workspace(tmp_path / "run-ev", "test-run-ev")
+    llm = FakeLLM(
+        {
+            "coder": [
+                (BAD_DIFF, _usage()),
+                (BAD_DIFF, _usage()),
+                (FULL_FILE_FALLBACK_SOURCE, _usage()),
+            ]
+        }
+    )
+    coder = LLMCoder(llm, ws, events=events)
+    coder.materialise(_hyp(), _node(), None)
+    rows = _read_events(events)
+    actions = [r.get("action") for r in rows if r.get("type") == "recovery"]
+    assert "patch_retried" in actions
+    assert "fullfile_fallback" in actions
