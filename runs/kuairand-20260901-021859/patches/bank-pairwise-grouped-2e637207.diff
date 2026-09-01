@@ -1,0 +1,85 @@
+--- a/template.py
++++ b/template.py
+@@ -110,20 +110,70 @@ class FM:
+     def step(self, X: np.ndarray, y: np.ndarray) -> float:
+         bsz = len(y)
+         z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++        
++        # Initialize gradient array for BPR pairing
++        g = np.zeros(bsz, dtype=np.float32)
++        total_loss = 0.0
++        num_samples = 0
++        
++        # Group by user_id (column 0 of X)
++        user_ids = X[:, 0]
++        unique_users = np.unique(user_ids)
++        rng = np.random.default_rng(np.random.randint(0, 2**31))
++        
++        for user_id in unique_users:
++            mask = user_ids == user_id
++            user_indices = np.where(mask)[0]
++            user_y = y[user_indices]
++            
++            # Separate positive and negative indices within this user
++            pos_indices = user_indices[user_y == 1]
++            neg_indices = user_indices[user_y == 0]
++            
++            num_pos = len(pos_indices)
++            num_neg = len(neg_indices)
++            num_pairs = min(num_pos, num_neg)
++            
++            # Pair positives with sampled negatives
++            if num_pairs > 0:
++                sampled_neg_locs = rng.choice(num_neg, size=num_pairs, replace=False)
++                pos_pair = pos_indices[:num_pairs]
++                neg_pair = neg_indices[sampled_neg_locs]
++                
++                z_pos = z[pos_pair]
++                z_neg = z[neg_pair]
++                
++                # BPR loss: -log(sigmoid(z_pos - z_neg))
++                pair_pred = sigmoid(z_pos - z_neg)
++                g[pos_pair] = pair_pred - 1.0
++                g[neg_pair] = 1.0 - pair_pred
++                
++                total_loss += -np.sum(np.log(pair_pred + 1e-9))
++                num_samples += num_pairs
++            
++            # Pointwise loss for unpaired positives
++            unpaired_pos = pos_indices[num_pairs:]
++            if len(unpaired_pos) > 0:
++                z_up = z[unpaired_pos]
++                pred_up = sigmoid(z_up)
++                g[unpaired_pos] = pred_up - 1.0
++                total_loss += -np.sum(np.log(pred_up + 1e-9))
++                num_samples += len(unpaired_pos)
++            
++            # Pointwise loss for unpaired negatives
++            paired_neg_mask = np.zeros(num_neg, dtype=bool)
++            if num_pairs > 0:
++                paired_neg_mask[sampled_neg_locs] = True
++            unpaired_neg = neg_indices[~paired_neg_mask]
++            
++            if len(unpaired_neg) > 0:
++                z_un = z[unpaired_neg]
++                pred_un = sigmoid(z_un)
++                g[unpaired_neg] = pred_un
++                total_loss += -np.sum(np.log(1.0 - pred_un + 1e-9))
++                num_samples += len(unpaired_neg)
++        
++        # Normalize gradient
++        g = (g / bsz).astype(np.float32)
++        
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
+         np.add.at(gW, X, g[:, None])
+@@ -135,9 +185,7 @@ class FM:
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+         self.b -= self.lr * g.sum()
+         return float(
+-            -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
++            total_loss / num_samples if num_samples > 0 else 0.0
+         )
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:

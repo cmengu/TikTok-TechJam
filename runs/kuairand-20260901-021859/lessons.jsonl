@@ -1,0 +1,7 @@
+{"defect":"no_gain","delta":0.0,"family":"features/video-popularity-bucket","node":2,"pattern":"video-popularity-bucket","round":1,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":-0.006230219230630274,"family":"architecture/lgbm-trees","node":3,"pattern":"lgbm-trees","round":2,"verdict":"rejected"}
+{"defect":"no_gain","delta":-0.014855053042976185,"family":"architecture/deep-cross","node":4,"pattern":"deep-cross","round":3,"verdict":"rejected"}
+{"defect":"no_gain","delta":6.167333490458837e-05,"family":"objective/pairwise-grouped","node":5,"pattern":"pairwise-grouped","round":4,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":-0.00024397990895907995,"family":"features/dur-log-buckets","node":6,"pattern":"dur-log-buckets","round":5,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":0.0,"family":"features/tab-cross","node":7,"pattern":"tab-cross","round":6,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":0.0,"family":"features/author-freq-bucket","node":8,"pattern":"author-freq-bucket","round":7,"verdict":"inconclusive"}

@@ -1,0 +1,178 @@
+--- a/template.py
++++ b/template.py
+@@ -39,6 +39,62 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _video_stats(rows: list[dict[str, str]]) -> tuple[dict[str, int], dict[str, float]]:
++    """Compute per-video impression count and out-of-fold positive rate.
++    
++    Returns:
++        impressions: video_id -> count of training impressions
++        positive_rates: video_id -> fraction of positive labels
++    """
++    impressions: dict[str, int] = {}
++    positives: dict[str, float] = {}
++    
++    for row in rows:
++        vid = row["video_id"]
++        impressions[vid] = impressions.get(vid, 0) + 1
++        if "long_view" in row:
++            positives[vid] = positives.get(vid, 0.0) + float(row["long_view"])
++    
++    positive_rates = {
++        vid: positives.get(vid, 0.0) / impressions[vid]
++        for vid in impressions
++    }
++    
++    return impressions, positive_rates
++
++
++def _video_popularity_edges(
++    impressions: dict[str, int],
++    positive_rates: dict[str, float],
++    n: int = 10,
++) -> tuple[np.ndarray, np.ndarray]:
++    """Compute quantile edges for video impression count and positive rate."""
++    imp_values = np.asarray(list(impressions.values()), dtype=np.float64)
++    rate_values = np.asarray(list(positive_rates.values()), dtype=np.float64)
++    
++    imp_edges = np.quantile(imp_values, np.linspace(0, 1, n + 1)[1:-1])
++    rate_edges = np.quantile(rate_values, np.linspace(0, 1, n + 1)[1:-1])
++    
++    return imp_edges, rate_edges
++
++
++def _video_popularity_token(
++    video_id: str,
++    impressions: dict[str, int],
++    positive_rates: dict[str, float],
++    imp_edges: np.ndarray,
++    rate_edges: np.ndarray,
++) -> str:
++    """Map video to popularity bucket token.
++    
++    Rare videos (low impression count) share buckets. Frequent videos are
++    further bucketed by positive rate to enable memorization of popular patterns.
++    """
++    imp = float(impressions.get(video_id, 0))
++    rate = positive_rates.get(video_id, 0.5)
++    
++    imp_bucket = int(np.searchsorted(imp_edges, imp))
++    rate_bucket = int(np.searchsorted(rate_edges, rate))
++    
++    return f"vpop_{imp_bucket}_{rate_bucket}"
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
++    impressions: dict[str, int] | None = None,
++    positive_rates: dict[str, float] | None = None,
++    video_imp_edges: np.ndarray | None = None,
++    video_rate_edges: np.ndarray | None = None,
+     fields: tuple[str, ...],
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
++    
++    impressions = impressions or {}
++    positive_rates = positive_rates or {}
++    video_imp_edges = video_imp_edges or np.array([])
++    video_rate_edges = video_rate_edges or np.array([])
++    
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(
+-            row, fields, edges
++            row, fields, edges, impressions, positive_rates, video_imp_edges, video_rate_edges
+         )):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
+ def _row_tokens(
+-    row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
++    row: dict[str, str],
++    fields: tuple[str, ...],
++    edges: np.ndarray,
++    impressions: dict[str, int] | None = None,
++    positive_rates: dict[str, float] | None = None,
++    video_imp_edges: np.ndarray | None = None,
++    video_rate_edges: np.ndarray | None = None,
+ ) -> list[str]:
+     tokens = []
++    impressions = impressions or {}
++    positive_rates = positive_rates or {}
++    
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name == "video_id" and impressions and video_imp_edges is not None:
++            tokens.append(
++                _video_popularity_token(
++                    row[name], impressions, positive_rates, video_imp_edges, video_rate_edges
++                )
++            )
+         else:
+             tokens.append(row[name])
+     return tokens
+ 
+ 
+ def _build_vocabs(
+-    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    train_rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    impressions: dict[str, int] | None = None,
++    positive_rates: dict[str, float] | None = None,
++    video_imp_edges: np.ndarray | None = None,
++    video_rate_edges: np.ndarray | None = None,
+ ):
+     vocabs = [dict() for _ in fields]
++    impressions = impressions or {}
++    positive_rates = positive_rates or {}
++    
+     for row in train_rows:
+         for i, v in enumerate(_row_tokens(
+-            row, fields, edges
++            row, fields, edges, impressions, positive_rates, video_imp_edges, video_rate_edges
+         )):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+     field_dims = [len(v) + 1 for v in vocabs]
+     offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+     return vocabs, unk, offsets
+ 
+ 
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+@@ -144,12 +200,18 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    
++    impressions, positive_rates = _video_stats(train_rows)
++    video_imp_edges, video_rate_edges = _video_popularity_edges(impressions, positive_rates)
++    
++    vocabs, unk, offsets = _build_vocabs(
++        train_rows, edges, fields, impressions, positive_rates, video_imp_edges, video_rate_edges
++    )
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, impressions, positive_rates, video_imp_edges, video_rate_edges, fields)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, impressions, positive_rates, video_imp_edges, video_rate_edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

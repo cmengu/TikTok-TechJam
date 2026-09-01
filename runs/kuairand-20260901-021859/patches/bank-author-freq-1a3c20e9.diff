@@ -1,0 +1,99 @@
+--- template.py
++++ template.py
+@@ -30,16 +30,27 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _count_author_frequencies(rows: list[dict[str, str]]) -> dict[str, int]:
++    """Count author_id frequencies in training data for backoff of rare authors."""
++    freqs = {}
++    for row in rows:
++        if "author_id" in row:
++            author = row["author_id"]
++            freqs[author] = freqs.get(author, 0) + 1
++    return freqs
++
++
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _row_tokens(
++    row: dict[str, str],
++    fields: tuple[str, ...],
++    edges: np.ndarray,
++    author_freqs: dict[str, int] | None = None,
++    author_freq_min: int = 1,
++) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name == "author_id" and author_freqs is not None:
++            v = row[name]
++            if author_freqs.get(v, 0) < author_freq_min:
++                tokens.append("__rare_author__")
++            else:
++                tokens.append(v)
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -48,12 +59,19 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    author_freqs: dict[str, int] | None = None,
++    author_freq_min: int = 1,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, author_freqs, author_freq_min)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+@@ -62,11 +80,15 @@ def _encode_rows(
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+ ):
++    author_freqs = None
++    author_freq_min = 1
++    if "author_id" in fields:
++        author_freqs = _count_author_frequencies(train_rows)
++        author_freq_min = _env_int("AUTHOR_FREQ_MIN", 1)
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, author_freqs, author_freq_min)):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+     field_dims = [len(v) + 1 for v in vocabs]
+     offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+-    return vocabs, unk, offsets
++    return vocabs, unk, offsets, author_freqs, author_freq_min
+@@ -148,15 +170,18 @@ def main() -> None:
+     fields = _active_fields()
+     max_rows = os.environ.get("MAX_ROWS")
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    vocabs, unk, offsets, author_freqs, author_freq_min = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, author_freqs, author_freq_min)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, author_freqs, author_freq_min)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

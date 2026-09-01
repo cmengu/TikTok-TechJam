@@ -1,0 +1,15 @@
+--- template.py
++++ template.py
+@@ -56,7 +56,10 @@ def _build_vocabs(
+ 
+ 
+ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+-    return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
++    durations_arr = np.asarray(durations, dtype=np.float64)
++    log_durations = np.log1p(durations_arr)
++    log_edges = np.quantile(log_durations, np.linspace(0, 1, n + 1)[1:-1])
++    # Map back from log space to get log-scaled edges with higher resolution <60s
++    return np.expm1(log_edges)
+ 
+ 
+ def _encode_rows(
