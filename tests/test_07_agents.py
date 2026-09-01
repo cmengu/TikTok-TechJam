@@ -680,3 +680,44 @@ def test_coder_emits_retry_and_fallback_recovery_events(tmp_path: Path):
     actions = [r.get("action") for r in rows if r.get("type") == "recovery"]
     assert "patch_retried" in actions
     assert "fullfile_fallback" in actions
+
+
+# --- Fix 2 (throughput batch): reseeded bank with model-class hypotheses ---
+
+def test_bank_rows_all_load_as_hypotheses():
+    """Every bank row must round-trip through the exact schema the harness
+    uses at run time: claim_from_bank_row + _bank_to_hypothesis."""
+    from harness.agents.researcher import _bank_to_hypothesis
+    from harness.attribute import claim_from_bank_row
+
+    rows = load_bank()
+    assert rows, "bank is empty"
+    seen_ids = set()
+    for row in rows:
+        for field in (
+            "id", "stage", "mechanism", "pattern", "description",
+            "citation", "expected_gain", "expected_gpu_h", "observables",
+        ):
+            assert field in row, f"{row.get('id')} missing {field}"
+        assert row["id"] not in seen_ids
+        seen_ids.add(row["id"])
+        claim = claim_from_bank_row(row, str(row["mechanism"]))
+        assert any(
+            o.source == "harness" for o in claim.observables
+        ), f"{row['id']} has no harness-side observable"
+        hyp = _bank_to_hypothesis(row)
+        assert hyp.claim is not None
+        assert 0 < hyp.expected_gain < 0.05
+        assert hyp.expected_gpu_h > 0
+
+
+def test_bank_has_model_class_ideas_and_dropped_losers():
+    """The reseed: >=3 model-class families (architecture/objective beyond a
+    knob tweak), and the two families with bad lessons are gone."""
+    rows = load_bank()
+    fams = {f"{r['stage']}/{r['mechanism']}" for r in rows}
+    assert "features/user-activity-bucket" not in fams
+    assert "features/target-encoding" not in fams
+    assert "architecture/lgbm-trees" in fams
+    assert "architecture/deep-cross" in fams
+    assert any(f.startswith("objective/pairwise") for f in fams)
