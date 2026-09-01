@@ -34,9 +34,13 @@ accepted improvement.
 | Official baseline (validation) | 0.6674 | 0.5357 | 0.6016 |
 | Official baseline (hidden test) | 0.6610 | 0.5282 | 0.5946 |
 | Our reproduction of their FM (validation) | 0.6671 | 0.5358 | 0.6015 |
-| **This run, validation-best** | 0.6607\* | not recorded\* | **0.5978** |
+| **This run, accepted candidate** | 0.6607\* | not recorded\* | **0.5896** |
 
-**Absolute delta vs the official validation baseline: −0.0038.**
+**Absolute delta vs the official validation baseline: −0.0120.**
+
+The accepted candidate's score is its **three-seed replicate mean** (0.58958),
+the number the promotion was actually decided on — not the single-seed screen
+reading, which runs higher and would flatter us.
 
 \* The measurement ladder scores every attempt on the **primary** metric, so
 per-attempt verdicts carry primary only; GAUC and nDCG@5 are computed by the
@@ -183,3 +187,78 @@ provenance stamp. Write-up: `context/Unexplained_win_investigation.md`.
   attempted, to protect the deadline.
 
 Solo project — all components by the repo owner, with LLM coding assistance.
+
+---
+
+## What we took from the literature — eight capabilities
+
+Every mechanism below is implemented and visible in the run logs; each line
+names the paper it came from and the file it lives in.
+
+**NOVA** (Tencent) — *the architecture gradient*
+
+- **Weak-component feedback.** Each round scores hypothesis families by their
+  measured history, so the proposer is told which part of the pipeline is
+  underperforming rather than guessing. `harness/tree.py` (`family_stats`,
+  `Queue.score_hyp`), surfaced on the **What it learned** page.
+- **Forbidden directions.** Patterns the log has already recorded as failures
+  are refused at proposal time — the agent cannot re-run a known dead end.
+  `harness/agents/researcher.py` (`_refuse_forbidden`, `forbidden(lessons)`).
+
+**AgentX** (Kuaishou) — *don't trust an unexplained win*
+
+- **The attribution brake.** Every hypothesis declares observables and a
+  direction; a candidate that improves the score without moving its own
+  declared observables is refused promotion as `unclear`.
+  `harness/attribute.py`, gated in `harness/measure.py`.
+- **Infrastructure-failure recovery as a first-class path.** A failed patch is
+  retried with the exact git error in hand, then rewritten whole-file, and
+  every step is logged as a `recovery` event rather than a silent death.
+  `harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file
+  fallback), counted on the **Health** page.
+
+**AIDE** (Weco) — *the search itself*
+
+- **Draft / debug / improve tree.** Nodes are drafted from the queue, repaired
+  when they crash, and extended when they win, with greedy keep-or-revert and
+  a fork when the branch stalls. `harness/tree.py`.
+
+**AIRA-dojo** (Meta) — *measure before you believe*
+
+- **Hidden consistent evaluation.** One fixed split, labels physically absent
+  from the candidate's environment, scoring done outside the candidate by the
+  organisers' own `evaluate.py` — pinned by SHA-256 so a changed scorer stops
+  the run instead of quietly changing the numbers. `harness/runner.py`
+  (`_build_env` whitelist), `harness/tasks/kuairand.py`.
+- **Noise-calibrated acceptance.** The bar is derived from the task's own
+  seed-to-seed variance, and a win must hold on every paired seed — their
+  result that "agents overfit validation" was largely evaluation noise, so the
+  ladder refuses to be impressed by one seed. `harness/measure.py`,
+  `harness/overfit.py`.
+
+**MLE-STAR** (Google) — *attack the right component*
+
+- **Ablation-targeted refinement.** Candidate code blocks are compared so the
+  next change targets the component the measurements blame, instead of
+  rewriting the model wholesale. Feeds the same weak-component signal NOVA's
+  gradient asks for.
+
+**MLE-bench** (OpenAI) — *never end with nothing*
+
+- **Always-valid submission + runtime watchdog.** Every accepted candidate is
+  immediately re-run on the submission features and written in the kit's
+  schema, with wall-clock limits and stall detection on every attempt;
+  `scripts/rescue_submission.py` covers the case where a run converges without
+  accepting anything. `harness/outputs.py`, `harness/runner.py`.
+
+### Seeing them in the dashboard
+
+- **Dashboard** — the funnel (`papers → ideas → attempts → accepted`), the
+  verification stage (**L4-v**: closed loop gated by an external oracle the
+  search cannot game), the intervention counter, and *Score vs current best*
+  showing the accepted delta against the bar it had to clear.
+- **Library** — the paper corpus with page-one covers, each card marked with
+  whether this particular run consulted it.
+- **What it learned** — the lessons the proposer reads next round.
+- **Health / Double-checks / Spend / Stability** — the recovery ledger, the
+  verification cascade, token and compute spend by stage, and seed stability.
