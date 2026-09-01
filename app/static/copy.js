@@ -237,6 +237,10 @@ export const DICT = {
     word: "dismiss",
     hint: null,
   },
+  paperOnShelf: {
+    word: "on the shelf — this run didn't open it",
+    hint: "the harness carries this paper; nothing in this run cited it",
+  },
   memoryTitle: {
     word: "What the run has learned",
     hint: null,
