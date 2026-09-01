@@ -1,6 +1,6 @@
 /** E7 audit view models. Pure: no DOM, no fetch. */
 
-import { fmtDuration } from "./copy.js";
+import { DICT, fmtDuration } from "./copy.js";
 import { escapeHtml } from "./chip.js";
 
 function isPlainObject(x) {
@@ -63,7 +63,13 @@ export function buildSpend(payload) {
       gpu_h: row.gpu_h,
     });
   }
-  return { slices };
+  // Fix list item 12: token rows are structurally 0 for most slices — the
+  // researcher only logs when it runs, and training/tuning have no LLM in
+  // them at all (training's real spend is gpu_h). Primary rows are the
+  // slices that actually spent words; the full four-slice breakdown stays
+  // available behind a fold so nothing is hidden.
+  const active = slices.filter((s) => (s.tokens_in || 0) + (s.tokens_out || 0) > 0);
+  return { slices, active, trainingGpuH: payload.training.gpu_h };
 }
 
 /*
@@ -114,8 +120,17 @@ export function doubleChecksPageHtml(vm) {
   </div>`;
 }
 
+// Why a zero row is zero: the researcher just hasn't run; testing and
+// tuning never spend words at all.
+const SLICE_ZERO_HINTS = {
+  researching: "spendStageIdle",
+  coding: "spendStageIdle",
+  training: "spendStageCompute",
+  tuning: "spendStageCompute",
+};
+
 export function spendPageHtml(vm) {
-  const tiles = vm.slices
+  const tiles = vm.active
     .map(
       // The ledger key ({slice}.tokens_in) is for the code, not the viewer —
       // it lives on the hover only (fix list item 10).
@@ -125,7 +140,29 @@ export function spendPageHtml(vm) {
       </div>`,
     )
     .join("");
-  return `<div class="doc">${tiles}</div>`;
+  const primary = tiles || `<p class="empty">no spend recorded yet</p>`;
+  // Testing's real spend is compute, not words — one plain line, as a
+  // duration (0.008 GPU-hours as "0.0" would just look broken again).
+  const gpu =
+    vm.trainingGpuH > 0
+      ? `<p class="spend-gpu" title="training.gpu_h">${escapeHtml(
+          DICT.spendGpuLine.word.replace("{t}", fmtDuration(vm.trainingGpuH * 3600)),
+        )}</p>`
+      : "";
+  const foldRows = vm.slices
+    .map((s) => {
+      const zero = (s.tokens_in || 0) + (s.tokens_out || 0) <= 0;
+      const note = zero
+        ? ` <span class="panel-note">${escapeHtml(DICT[SLICE_ZERO_HINTS[s.slice]].word)}</span>`
+        : "";
+      return `<li>${escapeHtml(s.label)} — ${escapeHtml(String(s.tokens_in))} words in · ${escapeHtml(String(s.tokens_out))} words out${note}</li>`;
+    })
+    .join("");
+  const fold = `<details class="spend-fold">
+    <summary>${escapeHtml(DICT.spendFoldSummary.word)}</summary>
+    <ul>${foldRows}</ul>
+  </details>`;
+  return `<div class="doc">${primary}${gpu}${fold}</div>`;
 }
 
 export function stabilityPageHtml(vm) {

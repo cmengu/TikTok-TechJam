@@ -207,6 +207,26 @@ export const DICT = {
     word: "0 exceptions possible — the gate refuses them.",
     hint: null,
   },
+  // Spend page (fix list item 12): three of four stages read 0 on most runs
+  // — the researcher never ran, and testing/tuning spend computer time, not
+  // words. Primary rows are the stages with words; the rest live in a fold
+  // with these explanations.
+  spendGpuLine: {
+    word: "testing ran {t} of GPU time",
+    hint: "training jobs spend computer time, not words",
+  },
+  spendStageIdle: {
+    word: "this stage has not run yet",
+    hint: null,
+  },
+  spendStageCompute: {
+    word: "this stage spends computer time, not words",
+    hint: null,
+  },
+  spendFoldSummary: {
+    word: "all four stages",
+    hint: null,
+  },
   memoryTitle: {
     word: "What the run has learned",
     hint: null,
