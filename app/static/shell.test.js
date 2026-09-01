@@ -92,3 +92,19 @@ describe("tab-pane shell", () => {
     assert.match(html, /\.protocol-scroll\s*{[^}]*overflow:\s*auto/);
   });
 });
+
+describe("default run", () => {
+  it("test_bare_domain_lands_on_the_scored_run", () => {
+    const src = readFileSync(APP, "utf8");
+    // The scored run is the one with an accepted improvement and a written
+    // submission; a first-time visitor should not land on whichever run
+    // happens to be newest.
+    assert.match(src, /PREFERRED_RUN = "kuairand-20260831-180915"/);
+    assert.match(src, /function pickDefaultRun/);
+    // Both the first resolve and the 2s follower go through it.
+    assert.match(src, /return pickDefaultRun\(runs\);/);
+    assert.match(src, /const target = pickDefaultRun\(runs\);/);
+    // An explicit ?run= still wins.
+    assert.match(src, /if \(fromQuery\) return fromQuery;/);
+  });
+});
