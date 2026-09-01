@@ -1642,6 +1642,18 @@ function highlightSidebar(hash) {
 
 let lastRenderedHash = null;
 let lastRenderedKey;
+// Tracks the last PATH (not hash) painted into the pane, so switching tabs —
+// or attempts within #/run/<id>, where the hash stays "run" — puts the pane
+// back at the top, while store ticks re-rendering the same path never touch
+// the reader's scroll position.
+let lastScrolledPath = null;
+
+function resetPaneScroll(path) {
+  if (path === lastScrolledPath) return;
+  lastScrolledPath = path;
+  const pane = document.getElementById("pane");
+  if (pane) pane.scrollTop = 0;
+}
 
 function renderRoute() {
   const path = currentRoutePath();
@@ -1662,6 +1674,7 @@ function renderRoute() {
   }
   lastRenderedHash = route.hash;
   route.render(state, path);
+  resetPaneScroll(path);
   applyTourHighlight();
 }
 
