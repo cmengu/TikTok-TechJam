@@ -16,6 +16,10 @@ import {
   fmtDuration,
   fmtScore,
   fmtTokens,
+  claimReasonLabel,
+  eventTypeLabel,
+  EVENT_TYPE_LABELS,
+  fmtPublished,
   levelLabel,
   moveLabel,
   rungLabel,
@@ -230,6 +234,77 @@ describe("pre-G2 renderer copy entries", () => {
           `${key} contains banned term "${term}"`,
         );
       }
+    }
+  });
+});
+
+describe("claimReasonLabel", () => {
+  it("test_no_promotions_translates", () => {
+    assert.equal(
+      claimReasonLabel("no promotions on the log"),
+      "no accepted wins on the log yet",
+    );
+  });
+
+  it("test_counted_promotions_translate", () => {
+    assert.equal(
+      claimReasonLabel("2 of 3 promotions carry oracle_delta"),
+      "2 of 3 accepted wins carry a hidden-check reading",
+    );
+  });
+
+  it("test_unknown_reason_passes_through_and_null_is_empty", () => {
+    assert.equal(claimReasonLabel("hand-written reason"), "hand-written reason");
+    assert.equal(claimReasonLabel(null), "");
+  });
+});
+
+describe("fmtPublished", () => {
+  it("test_metric_map_reads_as_pairs", () => {
+    assert.equal(
+      fmtPublished({ gauc: 0.6674, ndcg_at_5: 0.5357, primary: 0.6016 }),
+      "gauc 0.6674 \u00b7 ndcg@5 0.5357 \u00b7 primary 0.6016",
+    );
+  });
+
+  it("test_scalars_pass_through", () => {
+    assert.equal(fmtPublished(0.4834), "0.4834");
+    assert.equal(fmtPublished("synthetic-baseline-v1"), "synthetic-baseline-v1");
+  });
+
+  it("test_object_never_reaches_string", () => {
+    // Refuse twin for fix list item 5: any structured value, however nested,
+    // must never render as "[object Object]".
+    const gnarly = [
+      { valid: { gauc: 0.6, deep: { deeper: 1 } } },
+      { oracle_ceiling: { valid: 0.8484, test: 0.8645 } },
+      [{ a: 1 }, { b: [2, { c: 3 }] }],
+      {},
+    ];
+    for (const value of gnarly) {
+      assert.ok(!fmtPublished(value).includes("[object Object]"));
+    }
+  });
+});
+
+describe("eventTypeLabel", () => {
+  it("test_known_types_read_as_plain_words", () => {
+    assert.equal(eventTypeLabel("research_source", 2), "papers");
+    assert.equal(eventTypeLabel("research_source", 1), "paper");
+    assert.equal(eventTypeLabel("verdict", 3), "decisions");
+    assert.equal(eventTypeLabel("node_created", 2), "attempts built");
+  });
+
+  it("test_unknown_types_fall_back_to_events", () => {
+    assert.equal(eventTypeLabel("some_new_type", 2), "events");
+    assert.equal(eventTypeLabel(undefined, 1), "event");
+  });
+
+  it("test_every_label_clears_the_banned_list", () => {
+    const bannedRe = new RegExp(`\\b(?:${BANNED.join("|")})\\b`, "i");
+    for (const [type, entry] of Object.entries(EVENT_TYPE_LABELS)) {
+      assert.ok(!bannedRe.test(entry.one), `${type}: ${entry.one}`);
+      assert.ok(!bannedRe.test(entry.many), `${type}: ${entry.many}`);
     }
   });
 });

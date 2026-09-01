@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildDoubleChecks, buildSpend, buildStability } from "./audit.js";
+import { buildDoubleChecks, buildSpend, buildStability, spendPageHtml } from "./audit.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP = join(__dirname, "app.js");
@@ -94,5 +94,16 @@ describe("audit", () => {
     assert.match(src, /render:\s*renderDoubleChecks/);
     assert.match(src, /render:\s*renderSpend/);
     assert.match(src, /render:\s*renderStability/);
+  });
+});
+
+describe("spend page html", () => {
+  it("test_ledger_keys_live_on_the_hover_only", () => {
+    // Fix list item 10: "researching.tokens_in" was printed under each number.
+    const html = spendPageHtml(buildSpend(COST));
+    assert.ok(html.includes('title="researching.tokens_in"'));
+    assert.ok(!html.includes(">researching.tokens_in<"));
+    assert.ok(!html.includes("stat-src"));
+    assert.ok(html.includes("reading papers"));
   });
 });

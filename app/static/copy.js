@@ -165,6 +165,18 @@ export const DICT = {
     word: "Data fingerprints: recorded at load ✓",
     hint: null,
   },
+  claimReasonNoWins: {
+    word: "no accepted wins on the log yet",
+    hint: "how much to trust the headline number",
+  },
+  claimReasonWins: {
+    word: "{k} of {n} accepted wins carry a hidden-check reading",
+    hint: "how much to trust the headline number",
+  },
+  scoreSource: {
+    word: "from the measurement layer",
+    hint: null,
+  },
   stampMeasured: { word: "measured", hint: null },
   stampForecast: { word: "forecast", hint: null },
   stampHover: {
@@ -272,18 +284,30 @@ const STATE_LABELS = {
   failed: DICT.failed,
 };
 
+// Plural forms are listed explicitly: the sweep matches on \b word
+// boundaries, so "promotions" sailed past a list that only knew "promoted"
+// (fix list item 4).
 export const BANNED = [
   "hypothesis",
   "hypotheses",
   "replicate",
+  "replicates",
   "oracle",
+  "oracles",
   "holdout",
+  "holdouts",
   "rung",
+  "rungs",
   "verdict",
+  "verdicts",
   "promoted",
+  "promotion",
+  "promotions",
   "inconclusive",
   "attribution",
+  "attributions",
   "incumbent",
+  "incumbents",
   "v_sem",
   "leaked",
   "retired",
@@ -291,6 +315,56 @@ export const BANNED = [
 
 function passThrough(input) {
   return { word: String(input), hint: null };
+}
+
+// Plain-language names for raw event types, for the feed's gap markers
+// ("#12–#8 — 2 papers, 1 decision" instead of "2 research_source, 1 verdict").
+// Unknown types fall back to the honest generic "events" rather than leaking
+// a machine name.
+export const EVENT_TYPE_LABELS = {
+  run_started: { one: "run start", many: "run starts" },
+  run_ended: { one: "run end", many: "run ends" },
+  node_created: { one: "attempt built", many: "attempts built" },
+  state_changed: { one: "status change", many: "status changes" },
+  move_selected: { one: "move", many: "moves" },
+  hypothesis_queued: { one: "idea queued", many: "ideas queued" },
+  proposal_rejected: { one: "idea declined", many: "ideas declined" },
+  lesson_written: { one: "note", many: "notes" },
+  research_source: { one: "paper", many: "papers" },
+  measurement: { one: "measurement", many: "measurements" },
+  verdict: { one: "decision", many: "decisions" },
+  verify_level: { one: "check", many: "checks" },
+  failure: { one: "crash", many: "crashes" },
+  recovery: { one: "recovery", many: "recoveries" },
+  rule_trip: { one: "rulebook trip", many: "rulebook trips" },
+  attribution_checked: { one: "win check", many: "win checks" },
+  incumbent_changed: { one: "current-best change", many: "current-best changes" },
+  submission_written: { one: "submission written", many: "submissions written" },
+  submission_run: { one: "submission run", many: "submission runs" },
+  usage: { one: "spend update", many: "spend updates" },
+  heartbeat: { one: "heartbeat", many: "heartbeats" },
+};
+
+export function eventTypeLabel(type, count = 1) {
+  const entry = EVENT_TYPE_LABELS[type];
+  if (!entry) return count === 1 ? "event" : "events";
+  return count === 1 ? entry.one : entry.many;
+}
+
+// The harness writes claim_reason in its own vocabulary (harness/outputs.py).
+// Translate the two known shapes; anything unrecognised passes through and
+// the jargon sweep is the guard against new leaks.
+const CLAIM_REASON_WINS_RE = /^(\d+) of (\d+) promotions carry oracle_delta$/;
+
+export function claimReasonLabel(reason) {
+  if (reason == null || reason === "") return "";
+  const s = String(reason);
+  if (s === "no promotions on the log") return DICT.claimReasonNoWins.word;
+  const m = s.match(CLAIM_REASON_WINS_RE);
+  if (m) {
+    return DICT.claimReasonWins.word.replace("{k}", m[1]).replace("{n}", m[2]);
+  }
+  return s;
 }
 
 export function stateLabel(state) {
@@ -334,6 +408,23 @@ export function fmtDelta(x) {
   if (n > 0) return `+${body}`;
   if (n < 0) return `-${body}`;
   return `+${body}`;
+}
+
+// Baseline "published" values in the protocol can be scalars or per-metric
+// maps (valid: {gauc, ndcg_at_5, primary}). A map must never reach String()
+// — that renders "[object Object]" (fix list item 5). Metric keys read as
+// written in the protocol, with "_at_" restored to "@" (ndcg_at_5 → ndcg@5).
+export function fmtPublished(value) {
+  if (value == null) return "";
+  if (Array.isArray(value)) {
+    return value.map((v) => fmtPublished(v)).join(", ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([k, v]) => `${k.replaceAll("_at_", "@")} ${fmtPublished(v)}`)
+      .join(" · ");
+  }
+  return String(value);
 }
 
 export function fmtTokens(n) {

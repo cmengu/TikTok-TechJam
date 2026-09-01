@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildRung, buildLastMove, buildCascadeCounter, buildHero } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml } from "./dashboard.js";
 
 function move(round, kind, parent, reason) {
   return { type: "move_selected", round, kind, parent, reason };
@@ -17,7 +17,7 @@ describe("dashboard strip builders", () => {
       claim_reason: "1 of 1 promotions carry oracle_delta",
     });
     assert.equal(rung.level, "L4-v");
-    assert.equal(rung.reason, "1 of 1 promotions carry oracle_delta");
+    assert.equal(rung.reason, "1 of 1 accepted wins carry a hidden-check reading");
   });
 
   it("test_rung_badge_is_a_dash_while_unavailable", () => {
@@ -172,16 +172,48 @@ describe("dashboard hero", () => {
     );
   });
 
-  it("test_caption_is_verbatim", () => {
-    const reason = MONITORS.claim_reason;
+  it("test_caption_translates_the_harness_vocabulary", () => {
+    // Fix list item 4: "no promotions on the log" reached the viewer.
     const hero = buildHero(MONITORS, TRACE);
-    assert.equal(hero.caption, reason);
-    assert.equal(hero.caption === reason, true);
-    assert.equal(hero.caption.length, reason.length);
-    const twisted = buildHero(
-      { ...MONITORS, claim_reason: reason + " (approx)" },
+    assert.equal(hero.caption, "1 of 1 accepted wins carry a hidden-check reading");
+    const empty = buildHero(
+      { ...MONITORS, claim_reason: "no promotions on the log" },
       TRACE,
     );
-    assert.notEqual(twisted.caption, reason);
+    assert.equal(empty.caption, "no accepted wins on the log yet");
+  });
+
+  it("test_caption_passes_unknown_reasons_through", () => {
+    const hero = buildHero(
+      { ...MONITORS, claim_reason: "something new the harness said" },
+      TRACE,
+    );
+    assert.equal(hero.caption, "something new the harness said");
+  });
+});
+
+describe("dashboard hero html", () => {
+  it("test_hero_before_first_measurement_has_no_stamp", () => {
+    // Fix list item 2: "\u2014 / measured" claimed provenance for a number
+    // that does not exist yet.
+    const hero = buildHero({ available: false }, TRACE);
+    const html = heroHtml(hero);
+    assert.ok(html.includes("\u2014"));
+    assert.ok(!html.includes("stamp"));
+    assert.ok(!html.includes("measured"));
+  });
+
+  it("test_hero_source_is_plain_language_with_raw_key_on_hover", () => {
+    // Fix list item 3: the literal "monitors.primary" reached the viewer.
+    const html = heroHtml(buildHero(MONITORS, TRACE));
+    assert.ok(html.includes("from the measurement layer"));
+    assert.ok(html.includes('title="monitors.primary"'));
+    assert.ok(!html.includes(">monitors.primary<"));
+  });
+
+  it("test_hero_with_a_score_keeps_the_stamp", () => {
+    const html = heroHtml(buildHero(MONITORS, TRACE));
+    assert.ok(html.includes("0.5270"));
+    assert.ok(html.includes('class="stamp stamp--measured"'));
   });
 });

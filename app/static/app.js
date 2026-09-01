@@ -7,9 +7,9 @@ import { buildDossier, buildAttemptTrail } from "./dossier.js";
 import { buildClaimCard, claimCardHtml } from "./claimcard.js";
 import { buildMonitors } from "./monitors.js";
 import { buildWall, wallHtml } from "./wall.js";
-import { buildRung, buildLastMove, buildCascadeCounter, buildHero, provenanceCounts } from "./dashboard.js";
+import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, provenanceCounts } from "./dashboard.js";
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
-import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta } from "./copy.js";
+import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
@@ -256,8 +256,15 @@ function buildGapRow(highSeq, lowSeq, feedGaps) {
   for (const g of skipped) {
     byType.set(g.type, (byType.get(g.type) || 0) + 1);
   }
-  const summary = [...byType.entries()].map(([type, n]) => `${n} ${type}`).join(", ");
-  return `<li class="feed-gap">#${highSeq}–#${lowSeq} — ${summary}</li>`;
+  // Viewers read plain words; the raw event types stay on the hover
+  // (flagged on PR #60 — the marker rendered "2 research_source").
+  const summary = [...byType.entries()]
+    .map(([type, n]) => `${n} ${eventTypeLabel(type, n)}`)
+    .join(", ");
+  const rawTypes = [...byType.entries()]
+    .map(([type, n]) => `${n}\u00d7 ${type}`)
+    .join(", ");
+  return `<li class="feed-gap" title="${escapeAttr(rawTypes)}">#${highSeq}–#${lowSeq} — ${summary}</li>`;
 }
 
 function buildEventsPanel(state) {
@@ -365,7 +372,7 @@ function ensureDashboardRungFetch() {
       }
       const heroEl = view.querySelector("[data-dashboard-hero]");
       if (heroEl) {
-        heroEl.innerHTML = renderHeroHtml(
+        heroEl.innerHTML = heroHtml(
           buildHero(dashboardMonitors, buildTrace(store.getState())),
         );
       }
@@ -390,27 +397,6 @@ function renderRungStrip(rung) {
   return `<p>${escapeHtml(rung.level)}</p><p class="panel-note">${escapeHtml(rung.reason)}</p>`;
 }
 
-function renderHeroHtml(hero) {
-  const hint =
-    hero.trust.hint != null && hero.trust.hint !== ""
-      ? ` data-hint="${escapeAttr(hero.trust.hint)}"`
-      : "";
-  const funnel = hero.funnel
-    .map(
-      (s) =>
-        `<a class="funnel-step" href="${escapeAttr(s.href)}"><span class="funnel-count">${escapeHtml(String(s.count))}</span> ${escapeHtml(s.label)}</a>`,
-    )
-    .join('<span class="funnel-arrow">→</span>');
-  return `
-    <div class="stat">
-      <span class="stat-value dashboard-hero-score">${escapeHtml(hero.score)}</span>${stampHtml("measured")}
-      <span class="chip-state"${hint}>${escapeHtml(hero.trust.word)}</span>
-      <span class="stat-src">monitors.primary</span>
-    </div>
-    <p class="dashboard-hero-caption">${escapeHtml(hero.caption)}</p>
-    <div class="funnel">${funnel}</div>
-  `;
-}
 
 const LIVE_NODE_STATES = new Set([
   "screening",
@@ -456,7 +442,7 @@ function renderDashboard(state) {
     : `<p class="panel-empty">no moves yet</p>`;
   requireView().innerHTML = `
     <section class="card dashboard-hero" data-dashboard-hero>
-      ${renderHeroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
+      ${heroHtml(buildHero(dashboardMonitors, buildTrace(state)))}
       ${provenanceTileHtml(provenanceCounts(state))}
     </section>
     ${liveStatusHtml(state, nowMs)}
@@ -535,7 +521,8 @@ function formatHash(value) {
   const remainder = str.replace(/^sha256:/, "");
   const looksLikeHash = /^[0-9a-f]+$/i.test(remainder) && remainder.length >= 32;
   const display = looksLikeHash && str.length > 12 ? `${str.slice(0, 12)}…` : str;
-  return `<span class="hash-value" data-copy="${escapeAttr(str)}" title="click to copy full value">${escapeHtml(display)}</span>`;
+  const hover = display === str ? "click to copy" : `${str} — click to copy`;
+  return `<span class="hash-value" data-copy="${escapeAttr(str)}" title="${escapeAttr(hover)}">${escapeHtml(display)}</span>`;
 }
 
 // The spread across seeds *is* the noise band — reproduced renders as
@@ -603,10 +590,12 @@ function buildMetricsBlock(metrics) {
   return `
     <div class="protocol-block">
       <h3>Metrics</h3>
-      <table class="metrics">
-        <thead><tr><th>Metric</th><th>Population</th><th>Positive</th><th>Required output</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="protocol-scroll">
+        <table class="metrics">
+          <thead><tr><th>Metric</th><th>Population</th><th>Positive</th><th>Required output</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>
   `;
 }
@@ -623,6 +612,13 @@ function buildScoringBlock(scoring) {
   `;
 }
 
+// Published values can be per-metric maps — route them through
+// fmtPublished so an object never reaches String() (fix list item 5).
+function renderPublished(value) {
+  if (value === null || value === undefined) return chip("not set", "chip-null");
+  return escapeHtml(fmtPublished(value));
+}
+
 function buildBaselineBlock(baseline) {
   const published = baseline?.published || {};
   const reproduced = baseline?.reproduced || {};
@@ -631,7 +627,7 @@ function buildBaselineBlock(baseline) {
     .map(
       (name) => `<tr>
         <td>${escapeHtml(name)}</td>
-        <td>${renderScalar(published[name])}</td>
+        <td>${renderPublished(published[name])}</td>
         <td>${formatReproduced(reproduced[name])}</td>
       </tr>`,
     )
@@ -646,10 +642,12 @@ function buildBaselineBlock(baseline) {
       </dl>
       ${
         metricNames.length
-          ? `<table class="metrics">
-               <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th></tr></thead>
-               <tbody>${rows}</tbody>
-             </table>`
+          ? `<div class="protocol-scroll">
+               <table class="metrics">
+                 <thead><tr><th>Metric</th><th>Published</th><th>Reproduced</th></tr></thead>
+                 <tbody>${rows}</tbody>
+               </table>
+             </div>`
           : ""
       }
     </div>
@@ -993,7 +991,7 @@ function renderVerdictEntry({ verdict, reading }) {
 }
 
 function renderDossierVerdicts(verdicts) {
-  if (!verdicts.length) return `<p class="panel-empty">no verdicts yet</p>`;
+  if (!verdicts.length) return `<p class="panel-empty">no decisions yet</p>`;
   return `<ul class="dossier-verdicts">${verdicts.map(renderVerdictEntry).join("")}</ul>`;
 }
 
@@ -1284,7 +1282,7 @@ function renderStyleguide() {
       <div class="stat">
         <span class="stat-value">0.6041</span>
         <span class="stat-caption">score</span>
-        <span class="stat-src">monitors.primary</span>
+        <span class="stat-src" title="monitors.primary">${escapeHtml(DICT.scoreSource.word)}</span>
       </div>
       <div class="chip-row">
         <span class="chip-state chip-state--accepted">accepted</span>

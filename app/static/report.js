@@ -1,6 +1,6 @@
 /** E8 Summary view model. Pure: no DOM, no fetch. */
 
-import { claimLabel, fmtScore } from "./copy.js";
+import { DICT, claimLabel, fmtScore } from "./copy.js";
 import { renderMarkdown } from "./brief.js";
 import { escapeHtml } from "./chip.js";
 
@@ -43,7 +43,7 @@ export function reportPageHtml(report, hero) {
     <div class="stat">
       <span class="stat-value">${escapeHtml(hero.score)}</span>
       <span class="stat-caption"${hint}>${escapeHtml(hero.trustWord)}</span>
-      <span class="stat-src">monitors.primary</span>
+      <span class="stat-src" title="monitors.primary">${escapeHtml(DICT.scoreSource.word)}</span>
     </div>
     ${body}
   </div>`;

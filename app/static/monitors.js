@@ -1,5 +1,7 @@
 /** F5 monitors view model. Pure: no DOM, no fetch, no HTML. */
 
+import { claimReasonLabel } from "./copy.js";
+
 const CONTRACT_KEYS = [
   "available",
   "primary",
@@ -125,7 +127,7 @@ export function buildMonitors(payload) {
     seedEmpty: seedConsistency.length === 0,
     rung: {
       level: payload.claim_level,
-      reason: payload.claim_reason,
+      reason: claimReasonLabel(payload.claim_reason),
     },
   };
 }

@@ -136,7 +136,7 @@ function verdictSentence(ev, node) {
     return `Attempt ${node} accepted.`;
   }
   if (attribution === "unclear") {
-    return `Attempt ${node} passed the tests, but the win is unexplained — promotion withheld.`;
+    return `Attempt ${node} passed the tests, but the win is unexplained — not accepted.`;
   }
   if (state === "rejected") {
     return `Attempt ${node} declined.`;

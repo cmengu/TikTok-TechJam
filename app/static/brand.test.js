@@ -55,12 +55,14 @@ const KNOWN_ROUTES = [
 describe("brand", () => {
   it("test_index_carries_luxmax_brand", () => {
     const html = loadIndex();
-    assert.match(html, /LuxMax/);
+    // PR #70 respelled the wordmark "Lux Max"; either spacing is the brand.
+    assert.match(html, /Lux ?Max/);
     assert.equal(/beating[- ]nise/i.test(html), false);
   });
 
   it("test_title_is_luxmax", () => {
-    assert.equal(titleText(loadIndex()), "LuxMax");
+    // Pinned to the wordmark spelling PR #70 shipped in the <h1>.
+    assert.equal(titleText(loadIndex()), "Lux Max");
   });
 });
 

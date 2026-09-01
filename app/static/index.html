@@ -862,6 +862,16 @@
     .kv > dt:first-of-type + dd {
       border-top: 0;
     }
+    /* Fix list item 6: wide protocol tables scroll inside their block
+       instead of stretching the page — same pattern as .event-scroll. */
+    .protocol-scroll {
+      max-height: 320px;
+      overflow: auto;
+    }
+    .kv dd {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
     table.metrics {
       border-collapse: collapse;
       font-size: 0.9rem;
@@ -917,6 +927,12 @@
       color: var(--crit);
     }
     .hash-value {
+      max-width: 100%;
+      display: inline-block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
       font-size: 0.8125rem;
       background: var(--sunken);
       border: 1px solid var(--hairline);
@@ -957,7 +973,7 @@
        <div class="stat">
          <span class="stat-value">0.6041</span>
          <span class="stat-caption">score</span>
-         <span class="stat-src">monitors.primary</span>
+         <span class="stat-src" title="monitors.primary">from the measurement layer</span>
        </div> */
     .stat {
       display: flex;
