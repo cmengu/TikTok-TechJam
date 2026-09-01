@@ -447,3 +447,16 @@ def test_feedback_text_matches_render(client: TestClient, runs_dir: Path):
     text = res.json()["text"]
     expected = render(feedback_from(load_lessons(path)))
     assert text == expected
+
+
+def test_list_runs_carries_liveness_fields(client: TestClient):
+    """Fix-list item 9: the run picker labels entries with started time and
+    liveness, so /runs must say when a run was last heard from and whether
+    it ended honestly (run_ended on the log)."""
+    res = client.get("/runs")
+    row = res.json()[0]
+    # fake-0001 is written instant=True, so it carries a run_ended event.
+    assert row["ended"] is True
+    # last_signal is the newest stamp across events and heartbeats — at
+    # least as new as the run's start.
+    assert row["last_signal"] >= row["started"]

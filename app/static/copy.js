@@ -252,6 +252,18 @@ export const DICT = {
     word: "Weak spots, promising directions, and banned patterns. The footer is the exact text the proposing model reads next.",
     hint: null,
   },
+  runStalled: {
+    word: "stalled — no signals for {m}m",
+    hint: "nothing has been heard from the run — it may have been stopped or crashed without saying so",
+  },
+  verdictUnexplainedWin: {
+    word: "Attempt {n} passed the tests, but the win is unexplained — not accepted.",
+    hint: "an unexplained win is never accepted",
+  },
+  verdictSeedRetry: {
+    word: "Attempt {n} retrying — the gain didn't repeat across seeds.",
+    hint: "results disagreed, queued again (3 tries, then shelved)",
+  },
   tourHeroTitle: { word: "The score", hint: null },
   tourHeroBody: {
     word: "The headline number, and whether to trust it. Stamps tell you if a figure was measured or only forecast.",

@@ -91,6 +91,9 @@ const MEASUREMENTS_CAP = 500;
 export const initial = () => ({
   lastSeq: 0,
   lastHeartbeatSeq: 0,
+  // Newest t seen across BOTH streams (events + heartbeats) — the liveness
+  // signal for fix-list item 7. Pure: max over event stamps, no Date.now().
+  lastSignalAt: null,
 
   run: {
     id: null,
@@ -193,6 +196,14 @@ function bump(map, key) {
   return { ...map, [k]: (map[k] || 0) + 1 };
 }
 
+// Signals can arrive interleaved from two streams; keep the newest stamp and
+// never roll backwards. ISO-8601 UTC stamps compare correctly as strings.
+function newerSignal(current, t) {
+  if (t == null) return current;
+  if (current == null || t > current) return t;
+  return current;
+}
+
 export function reduce(state, ev) {
   // Per-stream duplicate guard: events.jsonl and heartbeat.jsonl each have
   // their own seq counter, so a replay or an overlapping ?since= page must be
@@ -206,11 +217,16 @@ export function reduce(state, ev) {
     return {
       ...state,
       lastHeartbeatSeq: ev.seq,
+      lastSignalAt: newerSignal(state.lastSignalAt, ev.t),
       workers: { ...state.workers, [ev.worker]: ev },
     };
   }
 
-  let next = { ...state, lastSeq: ev.seq };
+  let next = {
+    ...state,
+    lastSeq: ev.seq,
+    lastSignalAt: newerSignal(state.lastSignalAt, ev.t),
+  };
 
   const stamp = stampFor(ev);
   if (stamp === "measured") {

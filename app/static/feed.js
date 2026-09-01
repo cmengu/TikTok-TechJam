@@ -1,6 +1,7 @@
 /** LuxMax event feed sentences — pure, never throws. */
 
 import {
+  DICT,
   fmtDelta,
   fmtScore,
   levelLabel,
@@ -124,9 +125,27 @@ function measurementSentence(ev, node) {
     : `Attempt ${node} measured.`;
 }
 
+// The measurer stamps attribution "unclear" on MANY verdicts that never
+// reached the attribution gate — screen rejections, replicate fails,
+// seed-consistency requeues (Unexplained_win_investigation.md §3). Only the
+// verdict whose own summary says the harness decided on that branch
+// ("… replicate pass but attribution unclear") may be narrated as an
+// unexplained win; everything else narrates its state.
+function isAttributionHold(ev) {
+  return (
+    typeof ev.summary === "string" &&
+    /pass but attribution unclear/.test(ev.summary)
+  );
+}
+
+function isSeedDisagreement(ev) {
+  return (
+    typeof ev.summary === "string" && /seed consistency/.test(ev.summary)
+  );
+}
+
 function verdictSentence(ev, node) {
   const state = ev.state;
-  const attribution = ev.attribution;
   const oracle = ev.oracle_delta;
 
   if (state === "promoted") {
@@ -135,13 +154,16 @@ function verdictSentence(ev, node) {
     }
     return `Attempt ${node} accepted.`;
   }
-  if (attribution === "unclear") {
-    return `Attempt ${node} passed the tests, but the win is unexplained — not accepted.`;
+  if (isAttributionHold(ev)) {
+    return DICT.verdictUnexplainedWin.word.replace("{n}", String(node));
   }
   if (state === "rejected") {
     return `Attempt ${node} declined.`;
   }
   if (state === "inconclusive") {
+    if (isSeedDisagreement(ev)) {
+      return DICT.verdictSeedRetry.word.replace("{n}", String(node));
+    }
     return `Attempt ${node} retrying.`;
   }
   if (state === "replicating") {

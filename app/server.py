@@ -60,8 +60,31 @@ def _split_md_sections(text: str) -> list[dict[str, str]]:
     return sections
 
 
+def _tail_stamp(path: Path) -> str | None:
+    """The t of the last well-formed line, reading only the file's tail."""
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            fh.seek(max(0, size - 8192))
+            chunk = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in reversed(chunk.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            return json.loads(line).get("t")
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return None
+
+
 def list_runs() -> list[dict]:
-    """Return [{run_id, task, protocol_hash, started}] from each run's first event."""
+    """Return [{run_id, task, protocol_hash, started, last_signal, ended}]
+    from each run's first event, plus liveness for the run picker
+    (fix-list item 9): last_signal = newest stamp across events and
+    heartbeats, ended = a run_ended event actually exists on the log."""
     if not RUNS.is_dir():
         return []
     rows: list[dict] = []
@@ -75,13 +98,18 @@ def list_runs() -> list[dict]:
         if not lines:
             continue
         first = lines[0]
+        last = lines[-1]
         protocol = first.get("protocol") or {}
+        heartbeat_t = _tail_stamp(child / "heartbeat.jsonl")
+        signals = [t for t in (last.get("t"), heartbeat_t) if t]
         rows.append(
             {
                 "run_id": child.name,
                 "task": protocol.get("task") or first.get("run"),
                 "protocol_hash": first.get("protocol_hash"),
                 "started": first.get("t"),
+                "last_signal": max(signals) if signals else first.get("t"),
+                "ended": any(ev.get("type") == "run_ended" for ev in lines),
             }
         )
     rows.sort(key=lambda r: r.get("started") or "", reverse=True)

@@ -11,6 +11,7 @@ import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, pro
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
+import { backoffDelay, liveness, runPickerLabel, stalledText } from "./liveness.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
 import {
@@ -1206,10 +1207,15 @@ function dot(colorClass) {
   return `<span class="hdr-dot ${colorClass}"></span>`;
 }
 
-function renderRunStateSlot(run) {
+function renderRunStateSlot(run, live) {
   let colorClass = "dot-grey";
   let text = "waiting";
-  if (run.status === "running") {
+  if (live.status === "stalled") {
+    // Item 7: a killed run has no run_ended event, so run.status says
+    // "running" forever. Silence is the honest signal.
+    colorClass = "dot-amber";
+    text = stalledText(live.quietMs);
+  } else if (run.status === "running") {
     colorClass = "dot-green";
     text = "running";
   } else if (run.status === "ended") {
@@ -1248,13 +1254,20 @@ function renderInterventionsSlot(state) {
     `interventions: ${state.interventions.length}`;
 }
 
-function renderElapsedBudgetSlot(run) {
+function renderElapsedBudgetSlot(run, live, lastSignalAt) {
   const el = document.getElementById("hdr-elapsed-budget");
   if (!run.startedAt) {
     el.textContent = "not started";
     return;
   }
-  const end = run.status === "ended" && run.endedAt ? new Date(run.endedAt) : new Date();
+  // Item 7: on a stalled run the client-side clock must stop — ticking
+  // "elapsed" past the last signal claims work that is not happening. Freeze
+  // at the moment the run was last heard from.
+  let end;
+  if (run.status === "ended" && run.endedAt) end = new Date(run.endedAt);
+  else if (live.status === "stalled" && lastSignalAt) {
+    end = new Date(lastSignalAt);
+  } else end = new Date();
   const elapsed = formatDuration(end - new Date(run.startedAt));
   const budgetH = run.protocol?.run?.budget?.wall_clock_h;
   if (budgetH == null) {
@@ -1265,11 +1278,12 @@ function renderElapsedBudgetSlot(run) {
 }
 
 function renderHeader(state) {
-  renderRunStateSlot(state.run);
+  const live = liveness(state.run, state.lastSignalAt, Date.now());
+  renderRunStateSlot(state.run, live);
   renderSubmissionSlot(state);
   renderSpendSlot();
   renderInterventionsSlot(state);
-  renderElapsedBudgetSlot(state.run);
+  renderElapsedBudgetSlot(state.run, live, state.lastSignalAt);
 }
 
 function renderStyleguide() {
@@ -1698,17 +1712,28 @@ function stopHeaderTick() {
 // newest-run poller. Unchanged from Phase 2 other than routing through the
 // store instead of a bare module-level `state` variable. ---
 
+// Item 8: a tab opened before the run directory exists gets a 404 on the
+// stream; EventSource does NOT auto-retry a failed connection, so without
+// these handlers the page froze at "not started" forever. Reconnect with
+// exponential backoff; the attempt counter resets on any message, and the
+// since-cursor means each reconnect refolds exactly the events the reducer
+// has not seen — frozen panels come alive as soon as the run appears.
+let eventsAttempt = 0;
+let heartbeatAttempt = 0;
+
 function connectEvents() {
   if (eventsSource) eventsSource.close();
   eventsSource = new EventSource(`/runs/${runId}/events?since=${eventsSince}`);
   eventsSource.onmessage = (raw) => {
+    eventsAttempt = 0;
     const ev = JSON.parse(raw.data);
     store.applyEvent(ev);
     eventsSince = ev.seq;
   };
   eventsSource.onerror = () => {
     eventsSource.close();
-    setTimeout(connectEvents, 500);
+    setTimeout(connectEvents, backoffDelay(eventsAttempt));
+    eventsAttempt += 1;
   };
 }
 
@@ -1718,40 +1743,96 @@ function connectHeartbeat() {
     `/runs/${runId}/heartbeat?since=${heartbeatSince}`,
   );
   heartbeatSource.onmessage = (raw) => {
+    heartbeatAttempt = 0;
     const ev = JSON.parse(raw.data);
     store.applyEvent(ev);
     heartbeatSince = ev.seq;
   };
   heartbeatSource.onerror = () => {
     heartbeatSource.close();
-    setTimeout(connectHeartbeat, 500);
+    setTimeout(connectHeartbeat, backoffDelay(heartbeatAttempt));
+    heartbeatAttempt += 1;
   };
 }
 
+// Item 8's second freeze path: /runs empty (or the server briefly away)
+// used to throw straight out of main() — the app died before its first
+// paint and never looked again. Keep asking with the same backoff.
 async function resolveRunId() {
   const params = new URLSearchParams(location.search);
   const fromQuery = params.get("run");
   if (fromQuery) return fromQuery;
-  const res = await fetch("/runs");
-  const runs = await res.json();
-  if (!runs.length) throw new Error("no runs found");
-  return runs[0].run_id;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch("/runs");
+      const runs = await res.json();
+      if (runs.length) return runs[0].run_id;
+      metaEl().textContent = "waiting for the first run to appear…";
+    } catch (_) {
+      metaEl().textContent = "waiting for the server…";
+    }
+    await new Promise((tick) => setTimeout(tick, backoffDelay(attempt)));
+  }
+}
+
+function switchRun(nextRunId) {
+  runId = nextRunId;
+  eventsSince = 0;
+  heartbeatSince = 0;
+  store.replaceState(initial());
+  connectEvents();
+  connectHeartbeat();
+}
+
+// Item 9: the run picker. Rebuilt only when the option labels actually
+// change, so an open dropdown is not wiped mid-choice by the 2s poll.
+let pickerSignature = null;
+
+function renderRunPicker(rows) {
+  const el = document.getElementById("hdr-run-picker");
+  if (!el) return;
+  const nowMs = Date.now();
+  const options = rows.map((row) => ({
+    id: row.run_id,
+    label: runPickerLabel(row, nowMs),
+  }));
+  const signature = `${options.map((o) => `${o.id}|${o.label}`).join("\n")}@${runId}`;
+  if (signature === pickerSignature) return;
+  pickerSignature = signature;
+  el.innerHTML = options
+    .map(
+      (o) =>
+        `<option value="${escapeAttr(o.id)}"${o.id === runId ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
+    )
+    .join("");
+}
+
+function initRunPicker() {
+  const el = document.getElementById("hdr-run-picker");
+  if (!el) return;
+  el.addEventListener("change", () => {
+    const picked = el.value;
+    if (!picked || picked === runId) return;
+    // An explicit choice pins the run in the URL — refresh keeps it, and
+    // the newest-run follower stops switching underneath the reader.
+    const params = new URLSearchParams(location.search);
+    params.set("run", picked);
+    history.replaceState(null, "", `?${params}${location.hash}`);
+    switchRun(picked);
+  });
 }
 
 function followNewestRun() {
-  const params = new URLSearchParams(location.search);
-  if (params.get("run")) return; // pinned by URL: never switch
   setInterval(async () => {
     try {
       const res = await fetch("/runs");
       const runs = await res.json();
-      if (runs.length && runs[0].run_id !== runId) {
-        runId = runs[0].run_id;
-        eventsSince = 0;
-        heartbeatSince = 0;
-        store.replaceState(initial());
-        connectEvents();
-        connectHeartbeat();
+      if (!runs.length) return;
+      renderRunPicker(runs);
+      const pinned = new URLSearchParams(location.search).get("run");
+      // Default to the newest run only while nothing is pinned by the URL.
+      if (!pinned && runs[0].run_id !== runId) {
+        switchRun(runs[0].run_id);
       }
     } catch (_) {
       /* server away; try again next tick */
@@ -1863,6 +1944,7 @@ async function main() {
   try {
     initClickToCopy();
     initRunTreeClicks();
+    initRunPicker();
     initTour();
     runId = await resolveRunId();
     const showTour = shouldShowTour(window.localStorage);

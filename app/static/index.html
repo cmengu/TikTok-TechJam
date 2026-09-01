@@ -256,6 +256,19 @@
       border-radius: var(--r-ctl);
       padding: 0.05rem 0.4rem;
     }
+    /* Run picker (fix-list item 9): pick any run; entries carry started
+       time and liveness. Sits at the right edge of the header strip. */
+    #hdr-run-picker {
+      margin-left: auto;
+      max-width: 24rem;
+      font: inherit;
+      font-size: 0.8rem;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-ctl);
+      padding: 0.15rem 0.4rem;
+    }
 
     #meta {
       color: var(--ink-muted);
@@ -1329,6 +1342,7 @@
         <span id="hdr-spend"></span>
         <span id="hdr-interventions"></span>
         <span id="hdr-elapsed-budget"></span>
+        <select id="hdr-run-picker" aria-label="Pick a run"></select>
         <button type="button" id="tour-replay" aria-label="Replay the first-run tour">?</button>
       </header>
       <div id="meta">loading…</div>
