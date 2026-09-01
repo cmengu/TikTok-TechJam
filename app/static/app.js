@@ -11,6 +11,7 @@ import { buildRung, buildLastMove, buildCascadeCounter, buildHero, heroHtml, pro
 import { stampHtml, provenanceTileHtml } from "./provenance.js";
 import { DICT, stateLabel, rungLabel, attributionLabel, moveLabel, fmtScore, fmtDelta, fmtPublished, eventTypeLabel } from "./copy.js";
 import { sentence, buildMoveTrail } from "./feed.js";
+import { liveness, stalledText } from "./liveness.js";
 import { chipHtml, escapeHtml, escapeAttr } from "./chip.js";
 import { buildJourney, journeyStripHtml, buildReceipt } from "./journey.js";
 import {
@@ -1206,10 +1207,15 @@ function dot(colorClass) {
   return `<span class="hdr-dot ${colorClass}"></span>`;
 }
 
-function renderRunStateSlot(run) {
+function renderRunStateSlot(run, live) {
   let colorClass = "dot-grey";
   let text = "waiting";
-  if (run.status === "running") {
+  if (live.status === "stalled") {
+    // Item 7: a killed run has no run_ended event, so run.status says
+    // "running" forever. Silence is the honest signal.
+    colorClass = "dot-amber";
+    text = stalledText(live.quietMs);
+  } else if (run.status === "running") {
     colorClass = "dot-green";
     text = "running";
   } else if (run.status === "ended") {
@@ -1248,13 +1254,20 @@ function renderInterventionsSlot(state) {
     `interventions: ${state.interventions.length}`;
 }
 
-function renderElapsedBudgetSlot(run) {
+function renderElapsedBudgetSlot(run, live, lastSignalAt) {
   const el = document.getElementById("hdr-elapsed-budget");
   if (!run.startedAt) {
     el.textContent = "not started";
     return;
   }
-  const end = run.status === "ended" && run.endedAt ? new Date(run.endedAt) : new Date();
+  // Item 7: on a stalled run the client-side clock must stop — ticking
+  // "elapsed" past the last signal claims work that is not happening. Freeze
+  // at the moment the run was last heard from.
+  let end;
+  if (run.status === "ended" && run.endedAt) end = new Date(run.endedAt);
+  else if (live.status === "stalled" && lastSignalAt) {
+    end = new Date(lastSignalAt);
+  } else end = new Date();
   const elapsed = formatDuration(end - new Date(run.startedAt));
   const budgetH = run.protocol?.run?.budget?.wall_clock_h;
   if (budgetH == null) {
@@ -1265,11 +1278,12 @@ function renderElapsedBudgetSlot(run) {
 }
 
 function renderHeader(state) {
-  renderRunStateSlot(state.run);
+  const live = liveness(state.run, state.lastSignalAt, Date.now());
+  renderRunStateSlot(state.run, live);
   renderSubmissionSlot(state);
   renderSpendSlot();
   renderInterventionsSlot(state);
-  renderElapsedBudgetSlot(state.run);
+  renderElapsedBudgetSlot(state.run, live, state.lastSignalAt);
 }
 
 function renderStyleguide() {
