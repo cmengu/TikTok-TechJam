@@ -96,3 +96,42 @@ describe("trace", () => {
     assert.notEqual(a, b);
   });
 });
+
+// --- Fix-list item 1: llm.py's cost bookkeeping rides the research_source
+// event type titled "llm usage"; the funnel must count real papers only. ---
+describe("trace llm-usage de-pollution", () => {
+  const LLM_USAGE = {
+    schema_version: 1,
+    seq: 9001,
+    t: "2026-08-31T17:32:22.153Z",
+    run: "kuairand-20260831-171932",
+    type: "research_source",
+    id: "usage-0-coding",
+    title: "llm usage",
+    node: 0,
+    cost: { gpu_s: 0.0, tokens_in: 17244, tokens_out: 9069, slice: "coding" },
+    summary: "llm coding: 17244 in / 9069 out tokens",
+  };
+
+  it("test_llm_usage_rows_do_not_count_as_papers", () => {
+    const events = loadFixture();
+    const clean = buildTrace(fold(events));
+    const polluted = buildTrace(
+      fold([...events, LLM_USAGE, { ...LLM_USAGE, seq: 9002, id: "usage-1-coding" }]),
+    );
+    assert.equal(polluted.papersRead, clean.papersRead);
+  });
+
+  it("test_real_papers_still_count", () => {
+    const events = loadFixture();
+    const real = {
+      ...LLM_USAGE,
+      seq: 9003,
+      id: "src-99",
+      title: "Factorization Machines",
+      summary: "read",
+    };
+    const trace = buildTrace(fold([...events, real]));
+    assert.equal(trace.papersRead, buildTrace(fold(events)).papersRead + 1);
+  });
+});

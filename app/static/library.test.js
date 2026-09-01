@@ -110,3 +110,27 @@ describe("library", () => {
     assert.match(src, /render:\s*renderLibrary/);
   });
 });
+
+describe("library llm-usage de-pollution", () => {
+  const LLM_USAGE = {
+    schema_version: 1,
+    seq: 9001,
+    t: "2026-08-31T17:32:22.153Z",
+    type: "research_source",
+    id: "usage-0-coding",
+    title: "llm usage",
+    node: 0,
+    cost: { gpu_s: 0.0, tokens_in: 17244, tokens_out: 9069, slice: "coding" },
+    summary: "llm coding: 17244 in / 9069 out tokens",
+  };
+
+  it("test_llm_usage_rows_never_reach_the_library", () => {
+    const events = [...loadJsonl(FIXTURE), LLM_USAGE];
+    const lib = buildLibrary(fold(events), loadManifest());
+    assert.ok(lib.length > 0);
+    assert.equal(
+      lib.find((p) => p.title === "llm usage"),
+      undefined,
+    );
+  });
+});

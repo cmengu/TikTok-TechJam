@@ -3,6 +3,7 @@
 import { ideaOutcome } from "./reducer.js";
 import { stateLabel } from "./copy.js";
 import { escapeHtml, escapeAttr } from "./chip.js";
+import { isCostBookkeeping } from "./trace.js";
 
 export function normalize(title) {
   return String(title ?? "")
@@ -62,8 +63,11 @@ function tokensFor(source) {
  * manifest is the papers array (not the {available, papers} wrapper).
  */
 export function buildLibrary(state, manifest) {
-  const sources = state?.research?.sources;
-  if (!Array.isArray(sources) || sources.length === 0) return [];
+  const all = state?.research?.sources;
+  if (!Array.isArray(all)) return [];
+  // Item 1 de-pollution: cost-bookkeeping rows are spend, not reading.
+  const sources = all.filter((s) => !isCostBookkeeping(s));
+  if (sources.length === 0) return [];
   const papers = Array.isArray(manifest) ? manifest : [];
   return sources.map((source) => {
     const entry = matchEntry(source?.title, papers);
