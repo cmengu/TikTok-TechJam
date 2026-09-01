@@ -36,3 +36,8 @@ runs/*/workspace
 context
 video/cards
 pytest_full*.txt
+
+# Python packaging files: Vercel must NOT install the harness stack (torch etc.);
+# the function uses requirements.txt only, code is imported off the bundle path.
+pyproject.toml
+uv.lock
