@@ -1,0 +1,94 @@
+--- a/template.py
++++ b/template.py
+@@ -43,7 +43,25 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _compute_video_popularity_stats(
++    train_rows: list[dict[str, str]],
++) -> tuple[dict[str, int], dict[str, float], np.ndarray, np.ndarray]:
++    """Compute per-video impression counts and positive rates from training data."""
++    video_counts = {}
++    video_positives = {}
++    for row in train_rows:
++        vid = row["video_id"]
++        video_counts[vid] = video_counts.get(vid, 0) + 1
++        if "long_view" in row:
++            video_positives[vid] = video_positives.get(vid, 0.0) + float(row["long_view"])
++    video_rates = {vid: video_positives.get(vid, 0.0) / video_counts[vid] for vid in video_counts}
++    count_edges = np.quantile(np.asarray(list(video_counts.values()), dtype=np.float64), np.linspace(0, 1, 11)[1:-1])
++    rate_edges = np.quantile(np.asarray(list(video_rates.values()), dtype=np.float64), np.linspace(0, 1, 11)[1:-1])
++    return video_counts, video_rates, count_edges, rate_edges
++
++
++def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray, video_counts: dict[str, int] | None = None, video_rates: dict[str, float] | None = None, count_edges: np.ndarray | None = None, rate_edges: np.ndarray | None = None) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+@@ -51,6 +69,16 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarra
+         else:
+             tokens.append(row[name])
+     return tokens
++        elif name == "video_popularity_impression_count":
++            vid = row["video_id"]
++            count = float(video_counts.get(vid, 0)) if video_counts else 0.0
++            bucket = int(np.searchsorted(count_edges, count)) if count_edges is not None else 0
++            tokens.append(str(bucket))
++        elif name == "video_popularity_positive_rate":
++            vid = row["video_id"]
++            rate = video_rates.get(vid, 0.0) if video_rates else 0.0
++            bucket = int(np.searchsorted(rate_edges, rate)) if rate_edges is not None else 0
++            tokens.append(str(bucket))
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -63,6 +91,7 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    video_counts: dict[str, int] | None = None, video_rates: dict[str, float] | None = None, count_edges: np.ndarray | None = None, rate_edges: np.ndarray | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -70,7 +99,7 @@ def _encode_rows(
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, video_counts, video_rates, count_edges, rate_edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+@@ -80,6 +109,7 @@ def _encode_rows(
+ 
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    , video_counts: dict[str, int] | None = None, video_rates: dict[str, float] | None = None, count_edges: np.ndarray | None = None, rate_edges: np.ndarray | None = None
+ ):
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, video_counts, video_rates, count_edges, rate_edges)):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+@@ -144,10 +174,16 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
++    video_counts, video_rates, count_edges, rate_edges = _compute_video_popularity_stats(train_rows)
++    fields = _active_fields()
++    if "video_popularity_impression_count" in fields or "video_popularity_positive_rate" in fields:
++        fields = tuple(f for f in fields if f not in ("video_popularity_impression_count", "video_popularity_positive_rate")) + ("video_popularity_impression_count", "video_popularity_positive_rate")
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields, video_counts, video_rates, count_edges, rate_edges)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, video_counts, video_rates, count_edges, rate_edges)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, video_counts, video_rates, count_edges, rate_edges)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)

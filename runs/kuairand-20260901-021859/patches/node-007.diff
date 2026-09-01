@@ -1,0 +1,51 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..2fa8419 100644
+--- a/template.py
++++ b/template.py
+@@ -13,6 +13,7 @@ import numpy as np
+ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS_TAB_CROSS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_id_x_tab", "tab_x_dur_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -25,16 +26,35 @@ def _active_fields() -> tuple[str, ...]:
+     raw = os.environ.get("FEATURES", "base")
+     if raw.strip() in ("", "base"):
+         return FIELDS
++    if raw.strip() == "tab-cross":
++        return FIELDS_TAB_CROSS
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+     tokens = []
++    base_tokens = {}
++    
++    # First pass: compute base tokens
+     for name in fields:
+-        if name == "dur_bucket":
+-            tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        if "_x_" not in name:
++            if name == "dur_bucket":
++                val = str(int(np.searchsorted(edges, float(row["duration_ms"]))))
++            else:
++                val = row[name]
++            base_tokens[name] = val
++    
++    # Second pass: output tokens in order (base + cross)
++    for name in fields:
++        if "_x_" in name:
++            parts = name.split("_x_")
++            if len(parts) == 2 and parts[0] in base_tokens and parts[1] in base_tokens:
++                cross_token = f"{base_tokens[parts[0]]}_{base_tokens[parts[1]]}"
++                tokens.append(cross_token)
++            else:
++                tokens.append("")
+         else:
+-            tokens.append(row[name])
++            tokens.append(base_tokens[name])
+     return tokens
+ 
+ 

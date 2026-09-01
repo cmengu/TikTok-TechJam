@@ -1,0 +1,174 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..78e1c87 100644
+--- a/template.py
++++ b/template.py
+@@ -9,6 +9,7 @@ import sys
+ from pathlib import Path
+ 
+ import numpy as np
++import torch
+ 
+ import report
+ 
+@@ -82,54 +83,48 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
+-def sigmoid(x: np.ndarray) -> np.ndarray:
+-    return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+-
+-
+-class FM:
+-    def __init__(self, dim: int, k: int = 16, lr: float = 0.001, l2: float = 1e-6, seed: int = 0):
+-        rng = np.random.default_rng(seed)
+-        self.V = rng.normal(0, 0.01, (dim, k)).astype(np.float32)
+-        self.W = np.zeros(dim, dtype=np.float32)
+-        self.b = np.float32(0.0)
+-        self.lr, self.l2 = lr, l2
+-        self.mV = np.zeros_like(self.V)
+-        self.vV = np.zeros_like(self.V)
+-        self.mW = np.zeros_like(self.W)
+-        self.vW = np.zeros_like(self.W)
+-        self.t = 0
+-
+-    def logits(self, X: np.ndarray):
+-        e = self.V[X]
+-        s = e.sum(1)
+-        inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+-        return self.b + self.W[X].sum(1) + inter, e, s
+-
+-    def step(self, X: np.ndarray, y: np.ndarray) -> float:
+-        bsz = len(y)
+-        z, e, s = self.logits(X)
+-        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
+-        gV = np.zeros_like(self.V)
+-        gW = np.zeros_like(self.W)
+-        np.add.at(gW, X, g[:, None])
+-        np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
+-        gV += self.l2 * self.V
+-        gW += self.l2 * self.W
+-        self.t += 1
+-        b1, b2, eps = 0.9, 0.999, 1e-8
+-        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+-            M *= b1
+-            M += (1 - b1) * G
+-            Vv *= b2
+-            Vv += (1 - b2) * (G * G)
+-            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+-        self.b -= self.lr * g.sum()
+-        return float(
+-            -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
++class DCNv2Model(torch.nn.Module):
++    """DCNv2-style model: embedding + cross layers + MLP + output projection."""
++    
++    def __init__(self, dim: int, embedding_dim: int = 16, num_fields: int = 5, hidden_dim: int = 64):
++        super().__init__()
++        self.embedding = torch.nn.Embedding(dim, embedding_dim)
++        
++        x0_dim = num_fields * embedding_dim
++        
++        # Cross layers: x_{l+1} = x0 * (W_l x_l + b_l) + x_l
++        self.cross_w1 = torch.nn.Linear(x0_dim, x0_dim)
++        self.cross_w2 = torch.nn.Linear(x0_dim, x0_dim)
++        
++        # MLP: 2 layers with hidden dim 64
++        self.mlp = torch.nn.Sequential(
++            torch.nn.Linear(x0_dim, hidden_dim),
++            torch.nn.ReLU(),
++            torch.nn.Linear(hidden_dim, x0_dim)
+         )
+-
+-    def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+-        return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
++        
++        # Output projection: concatenate cross + MLP outputs and project to logit
++        self.output_proj = torch.nn.Linear(x0_dim * 2, 1)
++    
++    def forward(self, x):
++        # x: (batch_size, num_fields) with token IDs
++        emb = self.embedding(x)  # (batch_size, num_fields, embedding_dim)
++        x0 = emb.reshape(emb.size(0), -1)  # (batch_size, num_fields * embedding_dim)
++        
++        # Cross network (2 layers)
++        x_cross = x0
++        for cross_w in [self.cross_w1, self.cross_w2]:
++            y = cross_w(x_cross)
++            x_cross = x0 * y + x_cross
++        
++        # MLP network
++        x_mlp = self.mlp(x0)
++        
++        # Concatenate and project to logit
++        x_concat = torch.cat([x_cross, x_mlp], dim=1)
++        logits = self.output_proj(x_concat)
++        
++        return logits.squeeze(-1)
+ 
+ 
+ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> None:
+@@ -140,9 +135,9 @@ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) ->
+             writer.writerow([i, row["user_id"], row["video_id"], f"{float(score):.6g}"])
+ 
+ 
+-def _checkpoint_blob(model: FM) -> bytes:
++def _checkpoint_blob(model: DCNv2Model) -> bytes:
+     buf = io.BytesIO()
+-    np.savez(buf, V=model.V, W=model.W, b=np.asarray(model.b))
++    torch.save(model.state_dict(), buf)
+     return buf.getvalue()
+ 
+ 
+@@ -150,8 +145,7 @@ def main() -> None:
+     train_path = Path(os.environ["TRAIN"])
+     valid_path = Path(os.environ.get("ORACLE") or os.environ["VALID"])
+     seed = int(os.environ["SEED"])
+-    device = os.environ.get("DEVICE")
+-    del device
++    device = os.environ.get("DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
+     epochs = _env_int("EPOCHS", DEFAULT_EPOCHS)
+     batch = _env_int("BATCH", 8192)
+     lr = float(os.environ.get("LR", "0.001"))
+@@ -170,18 +164,40 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+-    model = FM(dim, k=16, lr=lr, seed=seed)
++    model = DCNv2Model(dim, embedding_dim=16, num_fields=len(fields), hidden_dim=64)
++    model = model.to(device)
++    
++    criterion = torch.nn.BCEWithLogitsLoss()
++    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
++    
++    torch.manual_seed(seed)
++    np.random.seed(seed)
++    
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+         idx = rng.permutation(len(ytr))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            batch_idx = idx[i : i + batch]
++            X_batch = torch.from_numpy(xtr[batch_idx]).long().to(device)
++            y_batch = torch.from_numpy(ytr[batch_idx]).float().to(device)
++            
++            optimizer.zero_grad()
++            logits = model(X_batch)
++            loss = criterion(logits, y_batch)
++            loss.backward()
++            optimizer.step()
++            
++            losses.append(float(loss.item()))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+ 
+     preds_path = workspace / "preds.csv"
+-    _write_preds(preds_path, valid_rows, model.predict(xva))
++    model.eval()
++    with torch.no_grad():
++        xva_tensor = torch.from_numpy(xva).long().to(device)
++        preds = model(xva_tensor).cpu().numpy()
++    _write_preds(preds_path, valid_rows, preds)
+     report.result({}, preds_path)
+ 
+ 

@@ -24,6 +24,8 @@ runs/*/*
 !runs/*/heartbeat.jsonl
 !runs/*/iterations.jsonl
 !runs/*/submission*.csv
+!runs/*/submission/
+!runs/*/submission/**
 !runs/*/patches/
 !runs/*/patches/**
 

@@ -1,0 +1,129 @@
+--- a/template.py
++++ b/template.py
+@@ -1,6 +1,7 @@
+ """KuaiRand FM baseline candidate — numpy + csv only, no valid-label early stop."""
+ 
+ from __future__ import annotations
++from datetime import datetime
+ 
+ import csv
+ import io
+@@ -35,8 +36,40 @@ def _active_fields() -> tuple[str, ...]:
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
++def _day_of_week(date_str: str) -> str:
++    """Extract day of week from date string (0=Monday, 6=Sunday)."""
++    try:
++        d = datetime.fromisoformat(date_str)
++        return str(d.weekday())
++    except (ValueError, TypeError):
++        return "6"  # Unknown day defaults to Sunday
++
++
++def _compute_user_first_dates(rows: list[dict[str, str]]) -> dict[str, str]:
++    """Compute first seen date for each user from training data only."""
++    first_dates = {}
++    for row in rows:
++        user_id = row["user_id"]
++        date = row.get("date", "")
++        if date and (user_id not in first_dates or date < first_dates[user_id]):
++            first_dates[user_id] = date
++    return first_dates
++
++
++def _days_since_first(date_str: str, first_date_str: str) -> int:
++    """Compute days between current date and user's first seen date."""
++    try:
++        d1 = datetime.fromisoformat(date_str)
++        d2 = datetime.fromisoformat(first_date_str)
++        return (d1 - d2).days
++    except (ValueError, TypeError):
++        return 0
++
++
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _row_tokens(
++    row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray, first_dates: dict[str, str] | None = None, days_edges: np.ndarray | None = None
++) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+@@ -44,12 +77,19 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+                 float(row["duration_ms"])
+             )
++        elif name == "date":
++            tokens.append(_day_of_week(row.get("date", "")))
++        elif name == "days_since_first":
++            if first_dates is None:
++                first_dates = {}
++            user_id = row["user_id"]
++            days = _days_since_first(row.get("date", ""), first_dates.get(user_id, row.get("date", "")))
++            days_bucket = str(int(np.searchsorted(days_edges or np.array([]), days)))
++            tokens.append(days_bucket)
+         else:
+             tokens.append(row[name])
+     return tokens
+ 
+ 
+ def _read_rows(path: Path, *, with_label: bool) -> list[dict[str, str]]:
+     del with_label
+@@ -62,26 +102,37 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+ 
+ 
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    first_dates: dict[str, str] | None = None,
++    days_edges: np.ndarray | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, first_dates, days_edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
+ def _build_vocabs(
+-    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...], first_dates: dict[str, str] | None = None, days_edges: np.ndarray | None = None
+ ):
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        for i, v in enumerate(_row_tokens(row, fields, edges, first_dates, days_edges)):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+@@ -181,11 +232,19 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    
++    # Compute days-since-first buckets from training data only (Covington et al. 2016)
++    first_dates = _compute_user_first_dates(train_rows) if "days_since_first" in fields else {}
++    days_values = [_days_since_first(r.get("date", ""), first_dates.get(r["user_id"], r.get("date", ""))) for r in train_rows if "days_since_first" in fields and r.get("date")]
++    days_edges = _bucket_edges(days_values) if days_values else np.array([])
++    
++    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields, first_dates, days_edges)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, first_dates, days_edges)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, first_dates, days_edges)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)

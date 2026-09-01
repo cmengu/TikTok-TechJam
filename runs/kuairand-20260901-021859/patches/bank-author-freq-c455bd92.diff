@@ -1,0 +1,93 @@
+--- a/template.py
++++ b/template.py
+@@ -66,20 +66,41 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+ 
+ 
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+-):
++) -> tuple[list[dict[str, int]], list[int], np.ndarray, set[str]]:
++    """Build vocabularies and identify rare authors for frequency bucketing.
++    
++    Implements sparse factorization backoff (Rendle 2010): authors appearing
++    fewer than MIN_AUTHOR_FREQ times in training map to a shared token,
++    avoiding noisy embeddings for sparse factors.
++    
++    Returns: (vocabs, unk, offsets, rare_authors)
++    """
+     vocabs = [dict() for _ in fields]
++    
++    # Compute author frequency for backoff bucketing if author_id is in fields
++    author_freq: dict[str, int] = {}
++    author_idx = -1
++    if "author_id" in fields:
++        author_idx = fields.index("author_id")
++        for row in train_rows:
++            author_id = row["author_id"]
++            author_freq[author_id] = author_freq.get(author_id, 0) + 1
++    
++    # Identify rare authors (below frequency threshold)
++    min_author_freq = _env_int("MIN_AUTHOR_FREQ", 5)
++    rare_authors = set(a for a, f in author_freq.items() if f < min_author_freq)
++    
+     for row in train_rows:
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
++            # Sparse factorization backoff: rare authors use shared token
++            if i == author_idx and v in rare_authors:
++                v = "__rare_author__"
++            
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+     field_dims = [len(v) + 1 for v in vocabs]
+     offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
+-    return vocabs, unk, offsets
++    return vocabs, unk, offsets, rare_authors
+ 
+ 
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+@@ -114,6 +135,7 @@ class FM:
+ 
+ 
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+     unk: list[int],
+@@ -121,6 +143,7 @@ def _encode_rows(
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    rare_authors: set[str] | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+@@ -128,9 +151,18 @@ def _encode_rows(
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
++            # Sparse factorization backoff: rare authors use shared token
++            if rare_authors is not None and "author_id" in fields:
++                author_idx = fields.index("author_id")
++                if i == author_idx and v in rare_authors:
++                    v = "__rare_author__"
++            
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+ 
+ 
+ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> None:
+@@ -159,8 +191,8 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    vocabs, unk, offsets, rare_authors = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, rare_authors)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, rare_authors)

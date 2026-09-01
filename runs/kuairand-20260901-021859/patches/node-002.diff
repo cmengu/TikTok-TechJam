@@ -1,0 +1,150 @@
+diff --git a/template.py b/template.py
+index 5fc7d70..33254cb 100644
+--- a/template.py
++++ b/template.py
+@@ -28,11 +28,67 @@ def _active_fields() -> tuple[str, ...]:
+     return tuple(part.strip() for part in raw.split(",") if part.strip())
+ 
+ 
+-def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
++def _compute_video_stats(rows: list[dict[str, str]]) -> tuple[dict[str, int], dict[str, float]]:
++    """Compute per-video impression count and positive rate from training data."""
++    video_counts = {}
++    video_positives = {}
++    
++    for row in rows:
++        vid = row["video_id"]
++        video_counts[vid] = video_counts.get(vid, 0) + 1
++        if "long_view" in row:
++            video_positives[vid] = video_positives.get(vid, 0) + float(row["long_view"])
++    
++    video_pos_rate = {
++        vid: (video_positives.get(vid, 0) / video_counts[vid]) if video_counts[vid] > 0 else 0.0
++        for vid in video_counts
++    }
++    
++    return video_counts, video_pos_rate
++
++
++def _bucket_video_stats(
++    counts: dict[str, int], pos_rates: dict[str, float], n_buckets: int = 10
++) -> tuple[np.ndarray, np.ndarray]:
++    """Compute quantile edges for video count and positive rate bucketing."""
++    count_values = np.asarray(list(counts.values()), dtype=np.float64)
++    rate_values = np.asarray(list(pos_rates.values()), dtype=np.float64)
++    
++    count_edges = np.quantile(count_values, np.linspace(0, 1, n_buckets + 1)[1:-1])
++    rate_edges = np.quantile(rate_values, np.linspace(0, 1, n_buckets + 1)[1:-1])
++    
++    return count_edges, rate_edges
++
++
++def _row_tokens(
++    row: dict[str, str],
++    fields: tuple[str, ...],
++    edges: np.ndarray,
++    video_counts: dict[str, int] | None = None,
++    video_pos_rate: dict[str, float] | None = None,
++    count_edges: np.ndarray | None = None,
++    rate_edges: np.ndarray | None = None,
++) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name == "video_pop_count":
++            if video_counts is not None and count_edges is not None:
++                vid = row["video_id"]
++                count = video_counts.get(vid, 0)
++                bucket = int(np.searchsorted(count_edges, count))
++                tokens.append(f"vc{bucket}")
++            else:
++                tokens.append("vc0")
++        elif name == "video_pop_rate":
++            if video_pos_rate is not None and rate_edges is not None:
++                vid = row["video_id"]
++                rate = video_pos_rate.get(vid, 0.0)
++                bucket = int(np.searchsorted(rate_edges, rate))
++                tokens.append(f"vr{bucket}")
++            else:
++                tokens.append("vr0")
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -55,13 +111,20 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    video_counts: dict[str, int] | None = None,
++    video_pos_rate: dict[str, float] | None = None,
++    count_edges: np.ndarray | None = None,
++    rate_edges: np.ndarray | None = None,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
+     for n, row in enumerate(rows):
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        tokens = _row_tokens(
++            row, fields, edges, video_counts, video_pos_rate, count_edges, rate_edges
++        )
++        for i, v in enumerate(tokens):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+@@ -69,11 +132,20 @@ def _encode_rows(
+ 
+ 
+ def _build_vocabs(
+-    train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
++    train_rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    video_counts: dict[str, int] | None = None,
++    video_pos_rate: dict[str, float] | None = None,
++    count_edges: np.ndarray | None = None,
++    rate_edges: np.ndarray | None = None,
+ ):
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+-        for i, v in enumerate(_row_tokens(row, fields, edges)):
++        tokens = _row_tokens(
++            row, fields, edges, video_counts, video_pos_rate, count_edges, rate_edges
++        )
++        for i, v in enumerate(tokens):
+             if v not in vocabs[i]:
+                 vocabs[i][v] = len(vocabs[i])
+     unk = [len(v) for v in vocabs]
+@@ -163,12 +235,28 @@ def main() -> None:
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
++    
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
++    
++    video_counts = None
++    video_pos_rate = None
++    count_edges = None
++    rate_edges = None
++    if "video_pop_count" in fields or "video_pop_rate" in fields:
++        video_counts, video_pos_rate = _compute_video_stats(train_rows)
++        count_edges, rate_edges = _bucket_video_stats(video_counts, video_pos_rate)
++    
++    vocabs, unk, offsets = _build_vocabs(
++        train_rows, edges, fields, video_counts, video_pos_rate, count_edges, rate_edges
++    )
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(
++        train_rows, vocabs, unk, offsets, edges, fields, video_counts, video_pos_rate, count_edges, rate_edges
++    )
++    xva, _ = _encode_rows(
++        valid_rows, vocabs, unk, offsets, edges, fields, video_counts, video_pos_rate, count_edges, rate_edges
++    )
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
