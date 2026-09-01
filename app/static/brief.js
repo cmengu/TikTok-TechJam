@@ -78,13 +78,11 @@ export function briefPageHtml(vm) {
       <h2>The rules</h2>
       <p>${escapeHtml(INTRO.rules)}</p>
     </section>`;
-  const sections = vm.sections
-    .map((s) => {
-      const heading = s.title
-        ? `<h2>${escapeHtml(s.title)}</h2>`
-        : "";
-      return `<section class="card">${heading}${renderMarkdown(s.body)}</section>`;
-    })
-    .join("");
-  return `<div class="doc">${intro}${sections}</div>`;
+  // vm.sections is deliberately NOT rendered: the /runs/{id}/brief endpoint
+  // serves context/Backend_plan.md verbatim — the backend spec companion
+  // ("Harness Decisions", file inventories), a document for the people
+  // building the harness, not for a viewer asking what the run is trying to
+  // do (user order, 1 Sep). The intro card (task + goal + rules) is the
+  // whole page until the harness writes a real per-run game plan.
+  return `<div class="doc">${intro}</div>`;
 }
