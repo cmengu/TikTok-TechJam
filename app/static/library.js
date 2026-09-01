@@ -77,6 +77,7 @@ export function buildLibrary(state, manifest) {
       year: entry?.year ?? null,
       one_liner: entry?.one_liner ?? null,
       action: actionFor(source, entry),
+      cover: entry?.thumb ? `/papers/${entry.thumb}` : null,
       ideas: ideasFor(state, source),
       tokens: tokensFor(source),
     };
@@ -87,6 +88,22 @@ export function buildLibrary(state, manifest) {
 
 const ACTION_LABEL = { pdf: "Open PDF", link: "Read online", search: "Find it" };
 
+// Placeholder spines carry one accent hue per venue, drawn from the design
+// tokens (palette discipline: ink-ramp structure, sparse hue). Stable
+// assignment: hash the venue name onto the short accent list.
+const SPINE_ACCENTS = ["var(--wine)", "var(--pos)", "var(--warn)"];
+
+function spineAccent(venue) {
+  const s = String(venue ?? "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return SPINE_ACCENTS[h % SPINE_ACCENTS.length];
+}
+
+/** Fix-list item 1, card grid: one card per paper — cover (real page-1
+ * render with a title overlay strip) or a placeholder spine when no PDF
+ * exists; title + venue · year + one_liner below; the whole card clicks
+ * through to the PDF / arXiv page. */
 export function libraryPageHtml(rows) {
   if (!rows.length) {
     return `<p class="empty">no papers yet</p>`;
@@ -102,19 +119,27 @@ export function libraryPageHtml(rows) {
             )
             .join(" ")
         : "";
-      const blurb = row.one_liner
-        ? `<p>${escapeHtml(row.one_liner)}</p>`
-        : "";
+      const cover = row.cover
+        ? `<div class="paper-cover">
+             <img src="${escapeAttr(row.cover)}" alt="" loading="lazy" />
+             <span class="paper-cover-overlay">${escapeHtml(row.title)}</span>
+           </div>`
+        : `<div class="paper-spine" style="--spine-accent: ${spineAccent(row.venue)}">
+             <span class="paper-spine-title">${escapeHtml(row.title)}</span>
+             ${row.venue != null ? `<span class="paper-spine-venue">${escapeHtml(String(row.venue))}</span>` : ""}
+           </div>`;
+      const external = row.action.kind === "search" || row.action.kind === "link";
       return `
-        <section class="card">
-          <h2>${escapeHtml(row.title)}</h2>
-          ${meta ? `<p class="stat-caption">${escapeHtml(meta)}</p>` : ""}
-          ${blurb}
-          <p><a href="${escapeAttr(row.action.href)}"${row.action.kind === "search" || row.action.kind === "link" ? ' target="_blank" rel="noreferrer"' : ""}>${escapeHtml(ACTION_LABEL[row.action.kind] || "Open")}</a></p>
-          ${ideaChips ? `<p>${ideaChips}</p>` : ""}
-          <p class="stat-src">${escapeHtml(String(row.tokens))} tokens</p>
-        </section>`;
+        <a class="paper-card" href="${escapeAttr(row.action.href)}"${external ? ' target="_blank" rel="noreferrer"' : ' target="_blank"'} title="${escapeAttr(ACTION_LABEL[row.action.kind] || "Open")}">
+          ${cover}
+          <div class="paper-card-body">
+            <h2>${escapeHtml(row.title)}</h2>
+            ${meta ? `<p class="stat-caption">${escapeHtml(meta)}</p>` : ""}
+            ${row.one_liner ? `<p class="paper-blurb">${escapeHtml(row.one_liner)}</p>` : ""}
+            ${ideaChips ? `<p>${ideaChips}</p>` : ""}
+          </div>
+        </a>`;
     })
     .join("");
-  return `<div class="doc">${cards}</div>`;
+  return `<div class="paper-grid">${cards}</div>`;
 }
