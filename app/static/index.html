@@ -982,6 +982,98 @@
       padding: 24px;
     }
 
+    /* Library card grid (fix-list item 1): one card per paper — page-1
+       cover (or placeholder spine) on top, title + venue · year +
+       one-liner below, whole card clicks through to the PDF/arXiv.
+       Palette discipline: ink-ramp structure, one accent per spine. */
+    .paper-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: var(--s5);
+      align-items: start;
+    }
+    .paper-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r-panel);
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 120ms ease;
+    }
+    .paper-card:hover {
+      border-color: var(--ink-faint);
+    }
+    .paper-cover {
+      position: relative;
+      aspect-ratio: 3 / 4;
+      background: var(--sunken);
+      border-bottom: 1px solid var(--hairline);
+    }
+    .paper-cover img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top;
+    }
+    .paper-cover-overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: var(--s2) var(--s3);
+      font-size: 12px;
+      line-height: 1.35;
+      color: #fff;
+      background: linear-gradient(transparent, rgba(15, 14, 12, 0.82));
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .paper-spine {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      aspect-ratio: 3 / 4;
+      padding: var(--s4);
+      background: var(--sunken);
+      border-top: 4px solid var(--spine-accent, var(--ink-muted));
+      border-bottom: 1px solid var(--hairline);
+    }
+    .paper-spine-title {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 18px;
+      line-height: 1.3;
+      color: var(--ink);
+    }
+    .paper-spine-venue {
+      font-size: var(--fs-label);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--spine-accent, var(--ink-muted));
+    }
+    .paper-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s2);
+      padding: var(--s4);
+    }
+    .paper-card-body h2 {
+      font-size: 15px;
+      line-height: 1.35;
+      margin: 0;
+    }
+    .paper-blurb {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin: 0;
+    }
+
     /* .stat — intended:
        <div class="stat">
          <span class="stat-value">0.6041</span>

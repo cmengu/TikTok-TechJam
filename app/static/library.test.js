@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { initial, reduce } from "./reducer.js";
-import { buildLibrary } from "./library.js";
+import { buildLibrary, libraryPageHtml } from "./library.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(__dirname, "..", "..", "tests", "fixtures", "fake-events.jsonl");
@@ -36,8 +36,10 @@ describe("library", () => {
     assert.ok(deepfm);
     assert.equal(deepfm.year, 2017);
     assert.equal(deepfm.venue, "IJCAI");
-    assert.equal(deepfm.action.kind, "link");
-    assert.equal(deepfm.action.href, "https://arxiv.org/abs/1703.04247");
+    // the covers script filled manifest pdf paths, so a local PDF now beats
+    // the arXiv abs link (event-carried urls still win over both)
+    assert.equal(deepfm.action.kind, "pdf");
+    assert.equal(deepfm.action.href, "/papers/pdfs/arxiv-1703-04247.pdf");
   });
 
   it("test_unmatched_falls_to_scholar", () => {
@@ -108,5 +110,96 @@ describe("library", () => {
     assert.equal(src.includes('renderStub("Research")'), false);
     assert.match(src, /hash:\s*"research"/);
     assert.match(src, /render:\s*renderLibrary/);
+  });
+});
+
+describe("library llm-usage de-pollution", () => {
+  const LLM_USAGE = {
+    schema_version: 1,
+    seq: 9001,
+    t: "2026-08-31T17:32:22.153Z",
+    type: "research_source",
+    id: "usage-0-coding",
+    title: "llm usage",
+    node: 0,
+    cost: { gpu_s: 0.0, tokens_in: 17244, tokens_out: 9069, slice: "coding" },
+    summary: "llm coding: 17244 in / 9069 out tokens",
+  };
+
+  it("test_llm_usage_rows_never_reach_the_library", () => {
+    const events = [...loadJsonl(FIXTURE), LLM_USAGE];
+    const lib = buildLibrary(fold(events), loadManifest());
+    assert.ok(lib.length > 0);
+    assert.equal(
+      lib.find((p) => p.title === "llm usage"),
+      undefined,
+    );
+  });
+});
+
+describe("library card grid", () => {
+  const paper = (o = {}) => ({
+    title: "DeepFM: A Factorization-Machine based Neural Network",
+    venue: "IJCAI",
+    year: 2017,
+    one_liner: "Factorization machines plus a deep net.",
+    action: { kind: "pdf", href: "/papers/pdfs/arxiv-1703-04247.pdf" },
+    cover: "/papers/thumbs/arxiv-1703-04247.png",
+    ideas: [],
+    tokens: 0,
+    ...o,
+  });
+
+  it("test_build_carries_cover_from_manifest_thumb", () => {
+    const lib = buildLibrary(fold(loadJsonl(FIXTURE)), [
+      {
+        title: "DeepFM",
+        match: ["DeepFM"],
+        url: "https://arxiv.org/abs/1703.04247",
+        pdf: "pdfs/arxiv-1703-04247.pdf",
+        thumb: "thumbs/arxiv-1703-04247.png",
+        year: 2017,
+        venue: "IJCAI",
+        one_liner: "x",
+      },
+    ]);
+    const deepfm = lib.find((p) => p.title === "DeepFM");
+    assert.ok(deepfm);
+    assert.equal(deepfm.cover, "/papers/thumbs/arxiv-1703-04247.png");
+  });
+
+  it("test_card_with_cover_renders_image_and_title_overlay", () => {
+    const html = libraryPageHtml([paper()]);
+    assert.match(html, /paper-grid/);
+    assert.match(html, /paper-card/);
+    assert.match(html, /<img[^>]*src="\/papers\/thumbs\/arxiv-1703-04247\.png"/);
+    assert.match(html, /paper-cover-overlay/);
+    assert.match(html, /IJCAI · 2017/);
+    assert.match(html, /Factorization machines plus a deep net\./);
+    // the whole card is the click-through to the PDF
+    assert.match(html, /href="\/papers\/pdfs\/arxiv-1703-04247\.pdf"/);
+  });
+
+  it("test_card_without_cover_renders_placeholder_spine", () => {
+    const html = libraryPageHtml([
+      paper({
+        title: "Factorization Machines",
+        venue: "ICDM",
+        year: 2010,
+        cover: null,
+        action: { kind: "link", href: "https://ieeexplore.ieee.org/document/5694074" },
+      }),
+    ]);
+    assert.match(html, /paper-spine/);
+    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /Factorization Machines/);
+    assert.match(html, /ICDM/);
+  });
+
+  it("test_card_markup_escapes_titles", () => {
+    const html = libraryPageHtml([
+      paper({ title: '<script>alert(1)</script>', cover: null }),
+    ]);
+    assert.doesNotMatch(html, /<script>alert/);
   });
 });

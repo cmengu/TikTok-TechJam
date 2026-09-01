@@ -19,6 +19,15 @@ function zeros() {
   return Object.fromEntries(TRACE_KEYS.map((k) => [k, 0]));
 }
 
+// Fix-list item 1: harness/agents/llm.py logs cost bookkeeping after every
+// LLM call as a research_source titled "llm usage" (riding the paper event
+// type so the cost field attaches). Those rows are spend, not reading —
+// frontend folds skip them; the emission itself stays untouched
+// (additive-events law).
+export function isCostBookkeeping(ev) {
+  return ev?.type === "research_source" && ev?.title === "llm usage";
+}
+
 /**
  * buildTrace(state) → counts of events on state.log.
  *
@@ -34,7 +43,7 @@ export function buildTrace(state) {
     if (ev == null || typeof ev !== "object") continue;
     switch (ev.type) {
       case "research_source":
-        out.papersRead += 1;
+        if (!isCostBookkeeping(ev)) out.papersRead += 1;
         break;
       case "hypothesis_queued":
         out.ideasProposed += 1;
