@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -116,10 +117,24 @@ def list_runs() -> list[dict]:
     return rows
 
 
+def _snapshot_host() -> bool:
+    """True on serverless hosts (Vercel sets VERCEL=1), where a response
+    can never outlive the request: streams must replay and close."""
+    return bool(os.environ.get("VERCEL"))
+
+
+def _run_has_ended(run_dir: Path) -> bool:
+    """A run_ended event on the log means nothing new will ever arrive."""
+    events = _read_jsonl(run_dir / "events.jsonl")
+    return any(ev.get("type") == "run_ended" for ev in events)
+
+
 async def _sse_tail(
-    path: Path, since: int, request: Request
+    path: Path, since: int, request: Request, follow: bool = True
 ) -> AsyncIterator[bytes]:
-    """Replay lines with seq>since, then poll for new lines every 0.5s."""
+    """Replay lines with seq>since, then poll for new lines every 0.5s.
+    With follow=False (ended run, or a serverless snapshot host), replay
+    what exists and close instead of tailing forever."""
     offset = 0
     while True:
         if await request.is_disconnected():
@@ -140,6 +155,8 @@ async def _sse_tail(
                             ev, separators=(",", ":"), ensure_ascii=False
                         )
                         yield f"data: {payload}\n\n".encode("utf-8")
+        if not follow:
+            return
         await asyncio.sleep(0.5)
 
 
@@ -150,12 +167,14 @@ def _json_since(path: Path, since: int) -> list[dict]:
 def get_events(
     run_id: str, since: int = 0, stream: bool = True, request: Request | None = None
 ):
-    path = _run_dir(run_id) / "events.jsonl"
+    run_dir = _run_dir(run_id)
+    path = run_dir / "events.jsonl"
     if stream:
         if request is None:
             raise ValueError("request required for streaming")
+        follow = not _snapshot_host() and not _run_has_ended(run_dir)
         return StreamingResponse(
-            _sse_tail(path, since, request),
+            _sse_tail(path, since, request, follow=follow),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
@@ -165,12 +184,14 @@ def get_events(
 def get_heartbeat(
     run_id: str, since: int = 0, stream: bool = True, request: Request | None = None
 ):
-    path = _run_dir(run_id) / "heartbeat.jsonl"
+    run_dir = _run_dir(run_id)
+    path = run_dir / "heartbeat.jsonl"
     if stream:
         if request is None:
             raise ValueError("request required for streaming")
+        follow = not _snapshot_host() and not _run_has_ended(run_dir)
         return StreamingResponse(
-            _sse_tail(path, since, request),
+            _sse_tail(path, since, request, follow=follow),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
