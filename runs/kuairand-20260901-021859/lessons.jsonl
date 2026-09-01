@@ -5,3 +5,6 @@
 {"defect":"no_gain","delta":-0.00024397990895907995,"family":"features/dur-log-buckets","node":6,"pattern":"dur-log-buckets","round":5,"verdict":"inconclusive"}
 {"defect":"no_gain","delta":0.0,"family":"features/tab-cross","node":7,"pattern":"tab-cross","round":6,"verdict":"inconclusive"}
 {"defect":"no_gain","delta":0.0,"family":"features/author-freq-bucket","node":8,"pattern":"author-freq-bucket","round":7,"verdict":"inconclusive"}
+{"defect":"no_gain","delta":0.0025408529579883745,"family":"features/date-token","node":9,"pattern":"date-token","round":8,"verdict":"promoted"}
+{"defect":"no_gain","delta":-0.0012319878724504907,"family":"training/emb-dim-12","node":10,"pattern":"emb-dim-12","round":9,"verdict":"rejected"}
+{"defect":"no_gain","delta":-0.0006689229173726385,"family":"training/lr-warmup","node":11,"pattern":"lr-warmup","round":10,"verdict":"inconclusive"}
