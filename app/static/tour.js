@@ -19,7 +19,12 @@ export const TOUR_STOPS = [
     body: DICT.tourRunBody.word,
   },
   {
-    route: "run/3",
+    // No hard-coded attempt id: a young run may not have attempt 3 yet (the
+    // first-open case — the tour fires before events finish streaming), and
+    // "#/run/3" then renders "no such attempt" with nothing to spotlight.
+    // tourStopRoute() picks a real attempt from live state at draw time.
+    route: "run",
+    pickAttempt: true,
     anchor: "journey-strip",
     title: DICT.tourJourneyTitle.word,
     body: DICT.tourJourneyBody.word,
@@ -65,4 +70,33 @@ export function tourOverlayHtml(stop, index, total) {
       <button type="button" data-tour="skip">Skip</button>
     </p>
   </div>`;
+}
+
+/**
+ * Resolve a stop's route against live state. Literal routes pass through;
+ * the journey stop (pickAttempt) targets the current best attempt, else the
+ * first attempt created, else the bare attempts tree — never an id that
+ * doesn't exist.
+ */
+export function tourStopRoute(stop, state) {
+  if (!stop.pickAttempt) return stop.route;
+  const id = state?.incumbent ?? state?.nodeOrder?.[0] ?? null;
+  if (id == null) return "run";
+  return `run/${encodeURIComponent(String(id))}`;
+}
+
+/**
+ * Pane-relative scroll math for the spotlight. All inputs are viewport
+ * coordinates (getBoundingClientRect) plus the pane's current scrollTop —
+ * the body is scroll-locked, so window offsets never enter the picture.
+ * Returns the pane scrollTop that centers the element, or null when the
+ * element is already fully visible.
+ */
+export function paneScrollTarget({ paneTop, paneHeight, paneScrollTop, elTop, elHeight }) {
+  const fits = elHeight <= paneHeight;
+  const fullyVisible =
+    elTop >= paneTop && elTop + elHeight <= paneTop + paneHeight;
+  if (fits && fullyVisible) return null;
+  const offset = fits ? (paneHeight - elHeight) / 2 : 0;
+  return Math.max(0, paneScrollTop + (elTop - paneTop) - offset);
 }
