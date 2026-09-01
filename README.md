@@ -76,6 +76,114 @@ genuine, fully-certified improvement over its own baseline:
 
 ---
 
+## See it running
+
+Every screen below is a fold over the run's own append-only event log — the UI
+computes nothing of its own. Browse them live at
+[luxmaxxing.vercel.app](https://luxmaxxing.vercel.app).
+
+### Dashboard
+
+The funnel (`papers → ideas → attempts → accepted`), the verification stage
+(**L4-v** — a closed loop gated by an external oracle the search cannot game),
+the intervention counter, and *Score vs current best* showing the accepted
+delta against the bar it had to clear.
+
+![Dashboard](docs/images/dashboard.png)
+
+### Library
+
+The paper corpus with page-one covers, each card marked with whether this
+particular run consulted it.
+
+![Library](docs/images/library.png)
+
+### Attempts
+
+Every attempt with its move, its stage, and its verdict — and on the right,
+*why we believe it*. Here the attribution gate **refuses credit** to
+`deep-cross`: the score moved, but `gauc` and `ndcg_at_5` — the observables its
+own hypothesis declared — did not, so the gain was never written into memory.
+
+![Attempts — why we believe it, credit refused](docs/images/attribution-refused.png)
+
+---
+
+## What we took from the literature — eight capabilities
+
+Every mechanism below is implemented, and the screenshot beside it is that
+mechanism working in a real run — not a mockup.
+
+### NOVA (Tencent) — the architecture gradient
+
+**1 · Weak-component feedback.** Families are scored by measured history, so
+the proposer is *told* which part of the pipeline is underperforming instead of
+guessing. **2 · Forbidden directions.** Patterns the log already recorded as
+failures are refused at proposal time — the agent cannot re-run a known dead
+end. The page below writes itself from the run's own lessons, and the code
+block at the bottom is the exact text the proposing model reads next round.
+`harness/tree.py` (`family_stats`, `Queue.score_hyp`),
+`harness/agents/researcher.py` (`_refuse_forbidden`).
+
+![What it learned — weak spots, promising directions, banned patterns](docs/images/what-it-learned.png)
+
+### AgentX (Kuaishou) — don't trust an unexplained win
+
+**3 · The attribution brake.** Every hypothesis declares observables and a
+direction. Below is the brake firing on a real attempt: `deep-cross` moved the
+score, but `gauc` and `ndcg_at_5` — the observables its own hypothesis named —
+did not move, so **credit was refused and the gain was never written into
+memory**. `harness/attribute.py`, gated in `harness/measure.py`.
+
+(Shown in the **Attempts** screenshot above.)
+
+**4 · Infrastructure failure as a first-class path.** A failed patch is retried
+with the exact git error in hand, then rewritten whole-file, and every step is
+logged rather than dying silently. This run crashed once and **rescued six**
+attempts that would previously have been lost.
+`harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file fallback).
+
+![Stability — crashes, rescued 6, rulebook trips 0](docs/images/stability-recoveries.png)
+
+### AIRA-dojo (Meta) — measure before you believe
+
+**5 · Hidden consistent evaluation.** One fixed split, labels physically absent
+from the candidate's environment, scoring done outside the candidate — and
+every look at the hidden check counted against a budget. `harness/runner.py`
+(`_build_env` whitelist), `harness/tasks/kuairand.py`.
+
+![Health — hidden check visited 0 of 12](docs/images/hidden-check.png)
+
+**6 · A frozen, hashed protocol.** The data, the splits and the scorer are
+pinned by SHA-256; changing any of them means results are no longer comparable,
+and a changed `evaluate.py` stops the run rather than quietly changing the
+numbers. `harness/protocol.py`, `protocols/kuairand.yaml`.
+
+![Rules — hashed, defines comparability](docs/images/frozen-protocol.png)
+
+### AIDE (Weco) — the search itself
+
+**7 · Draft / debug / improve tree.** Nodes are drafted from the queue,
+repaired when they crash, and extended when they win, with greedy
+keep-or-revert and a fork when a branch stalls — visible as the move trail
+("new idea — breadth floor", "fix a crash — repair before extend") in the
+Attempts screenshot above. `harness/tree.py`.
+
+### MLE-bench (OpenAI) + MLE-STAR (Google) — never end with nothing, and attack the right component
+
+**8 · Always-valid submission, watchdogs, and honest forecasts.** Every
+accepted candidate is immediately re-run on the submission features and written
+in the kit's schema; wall-clock limits and stall detection cover every attempt;
+`scripts/rescue_submission.py` covers a run that converges without accepting
+anything. MLE-STAR's ablation idea shows up as the forecast-vs-measured
+discipline: each idea carries an *expected* gain, and the page shows what it
+actually delivered beside it — `expected 0.003 (forecast) · actual +0.0000
+(measured)`. `harness/outputs.py`, `harness/runner.py`.
+
+![Ideas — expected forecast vs actual measured](docs/images/ideas-forecast-vs-actual.png)
+
+---
+
 ## Architecture
 
 Five decoupled stages that only talk through an **append-only event log**.
@@ -190,97 +298,7 @@ Solo project — all components by the repo owner, with LLM coding assistance.
 
 ---
 
-## What we took from the literature — eight capabilities
-
-Every mechanism below is implemented, and the screenshot beside it is that
-mechanism working in a real run — not a mockup.
-
-### NOVA (Tencent) — the architecture gradient
-
-**1 · Weak-component feedback.** Families are scored by measured history, so
-the proposer is *told* which part of the pipeline is underperforming instead of
-guessing. **2 · Forbidden directions.** Patterns the log already recorded as
-failures are refused at proposal time — the agent cannot re-run a known dead
-end. The page below writes itself from the run's own lessons, and the code
-block at the bottom is the exact text the proposing model reads next round.
-`harness/tree.py` (`family_stats`, `Queue.score_hyp`),
-`harness/agents/researcher.py` (`_refuse_forbidden`).
-
-![What it learned — weak spots, promising directions, banned patterns](docs/images/what-it-learned.png)
-
-### AgentX (Kuaishou) — don't trust an unexplained win
-
-**3 · The attribution brake.** Every hypothesis declares observables and a
-direction. Below is the brake firing on a real attempt: `deep-cross` moved the
-score, but `gauc` and `ndcg_at_5` — the observables its own hypothesis named —
-did not move, so **credit was refused and the gain was never written into
-memory**. `harness/attribute.py`, gated in `harness/measure.py`.
-
-![Attempts — why we believe it, credit refused](docs/images/attribution-refused.png)
-
-**4 · Infrastructure failure as a first-class path.** A failed patch is retried
-with the exact git error in hand, then rewritten whole-file, and every step is
-logged rather than dying silently. This run crashed once and **rescued six**
-attempts that would previously have been lost.
-`harness/agents/coder.py` (`sanitize_diff`, `DIFF_ATTEMPTS`, full-file fallback).
-
-![Stability — crashes, rescued 6, rulebook trips 0](docs/images/stability-recoveries.png)
-
-### AIRA-dojo (Meta) — measure before you believe
-
-**5 · Hidden consistent evaluation.** One fixed split, labels physically absent
-from the candidate's environment, scoring done outside the candidate — and
-every look at the hidden check counted against a budget. `harness/runner.py`
-(`_build_env` whitelist), `harness/tasks/kuairand.py`.
-
-![Health — hidden check visited 0 of 12](docs/images/hidden-check.png)
-
-**6 · A frozen, hashed protocol.** The data, the splits and the scorer are
-pinned by SHA-256; changing any of them means results are no longer comparable,
-and a changed `evaluate.py` stops the run rather than quietly changing the
-numbers. `harness/protocol.py`, `protocols/kuairand.yaml`.
-
-![Rules — hashed, defines comparability](docs/images/frozen-protocol.png)
-
-### AIDE (Weco) — the search itself
-
-**7 · Draft / debug / improve tree.** Nodes are drafted from the queue,
-repaired when they crash, and extended when they win, with greedy
-keep-or-revert and a fork when a branch stalls — visible as the move trail
-("new idea — breadth floor", "fix a crash — repair before extend") in the
-Attempts screenshot above. `harness/tree.py`.
-
-### MLE-bench (OpenAI) + MLE-STAR (Google) — never end with nothing, and attack the right component
-
-**8 · Always-valid submission, watchdogs, and honest forecasts.** Every
-accepted candidate is immediately re-run on the submission features and written
-in the kit's schema; wall-clock limits and stall detection cover every attempt;
-`scripts/rescue_submission.py` covers a run that converges without accepting
-anything. MLE-STAR's ablation idea shows up as the forecast-vs-measured
-discipline: each idea carries an *expected* gain, and the page shows what it
-actually delivered beside it — `expected 0.003 (forecast) · actual +0.0000
-(measured)`. `harness/outputs.py`, `harness/runner.py`.
-
-![Ideas — expected forecast vs actual measured](docs/images/ideas-forecast-vs-actual.png)
-
----
-
-## The dashboard
-
-Every number below is a fold over the append-only event log — the UI computes
-nothing of its own.
-
-**Dashboard** — the funnel (`papers → ideas → attempts → accepted`), the
-verification stage (**L4-v**: a closed loop gated by an external oracle the
-search cannot game), the intervention counter, and *Score vs current best*
-showing the accepted delta against the bar it had to clear.
-
-![Dashboard](docs/images/dashboard.png)
-
-**Library** — the paper corpus with page-one covers, each card marked with
-whether this particular run consulted it.
-
-![Library](docs/images/library.png)
+## The rest of the dashboard
 
 **The rules** — the 18-rule contract the candidate reads and the free checks
 enforce; same document, both sides.
@@ -291,7 +309,7 @@ enforce; same document, both sides.
 
 ![Game plan](docs/images/game-plan.png)
 
-**Spend** — tokens by stage, with the compute time called out separately;
-stages that spend nothing say so rather than showing a misleading zero.
+**Spend** — tokens by stage, with compute time called out separately; stages
+that spend nothing say so rather than showing a misleading zero.
 
 ![Spend](docs/images/spend.png)
