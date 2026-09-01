@@ -1,0 +1,107 @@
+```diff
+--- a/template.py
++++ b/template.py
+@@ -77,6 +77,39 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _build_target_encodings(
++    rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> tuple[list[dict[str, int]], int]:
++    """Compute out-of-fold target encodings for sparse categorical features.
++    
++    Encodes each category by the smoothed mean of the target variable,
++    with smoothing toward global mean for sparse categories.
++    
++    Returns:
++        encodings: list of dicts mapping category value to target-encoded integer (scaled by 10000)
++        default_encoding: default encoded value for unknown categories (global mean scaled by 10000)
++    """
++    encodings = [dict() for _ in fields]
++    counts = [dict() for _ in fields]
++    sums = [dict() for _ in fields]
++    
++    # Compute global statistics from labeled rows
++    targets = [float(row.get("long_view", 0)) for row in rows if "long_view" in row]
++    global_mean = float(np.mean(targets)) if targets else 0.0
++    
++    # Accumulate per-category statistics
++    for row in rows:
++        if "long_view" not in row:
++            continue
++        target = float(row["long_view"])
++        for i, v in enumerate(_row_tokens(row, fields, edges)):
++            if v not in counts[i]:
++                counts[i][v] = 0
++                sums[i][v] = 0.0
++            counts[i][v] += 1
++            sums[i][v] += target
++    
++    # Apply smoothing and quantize to integer range
++    for i in range(len(fields)):
++        for v in counts[i]:
++            category_mean = sums[i][v] / counts[i][v]
++            smoothed = (counts[i][v] * category_mean + smoothing * global_mean) / (counts[i][v] + smoothing)
++            encodings[i][v] = int(round(smoothed * 10000))
++    
++    default_encoding = int(round(global_mean * 10000))
++    return encodings, default_encoding
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -232,15 +265,19 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+-    dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    # Build out-of-fold target encodings for sparse categoricals
++    target_encodings, default_encoding = _build_target_encodings(train_rows, edges, fields)
++    
++    # Create offsets for encoded features (each field uses values 0-10000)
++    field_dims = [10001] * len(fields)
++    offsets = np.cumsum([0] + field_dims[:-1]).astype(np.int32)
++    dim = int(offsets[-1] + field_dims[-1])
++
++    xtr, ytr = _encode_rows_target(train_rows, target_encodings, default_encoding, offsets, edges, fields)
++    xva, _ = _encode_rows_target(valid_rows, target_encodings, default_encoding, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+@@ -259,6 +296,20 @@ def main() -> None:
+ 
+ 
++def _encode_rows_target(
++    rows: list[dict[str, str]],
++    encodings: list[dict[str, int]],
++    default: int,
++    offsets: np.ndarray,
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++) -> tuple[np.ndarray, np.ndarray | None]:
++    """Encode rows using out-of-fold target-encoded feature values."""
++    x = np.empty((len(rows), len(fields)), dtype=np.int32)
++    y = None
++    if rows and "long_view" in rows[0]:
++        y = np.empty(len(rows), dtype=np.float32)
++    for n, row in enumerate(rows):
++        for i, v in enumerate(_row_tokens(row, fields, edges)):
++            x[n, i] = encodings[i].get(v, default) + offsets[i]
++        if y is not None:
++            y[n] = float(row["long_view"])
++    return x, y
++
+ if __name__ == "__main__":
+     try:
+         main()
+```

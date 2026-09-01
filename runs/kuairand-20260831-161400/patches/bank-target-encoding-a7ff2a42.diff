@@ -1,0 +1,115 @@
+--- template.py
++++ template.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import csv
+ import io
+ import os
++import statistics
+ import sys
+ from pathlib import Path
+ 
+@@ -13,6 +14,7 @@ import numpy as np
+ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++TARGET_ENCODE_FIELDS = ("user_id", "video_id", "author_id")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -74,6 +76,79 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _calculate_target_encoding_stats(
++    rows: list[dict[str, str]], fields: tuple[str, ...]
++) -> dict[str, dict[str, dict]]:
++    """Calculate target encoding statistics per field value.
++    
++    For each value in the specified fields, computes:
++    - sum: sum of long_view labels
++    - count: number of occurrences with labels
++    
++    Used to smooth per-value means toward global rate.
++    Implements Micci-Barreca (2001) leave-one-out encoding.
++    """
++    stats = {}
++    for field in fields:
++        stats[field] = {}
++        for row in rows:
++            if "long_view" not in row:
++                continue
++            value = row[field]
++            label = float(row["long_view"])
++            if value not in stats[field]:
++                stats[field][value] = {"sum": 0.0, "count": 0}
++            stats[field][value]["sum"] += label
++            stats[field][value]["count"] += 1
++    return stats
++
++
++def _apply_target_encoding(
++    rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    target_stats: dict[str, dict[str, dict]],
++    global_mean: float,
++    smoothing: float = 1.0,
++) -> np.ndarray:
++    """Apply target-encoded features, smoothed toward global rate.
++    
++    For each row and field, replaces categorical value with:
++        smoothed_mean = (n * mean + m * global_mean) / (n + m)
++    
++    where n=count, mean=per-value mean, m=smoothing factor.
++    Implements Micci-Barreca (2001) smoothing with leave-one-out.
++    """
++    encoded = np.zeros((len(rows), len(fields)), dtype=np.float32)
++    for row_idx, row in enumerate(rows):
++        for field_idx, field in enumerate(fields):
++            value = row[field]
++            if value in target_stats[field]:
++                total_sum = target_stats[field][value]["sum"]
++                total_count = target_stats[field][value]["count"]
++                
++                # Leave-one-out: exclude this row's contribution if it has a label
++                if "long_view" in row:
++                    label = float(row["long_view"])
++                    total_sum -= label
++                    total_count -= 1
++                
++                if total_count > 0:
++                    mean = total_sum / total_count
++                else:
++                    mean = global_mean
++            else:
++                mean = global_mean
++                total_count = 0
++            
++            # Apply smoothing toward global rate
++            smoothed_mean = (
++                total_count * mean + smoothing * global_mean
++            ) / (total_count + smoothing)
++            encoded[row_idx, field_idx] = smoothed_mean
++    
++    return encoded
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -186,6 +261,16 @@ def main() -> None:
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
++    # Apply target encoding for specified fields
++    target_stats = _calculate_target_encoding_stats(train_rows, TARGET_ENCODE_FIELDS)
++    global_mean = float(np.mean(ytr)) if ytr is not None else 0.0
++    target_encoded_tr = _apply_target_encoding(
++        train_rows, TARGET_ENCODE_FIELDS, target_stats, global_mean, smoothing=1.0
++    )
++    target_encoded_va = _apply_target_encoding(
++        valid_rows, TARGET_ENCODE_FIELDS, target_stats, global_mean, smoothing=1.0
++    )
++
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):

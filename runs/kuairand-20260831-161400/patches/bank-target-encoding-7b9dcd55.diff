@@ -1,0 +1,96 @@
+--- a/template.py
++++ b/template.py
+@@ -8,6 +8,7 @@ import csv
+ import io
+ import os
+ import sys
++from typing import Callable
+ from pathlib import Path
+ 
+ import numpy as np
+@@ -15,6 +16,7 @@ import numpy as np
+ import report
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++TARGET_ENCODING_FIELDS = ("user_id", "video_id", "author_id")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -122,6 +124,53 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _encode_target_features(
++    rows: list[dict[str, str]],
++    target_fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> None:
++    """
++    Add target-encoded features to rows (in-place).
++    Micci-Barreca 2001: out-of-fold mean smoothed toward global rate.
++    Leave-one-out: row's own label doesn't contribute to its encoding.
++    
++    Args:
++        rows: List of data rows to augment
++        target_fields: Categorical field names to encode
++        smoothing: Smoothing constant (default 1.0)
++    """
++    if not rows or "long_view" not in rows[0]:
++        return
++    
++    y_all = np.array([float(r["long_view"]) for r in rows], dtype=np.float32)
++    global_mean = float(np.mean(y_all))
++    
++    # Compute sum and count per (field, value) pair
++    stats = {}
++    for field in target_fields:
++        for row in rows:
++            val = row.get(field)
++            if not val:
++                continue
++            key = (field, val)
++            if key not in stats:
++                stats[key] = {"sum": 0.0, "count": 0}
++            stats[key]["sum"] += float(row["long_view"])
++            stats[key]["count"] += 1
++    
++    # Apply encoding with leave-one-out for each row
++    for row in rows:
++        for field in target_fields:
++            val = row.get(field)
++            key = (field, val)
++            
++            if key not in stats:
++                row[f"te_{field}"] = str(global_mean)
++            else:
++                s, c = stats[key]["sum"], stats[key]["count"]
++                # Leave-one-out: exclude this row's contribution
++                if "long_view" in row:
++                    s -= float(row["long_view"])
++                    c -= 1
++                # Mean with leave-one-out
++                mean = s / c if c > 0 else global_mean
++                # Apply Micci-Barreca smoothing
++                te_val = (c * mean + smoothing * global_mean) / (c + smoothing)
++                row[f"te_{field}"] = str(te_val)
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -197,6 +246,14 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
++    
++    # Add target-encoded features
++    _encode_target_features(train_rows, TARGET_ENCODING_FIELDS)
++    _encode_target_features(valid_rows, TARGET_ENCODING_FIELDS)
++    
++    # Include target-encoded fields in active features
++    te_cols = tuple(f"te_{f}" for f in TARGET_ENCODING_FIELDS)
++    fields = tuple(list(fields) + list(te_cols))
++    
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)

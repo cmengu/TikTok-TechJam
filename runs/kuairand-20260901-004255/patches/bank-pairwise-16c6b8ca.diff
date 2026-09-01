@@ -1,0 +1,105 @@
+--- a/template.py
++++ b/template.py
+@@ -107,6 +107,41 @@ class FM:
+             return float(
+                 -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+             )
++
++    def step_pairwise(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """BPR pairwise ranking step grouped by user."""
++        bsz = len(X_pos)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        
++        z_diff = z_pos - z_neg
++        sig_z_diff = sigmoid(z_diff)
++        
++        g_pos = ((sig_z_diff - 1.0) / bsz).astype(np.float32)
++        g_neg = ((1.0 - sig_z_diff) / bsz).astype(np.float32)
++        
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        np.add.at(gW, X_pos, g_pos[:, None])
++        np.add.at(gV, X_pos, g_pos[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gW, X_neg, g_neg[:, None])
++        np.add.at(gV, X_neg, g_neg[:, None, None] * (s_neg[:, None, :] - e_neg))
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        self.b -= self.lr * (g_pos.sum() + g_neg.sum())
++        return float(-np.mean(np.log(sig_z_diff + 1e-9)))
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+@@ -134,6 +169,32 @@ def _checkpoint_blob(model: FM) -> bytes:
+     return buf.getvalue()
+ 
+ 
++def _make_pairwise_batches(
++    train_rows: list[dict[str, str]],
++    vocabs: list[dict[str, int]],
++    unk: list[int],
++    offsets: np.ndarray,
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    batch_size: int,
++    rng: np.random.Generator,
++) -> list[tuple[np.ndarray, np.ndarray]]:
++    """Create pairwise batches grouped by user (BPR)."""
++    user_items = {}
++    for row in train_rows:
++        user_id = row["user_id"]
++        if user_id not in user_items:
++            user_items[user_id] = {"pos": [], "neg": []}
++        label = float(row.get("long_view", 0.0))
++        if label > 0.5:
++            user_items[user_id]["pos"].append(row)
++        else:
++            user_items[user_id]["neg"].append(row)
++    pairs_pos, pairs_neg = [], []
++    for user_id, items in user_items.items():
++        for pos_row in items["pos"]:
++            for neg_row in items["neg"]:
++                pairs_pos.append(pos_row)
++                pairs_neg.append(neg_row)
++    if pairs_pos:
++        indices = rng.permutation(len(pairs_pos))
++        pairs_pos = [pairs_pos[i] for i in indices]
++        pairs_neg = [pairs_neg[i] for i in indices]
++    batches = []
++    for i in range(0, len(pairs_pos), batch_size):
++        x_pos, _ = _encode_rows(pairs_pos[i:i+batch_size], vocabs, unk, offsets, edges, fields)
++        x_neg, _ = _encode_rows(pairs_neg[i:i+batch_size], vocabs, unk, offsets, edges, fields)
++        batches.append((x_pos, x_neg))
++    return batches
++
++
+ def main() -> None:
+     train_path = Path(os.environ["TRAIN"])
+     valid_path = Path(os.environ.get("ORACLE") or os.environ["VALID"])
+@@ -151,17 +212,13 @@ def main() -> None:
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        batches = _make_pairwise_batches(train_rows, vocabs, unk, offsets, edges, fields, batch, rng)
+         losses = []
+-        for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++        for X_pos, X_neg in batches:
++            losses.append(model.step_pairwise(X_pos, X_neg))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

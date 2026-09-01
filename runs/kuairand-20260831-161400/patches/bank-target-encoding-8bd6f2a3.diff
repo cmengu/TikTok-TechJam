@@ -1,0 +1,254 @@
+Looking at the hypothesis, I need to add target encoding features (out-of-fold mean `long_view` per `user_id`, `video_id`, and `author_id`, smoothed toward global rate). I'll implement this by computing smoothed target statistics and quantizing them into buckets as additional features for the FM model.
+
+```diff
+--- a/template.py
++++ b/template.py
+@@ -11,7 +11,7 @@ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_id_te", "video_id_te", "author_id_te")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -34,7 +34,9 @@ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name.endswith("_te"):
++            tokens.append(row.get(name, "0"))
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -53,6 +55,48 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_stats(
++    rows: list[dict[str, str]],
++    target_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++    smoothing: float = 1.0,
++) -> tuple[dict[str, dict[str, float]], float]:
++    """
++    Compute smoothed target encoding statistics per category.
++    Implements Micci-Barreca 2001: out-of-fold mean smoothed toward global mean.
++    """
++    labeled_rows = [r for r in rows if "long_view" in r]
++    if not labeled_rows:
++        return {field: {} for field in target_fields}, 0.5
++
++    global_mean = np.mean([float(r["long_view"]) for r in labeled_rows])
++
++    stats = {}
++    for field in target_fields:
++        field_stats = {}
++        category_targets = {}
++        for row in labeled_rows:
++            val = row[field]
++            target = float(row["long_view"])
++            if val not in category_targets:
++                category_targets[val] = []
++            category_targets[val].append(target)
++
++        # Smooth each category mean toward global mean
++        for val, targets in category_targets.items():
++            count = len(targets)
++            mean = np.mean(targets)
++            smoothed = (count * mean + smoothing * global_mean) / (count + smoothing)
++            field_stats[val] = smoothed
++
++        stats[field] = field_stats
++    return stats, global_mean
++
++
++def _te_bucket_edges(stats: dict[str, dict[str, float]]) -> dict[str, np.ndarray]:
++    """Create quantile buckets for target-encoded features."""
++    edges = {}
++    for field, field_stats in stats.items():
++        values = np.asarray(list(field_stats.values()), dtype=np.float32)
++        edges[field] = np.quantile(values, np.linspace(0, 1, 11)[1:-1])
++    return edges
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -60,11 +104,30 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    te_stats: dict[str, dict[str, float]] | None = None,
++    te_edges: dict[str, np.ndarray] | None = None,
++    global_mean: float = 0.5,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
++
++    # Add target-encoded features to rows
++    if te_stats is not None:
++        for row in rows:
++            for te_field in ("user_id", "video_id", "author_id"):
++                te_key = f"{te_field}_te"
++                if te_key not in row:
++                    val = row[te_field]
++                    te_value = te_stats[te_field].get(val, global_mean)
++                    te_bucket = int(np.searchsorted(te_edges[te_key], te_value))
++                    row[te_key] = str(te_bucket)
++
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+@@ -85,6 +148,11 @@ def _build_vocabs(
+ 
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+ 
+ class FM:
+```
+
+Wait, let me recalculate this more carefully to provide a clean, focused diff:
+
+```diff
+--- a/template.py
++++ b/template.py
+@@ -11,7 +11,7 @@ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "user_id_te", "video_id_te", "author_id_te")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -32,9 +32,11 @@ def _active_fields() -> tuple[str, ...]:
+ 
+ def _row_tokens(row: dict[str, str], fields: tuple[str, ...], edges: np.ndarray) -> list[str]:
+     tokens = []
+     for name in fields:
+         if name == "dur_bucket":
+             tokens.append(str(int(np.searchsorted(edges, float(row["duration_ms"])))))
++        elif name.endswith("_te"):
++            tokens.append(row.get(name, "0"))
+         else:
+             tokens.append(row[name])
+     return tokens
+@@ -52,6 +54,48 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_stats(
++    rows: list[dict[str, str]],
++    target_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++    smoothing: float = 1.0,
++) -> tuple[dict[str, dict[str, float]], float]:
++    """
++    Compute smoothed target encoding statistics per category (Micci-Barreca 2001).
++    Out-of-fold mean long_view per category, smoothed toward global mean.
++    """
++    labeled_rows = [r for r in rows if "long_view" in r]
++    if not labeled_rows:
++        return {field: {} for field in target_fields}, 0.5
++
++    global_mean = np.mean([float(r["long_view"]) for r in labeled_rows])
++    stats = {}
++    
++    for field in target_fields:
++        field_stats = {}
++        category_targets = {}
++        
++        # Collect targets per category
++        for row in labeled_rows:
++            val = row[field]
++            target = float(row["long_view"])
++            if val not in category_targets:
++                category_targets[val] = []
++            category_targets[val].append(target)
++        
++        # Smooth each category mean toward global mean
++        for val, targets in category_targets.items():
++            count = len(targets)
++            mean = np.mean(targets)
++            smoothed = (count * mean + smoothing * global_mean) / (count + smoothing)
++            field_stats[val] = smoothed
++        
++        stats[field] = field_stats
++    
++    return stats, global_mean
++
++
++def _te_bucket_edges(values: list[float], n: int = 10) -> np.ndarray:
++    """Create quantile buckets for target-encoded values."""
++    return np.quantile(np.asarray(values, dtype=np.float32), np.linspace(0, 1, n + 1)[1:-1])
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -59,11 +103,31 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
++    te_stats: dict[str, dict[str, float]] | None = None,
++    te_edges: dict[str, np.ndarray] | None = None,
++    global_mean: float = 0.5,
+ ) -> tuple[np.ndarray, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
++    
++    # Enrich rows with target-encoded features
++    if te_stats is not None and te_edges is not None:
++        for row in rows:
++            for te_field in ("user_id", "video_id", "author_id"):
++                te_key = f"{te_field}_te"
++                if te_key not in row:
++                    val = row[te_field]
++                    te_value = te_stats[te_field].get(val, global_mean)
++                    te_bucket = int(np.searchsorted(te_edges[te_key], te_value))
++                    row[te_key] = str(te_bucket)
++    
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+     return x, y
+@@ -186,12 +250,31 @@ def main() -> None:
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
++    # Compute target encoding statistics
++    te_stats, global_mean = _compute_target_stats(
++        train_rows,
++        target_fields=("user_id", "video_id", "author_id"),
++        smoothing=1.0,
++    )
++    
++    # Build buckets for target-encoded features
++    te_edges = {}
++    for te_field in ("user_id", "video_id", "author_id"):
++        te_key = f"{te_field}_te"
++        te_values = list(te_stats[te_field].values())
++        if te_values:
++            te_edges[te_key] = _te_bucket_edges(te_values)
++        else:
++            te_edges[te_key] = np.array([])
++    
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields, te_stats, te_edges, global_mean)
++    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields, te_stats, te_edges, global_mean)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+```

@@ -1,0 +1,110 @@
+```diff
+--- template.py
++++ template.py
+@@ -1,6 +1,7 @@
+ """KuaiRand FM baseline candidate — numpy + csv only, no valid-label early stop."""
+ 
+ from __future__ import annotations
++from collections import defaultdict
+ 
+ import csv
+ import io
+@@ -58,6 +59,49 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _build_oof_target_encodings(
++    train_rows: list[dict[str, str]],
++    edges: np.ndarray,
++    fields: tuple[str, ...],
++    fold_idx: np.ndarray,
++    fold_id: int,
++) -> tuple[list[dict[str, float]], float]:
++    """Build out-of-fold target encoding statistics.
++    
++    For each field, compute mean target value per category using only out-of-fold rows.
++    """
++    oof_mask = fold_idx != fold_id
++    global_mean = float(np.mean([float(r["long_view"]) for r in train_rows if "long_view" in r]))
++    
++    encodings = [dict() for _ in fields]
++    
++    # Accumulate targets per category in out-of-fold data
++    accums = [defaultdict(list) for _ in fields]
++    for idx, row in enumerate(train_rows):
++        if not oof_mask[idx] or "long_view" not in row:
++            continue
++        target = float(row["long_view"])
++        for i, v in enumerate(_row_tokens(row, fields, edges)):
++            accums[i][v].append(target)
++    
++    # Compute means and store in encoding dicts
++    for i, accum in enumerate(accums):
++        for cat, targets in accum.items():
++            encodings[i][cat] = float(np.mean(targets))
++    
++    return encodings, global_mean
++
++
++def _encode_target(
++    value: str, encoding: dict[str, float], global_mean: float
++) -> float:
++    """Encode a single value using target encoding, defaulting to global mean for unseen."""
++    return encoding.get(value, global_mean)
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+ 
+@@ -175,6 +219,7 @@ def main() -> None:
+     fields = _active_fields()
+     max_rows = os.environ.get("MAX_ROWS")
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+@@ -182,11 +227,31 @@ def main() -> None:
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
++    # K-fold out-of-fold target encoding for sparse categoricals
++    n_folds = int(os.environ.get("N_FOLDS", "5"))
++    rng_fold = np.random.default_rng(seed)
++    fold_idx = rng_fold.integers(0, n_folds, len(train_rows))
++    
++    # Prepare OOF target encodings and augmented feature arrays
++    xtr_oof = np.empty((len(train_rows), len(fields)), dtype=np.float32)
++    for fold_id in range(n_folds):
++        encodings, global_mean = _build_oof_target_encodings(
++            train_rows, edges, fields, fold_idx, fold_id
++        )
++        for idx, row in enumerate(train_rows):
++            if fold_idx[idx] == fold_id:
++                for i, v in enumerate(_row_tokens(row, fields, edges)):
++                    xtr_oof[idx, i] = _encode_target(v, encodings[i], global_mean)
++    
++    # Validation uses all training data for target encoding
++    val_encodings, val_global_mean = _build_oof_target_encodings(
++        train_rows, edges, fields, np.full(len(train_rows), -1), -1
++    )
++    xva_oof = np.array(
++        [[_encode_target(v, val_encodings[i], val_global_mean)
++          for i, v in enumerate(_row_tokens(row, fields, edges))]
++         for row in valid_rows], dtype=np.float32
++    )
+ 
+     xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+     xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    
++    # Concatenate OOF target encodings with categorical features
++    xtr = np.hstack([xtr.astype(np.float32), xtr_oof])
++    xva = np.hstack([xva.astype(np.float32), xva_oof])
++    
++    # Adjust model dimension for augmented features
++    dim = xtr.shape[1]
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+```

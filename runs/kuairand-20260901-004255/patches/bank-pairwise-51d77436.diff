@@ -1,0 +1,103 @@
+--- template.py
++++ template.py
+@@ -150,6 +150,48 @@ class FM:
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
+ 
++    def step_bpr(self, X_pos: np.ndarray, X_neg: np.ndarray) -> float:
++        """BPR pairwise ranking step: rank positives higher than negatives."""
++        if len(X_pos) == 0:
++            return 0.0
++        
++        bsz = len(X_pos)
++        z_pos, e_pos, s_pos = self.logits(X_pos)
++        z_neg, e_neg, s_neg = self.logits(X_neg)
++        
++        # Score difference: positive - negative
++        z_diff = z_pos - z_neg
++        # Gradient of -log(sigmoid(z_diff)) w.r.t. z_diff
++        sig_diff = sigmoid(z_diff)
++        g = (sig_diff - 1.0) / bsz  # = -sigmoid(-z_diff) / bsz
++        
++        # Accumulate gradients for embeddings and linear weights
++        gV_pos = np.zeros_like(self.V)
++        gV_neg = np.zeros_like(self.V)
++        gW_pos = np.zeros_like(self.W)
++        gW_neg = np.zeros_like(self.W)
++        
++        np.add.at(gW_pos, X_pos, g[:, None])
++        np.add.at(gW_neg, X_neg, -g[:, None])
++        np.add.at(gV_pos, X_pos, g[:, None, None] * (s_pos[:, None, :] - e_pos))
++        np.add.at(gV_neg, X_neg, -g[:, None, None] * (s_neg[:, None, :] - e_neg))
++        
++        gV = gV_pos + gV_neg + self.l2 * self.V
++        gW = gW_pos + gW_neg + self.l2 * self.W
++        
++        # Adam optimization step
++        self.t += 1
++        b1, b2, eps = 0.9, 0.999, 1e-8
++        for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
++            M *= b1
++            M += (1 - b1) * G
++            Vv *= b2
++            Vv += (1 - b2) * (G * G)
++            P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        self.b -= self.lr * g.sum()
++        
++        return float(-np.mean(np.log(sig_diff + 1e-9)))
++
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+ 
+@@ -157,6 +199,28 @@ def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+         return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
+ 
+ 
++def _sample_bpr_pairs(
++    rows: list[dict[str, str]],
++    y: np.ndarray,
++    rng: np.random.Generator,
++) -> tuple[np.ndarray, np.ndarray]:
++    """Sample positive/negative pairs grouped by user for BPR ranking loss."""
++    user_groups = {}
++    for i, row in enumerate(rows):
++        uid = row["user_id"]
++        if uid not in user_groups:
++            user_groups[uid] = {"pos": [], "neg": []}
++        if y[i] > 0.5:
++            user_groups[uid]["pos"].append(i)
++        else:
++            user_groups[uid]["neg"].append(i)
++    
++    pos_indices, neg_indices = [], []
++    for uid, groups in user_groups.items():
++        for p_idx in groups["pos"]:
++            n_idx = rng.choice(groups["neg"]) if groups["neg"] else None
++            if n_idx is not None:
++                pos_indices.append(p_idx)
++                neg_indices.append(n_idx)
++    return np.array(pos_indices, dtype=np.int32), np.array(neg_indices, dtype=np.int32)
++
+ 
+ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> None:
+@@ -207,11 +231,17 @@ def main() -> None:
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)
+     for ep in range(1, epochs + 1):
+-        idx = rng.permutation(len(ytr))
++        # Sample BPR pairs: positive/negative items grouped by user
++        pos_idx, neg_idx = _sample_bpr_pairs(train_rows, ytr, rng)
++        
++        # Shuffle pairs
++        pair_idx = rng.permutation(len(pos_idx))
++        pos_idx = pos_idx[pair_idx]
++        neg_idx = neg_idx[pair_idx]
++        
+         losses = []
+-        for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++        for i in range(0, len(pos_idx), batch):
++            end = min(i + batch, len(pos_idx))
++            losses.append(model.step_bpr(xtr[pos_idx[i:end]], xtr[neg_idx[i:end]]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))

@@ -13,8 +13,19 @@ build/
 .env.*
 
 # Run artefacts: every run directory except the placeholder
+# runs/: bulky artefacts (attempts/ checkpoints, workspace/ nested git) stay
+# local; the judge-readable record of every run is committed.
 runs/*
 !runs/.gitkeep
+!runs/*/
+runs/*/*
+!runs/*/events.jsonl
+!runs/*/lessons.jsonl
+!runs/*/heartbeat.jsonl
+!runs/*/iterations.jsonl
+!runs/*/submission*.csv
+!runs/*/patches/
+!runs/*/patches/**
 
 # Data caches (parquet, raw Ali-CCP) — never committed
 data/cache/

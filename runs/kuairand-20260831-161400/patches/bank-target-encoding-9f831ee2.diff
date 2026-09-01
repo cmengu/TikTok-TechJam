@@ -1,0 +1,141 @@
+--- template.py
++++ template.py
+@@ -1,6 +1,7 @@
+ """KuaiRand FM baseline candidate — numpy + csv only, no valid-label early stop."""
+ 
+ from __future__ import annotations
++from typing import Optional
+ 
+ import csv
+ import io
+@@ -103,6 +104,80 @@ def _build_vocabs(
+     return vocabs, unk, offsets
+ 
+ 
++def _compute_target_encodings(
++    rows: list[dict[str, str]], field_names: tuple[str, ...]
++) -> tuple[float, list[dict[str, float]], list[dict[str, tuple[float, int]]]]:
++    """Compute target encodings per category (Micci-Barreca 2001).
++    
++    Stage: features/target-encoding
++    Computes out-of-fold mean long_view per category, smoothed toward global rate.
++    Each row's own label never contributes to its category encoding (leave-one-out).
++    
++    Args:
++        rows: Training rows with 'long_view' labels
++        field_names: Fields to compute target encoding for
++        
++    Returns:
++        global_mean: Overall mean of long_view
++        smoothed_means: Smoothed mean per field per category
++        raw_stats: (sum, count) per field per category for leave-one-out
++    """
++    # Compute global mean
++    labels = np.array([float(r["long_view"]) for r in rows if "long_view" in r], dtype=np.float32)
++    global_mean = float(np.mean(labels)) if len(labels) > 0 else 0.5
++    
++    # Accumulate category statistics
++    raw_stats = [{} for _ in field_names]
++    for row in rows:
++        if "long_view" not in row:
++            continue
++        label = float(row["long_view"])
++        for i, field in enumerate(field_names):
++            cat = row[field]
++            if cat not in raw_stats[i]:
++                raw_stats[i][cat] = [0.0, 0]
++            raw_stats[i][cat][0] += label
++            raw_stats[i][cat][1] += 1
++    
++    # Compute smoothed category means
++    smoothing = 1.0  # Smoothing parameter (Micci-Barreca 2001)
++    smoothed_means = [{} for _ in field_names]
++    for i in range(len(field_names)):
++        for cat, (total_sum, total_count) in raw_stats[i].items():
++            cat_mean = total_sum / total_count
++            smoothed = (total_count * cat_mean + smoothing * global_mean) / (total_count + smoothing)
++            smoothed_means[i][cat] = smoothed
++    
++    return global_mean, smoothed_means, raw_stats
++
++
++def _encode_rows_target_encoding(
++    rows: list[dict[str, str]],
++    global_mean: float,
++    smoothed_means: list[dict[str, float]],
++    raw_stats: Optional[list[dict[str, tuple[float, int]]]],
++    offsets: np.ndarray,
++    fields: tuple[str, ...],
++) -> tuple[np.ndarray, np.ndarray | None]:
++    """Encode categorical fields using target encoding (Micci-Barreca 2001).
++    
++    For training rows (with labels): uses leave-one-out encoding where each row's
++    own label is excluded from its category mean.
++    
++    For validation rows (without labels): uses smoothed category means.
++    """
++    x = np.empty((len(rows), len(fields)), dtype=np.int32)
++    y = None
++    if rows and "long_view" in rows[0]:
++        y = np.empty(len(rows), dtype=np.float32)
++    
++    smoothing = 1.0
++    
++    for n, row in enumerate(rows):
++        for i, field in enumerate(fields):
++            cat = row[field]
++            
++            # Compute target-encoded value with leave-one-out for labeled rows
++            if "long_view" in row and raw_stats is not None:
++                label = float(row["long_view"])
++                if cat in raw_stats[i]:
++                    total_sum, total_count = raw_stats[i][cat]
++                    # Exclude this row's contribution (leave-one-out)
++                    if total_count > 1:
++                        loo_sum = total_sum - label
++                        loo_count = total_count - 1
++                        loo_mean = loo_sum / loo_count
++                        encoded_val = (loo_count * loo_mean + smoothing * global_mean) / (loo_count + smoothing)
++                    else:
++                        # Only one occurrence: use smoothed global mean
++                        encoded_val = global_mean
++                else:
++                    encoded_val = global_mean
++            else:
++                # Use pre-computed smoothed means for validation
++                encoded_val = smoothed_means[i].get(cat, global_mean)
++            
++            # Discretize to integer for FM indexing
++            x[n, i] = int(np.clip(encoded_val * 1000, 0, 9999)) + offsets[i]
++        
++        if y is not None:
++            y[n] = float(row["long_view"])
++    
++    return x, y
++
++
+ def sigmoid(x: np.ndarray) -> np.ndarray:
+     return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+ 
+@@ -156,13 +231,16 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+-    vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+-    dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    # Compute target encodings for specified fields (user_id, video_id, author_id)
++    target_fields = tuple(f for f in fields if f in ("user_id", "video_id", "author_id"))
++    global_mean, smoothed_means, raw_stats = _compute_target_encodings(train_rows, target_fields)
++    offsets = np.arange(len(target_fields)).astype(np.int32) * 10000
++    dim = len(target_fields) * 10000
++
++    xtr, ytr = _encode_rows_target_encoding(train_rows, global_mean, smoothed_means, raw_stats, offsets, target_fields)
++    xva, _ = _encode_rows_target_encoding(valid_rows, global_mean, smoothed_means, None, offsets, target_fields)
+ 
+     model = FM(dim, k=16, lr=lr, seed=seed)
+     rng = np.random.default_rng(seed)

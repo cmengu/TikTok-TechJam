@@ -1,0 +1,2 @@
+{"schema_version":1,"seq":1,"t":"2026-08-27T06:39:30.707Z","run":"synthetic-20260827-063929","protocol_hash":"sha256:c7cfaa3e2a68325da6dbb56a9a54cee105a2a2911d694c7cb53f5a120ba674f7","type":"heartbeat","worker":"node-1","node":1,"step":0,"total":0,"loss":null,"attempt":1}
+{"schema_version":1,"seq":2,"t":"2026-08-27T06:39:32.227Z","run":"synthetic-20260827-063929","protocol_hash":"sha256:c7cfaa3e2a68325da6dbb56a9a54cee105a2a2911d694c7cb53f5a120ba674f7","type":"heartbeat","worker":"node-1","node":1,"step":0,"total":0,"loss":null,"attempt":2}

@@ -1,0 +1,109 @@
+--- a/template.py
++++ b/template.py
+@@ -8,7 +8,7 @@ import csv
+ import os
+ import sys
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "target_encoding")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -44,6 +44,71 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_training_encodings(
++    rows: list[dict[str, str]],
++    target_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++    smoothing: float = 1.0,
++) -> tuple[np.ndarray, dict[tuple[str, ...], float], float]:
++    """Compute out-of-fold target encodings per Micci-Barreca 2001.
++    
++    For training data, computes leave-one-out mean long_view per target_fields combination,
++    smoothed toward global mean. Returns per-row encodings, lookup map, and global mean.
++    """
++    if not rows or "long_view" not in rows[0]:
++        return np.zeros(len(rows), dtype=np.float32), {}, 0.0
++    
++    labels = np.array([float(r["long_view"]) for r in rows], dtype=np.float32)
++    global_mean = float(np.mean(labels))
++    row_encodings = np.zeros(len(rows), dtype=np.float32)
++    encoding_map = {}
++    
++    # Group row indices by feature combination
++    groups: dict[tuple[str, ...], list[int]] = {}
++    for i, row in enumerate(rows):
++        key = tuple(row.get(f, "") for f in target_fields)
++        if key not in groups:
++            groups[key] = []
++        groups[key].append(i)
++    
++    # Compute leave-one-out encoding for training, full-group encoding for lookup
++    for key, indices in groups.items():
++        label_sum = np.sum(labels[indices])
++        count = len(indices)
++        
++        # Per-row encoding: mean excluding this row's label
++        for idx in indices:
++            count_other = count - 1
++            if count_other > 0:
++                mean = (label_sum - labels[idx]) / count_other
++            else:
++                mean = global_mean
++            # Smooth toward global mean per Micci-Barreca
++            smoothed = (count_other * mean + smoothing * global_mean) / (count_other + smoothing)
++            row_encodings[idx] = smoothed
++        
++        # Lookup encoding: full group mean (for validation inference)
++        mean = label_sum / count
++        smoothed_lookup = (count * mean + smoothing * global_mean) / (count + smoothing)
++        encoding_map[key] = smoothed_lookup
++    
++    return row_encodings, encoding_map, global_mean
++
++
++def _apply_target_encodings(
++    rows: list[dict[str, str]],
++    encoding_map: dict[tuple[str, ...], float],
++    global_mean: float,
++    target_fields: tuple[str, ...] = ("user_id", "video_id", "author_id"),
++    bucket_edges: np.ndarray | None = None,
++) -> tuple[list[dict[str, str]], np.ndarray]:
++    """Apply precomputed target encoding statistics to rows."""
++    encodings = np.array([encoding_map.get(tuple(r.get(f, "") for f in target_fields), global_mean)
++                          for r in rows], dtype=np.float32)
++    if bucket_edges is None:
++        bucket_edges = np.quantile(encodings[encodings > 0] if np.any(encodings > 0) else encodings,
++                                   np.linspace(0, 1, 11)[1:-1])
++    for i, row in enumerate(rows):
++        row["target_encoding"] = str(int(np.searchsorted(bucket_edges, encodings[i])))
++    return rows, bucket_edges
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -194,6 +259,15 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
++    
++    # Compute target encodings from training data (features/target-encoding)
++    train_te, te_map, te_global = _compute_training_encodings(train_rows)
++    te_edges = np.quantile(train_te, np.linspace(0, 1, 11)[1:-1])
++    for i, row in enumerate(train_rows):
++        row["target_encoding"] = str(int(np.searchsorted(te_edges, train_te[i])))
++    
++    # Apply training statistics to validation rows
++    valid_rows, _ = _apply_target_encodings(valid_rows, te_map, te_global, bucket_edges=te_edges)
++    
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)

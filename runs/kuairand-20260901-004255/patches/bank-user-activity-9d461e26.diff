@@ -1,0 +1,69 @@
+--- a/template.py
++++ b/template.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ import csv
+ import io
+ import os
+ import sys
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+ import report
+ 
+-FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket", "activity_bucket")
+ DEFAULT_EPOCHS = 11
+ 
+ 
+@@ -31,6 +31,27 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _build_activity_edges(
++    rows: list[dict[str, str]], n: int = 8
++) -> tuple[np.ndarray, dict[str, int]]:
++    """Compute activity quantile edges from per-user impression count distribution.
++    
++    Returns:
++        edges: quantile boundaries for binning impression counts
++        user_counts: mapping of user_id to total impressions in training data
++    """
++    user_counts = {}
++    for row in rows:
++        user_counts[row["user_id"]] = user_counts.get(row["user_id"], 0) + 1
++    counts = np.asarray(list(user_counts.values()), dtype=np.float64)
++    edges = np.quantile(counts, np.linspace(0, 1, n + 1)[1:-1])
++    return edges, user_counts
++
++
++def _add_activity_buckets(
++    rows: list[dict[str, str]], user_counts: dict[str, int], activity_edges: np.ndarray
++) -> None:
++    """Add activity_bucket field to each row based on per-user impression quantiles."""
++    for row in rows:
++        count = user_counts.get(row["user_id"], 0)
++        bucket = int(np.searchsorted(activity_edges, float(count)))
++        row["activity_bucket"] = str(bucket)
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -105,9 +126,13 @@ def main() -> None:
+ 
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
++
++    # Compute duration buckets
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
++    # Compute activity buckets from training distribution
++    activity_edges, user_counts = _build_activity_edges(train_rows)
++    _add_activity_buckets(train_rows, user_counts, activity_edges)
++    _add_activity_buckets(valid_rows, user_counts, activity_edges)
++
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)

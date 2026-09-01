@@ -1,0 +1,251 @@
+--- template.py.orig
++++ template.py
+@@ -7,6 +7,7 @@
+ import numpy as np
+ 
+ import report
++from typing import Optional
+ 
+ FIELDS = ("user_id", "video_id", "author_id", "tab", "dur_bucket")
++TARGET_ENCODING_FIELDS = ("user_id", "video_id", "author_id")
+ DEFAULT_EPOCHS = 11
+@@ -36,6 +37,40 @@ def _bucket_edges(durations: list[float], n: int = 10) -> np.ndarray:
+     return np.quantile(np.asarray(durations, dtype=np.float64), np.linspace(0, 1, n + 1)[1:-1])
+ 
+ 
++def _compute_target_encoding_stats(
++    rows: list[dict[str, str]],
++    fields: tuple[str, ...],
++    smoothing: float = 1.0,
++) -> tuple[dict[str, dict[str, float]], float]:
++    """
++    Compute out-of-fold target encoding with Micci-Barreca smoothing.
++
++    For each unique value of each field, compute the smoothed mean of long_view,
++    regularizing toward the global mean to handle sparse categories.
++    """
++    labels = np.array([float(r["long_view"]) for r in rows if "long_view" in r], dtype=np.float32)
++    global_mean = float(np.mean(labels)) if len(labels) > 0 else 0.5
++
++    encoding = {}
++    for field in fields:
++        field_encoding = {}
++        by_value = {}
++        for row in rows:
++            val = row[field]
++            if val not in by_value:
++                by_value[val] = []
++            if "long_view" in row:
++                by_value[val].append(float(row["long_view"]))
++
++        for val, labels_list in by_value.items():
++            count = len(labels_list)
++            value_mean = float(np.mean(labels_list))
++            smoothed = (count * value_mean + smoothing * global_mean) / (count + smoothing)
++            field_encoding[val] = smoothed
++        encoding[field] = field_encoding
++    return encoding, global_mean
++
++
+ def _encode_rows(
+     rows: list[dict[str, str]],
+     vocabs: list[dict[str, int]],
+@@ -43,13 +78,26 @@ def _encode_rows(
+     offsets: np.ndarray,
+     edges: np.ndarray,
+     fields: tuple[str, ...],
+-) -> tuple[np.ndarray, np.ndarray | None]:
++    target_encoding: dict[str, dict[str, float]] | None = None,
++    target_fields: tuple[str, ...] | None = None,
++    global_mean: float = 0.5,
++) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+     x = np.empty((len(rows), len(fields)), dtype=np.int32)
+     y = None
++    x_cont = None
++
+     if rows and "long_view" in rows[0]:
+         y = np.empty(len(rows), dtype=np.float32)
++
++    if target_encoding and target_fields:
++        x_cont = np.empty((len(rows), len(target_fields)), dtype=np.float32)
++
+     for n, row in enumerate(rows):
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             x[n, i] = vocabs[i].get(v, unk[i]) + offsets[i]
+         if y is not None:
+             y[n] = float(row["long_view"])
+-    return x, y
++        if x_cont is not None:
++            for j, field in enumerate(target_fields):
++                x_cont[n, j] = target_encoding[field].get(row[field], global_mean)
++    return x, y, x_cont
+@@ -57,7 +105,9 @@ def _encode_rows(
+ def _build_vocabs(
+     train_rows: list[dict[str, str]], edges: np.ndarray, fields: tuple[str, ...]
+ ):
+     vocabs = [dict() for _ in fields]
+     for row in train_rows:
+         for i, v in enumerate(_row_tokens(row, fields, edges)):
+             if v not in vocabs[i]:
+@@ -74,12 +124,28 @@ def sigmoid(x: np.ndarray) -> np.ndarray:
+ 
+ 
+ class FM:
+-    def __init__(self, dim: int, k: int = 16, lr: float = 0.001, l2: float = 1e-6, seed: int = 0):
++    def __init__(self, dim: int, k: int = 16, lr: float = 0.001, l2: float = 1e-6, seed: int = 0, cont_dim: int = 0):
+         rng = np.random.default_rng(seed)
+         self.V = rng.normal(0, 0.01, (dim, k)).astype(np.float32)
+         self.W = np.zeros(dim, dtype=np.float32)
+         self.b = np.float32(0.0)
+         self.lr, self.l2 = lr, l2
+         self.mV = np.zeros_like(self.V)
+         self.vV = np.zeros_like(self.V)
+         self.mW = np.zeros_like(self.W)
+         self.vW = np.zeros_like(self.W)
+         self.t = 0
++        self.W_cont = np.zeros(cont_dim, dtype=np.float32) if cont_dim > 0 else None
++        self.mW_cont = np.zeros(cont_dim, dtype=np.float32) if cont_dim > 0 else None
++        self.vW_cont = np.zeros(cont_dim, dtype=np.float32) if cont_dim > 0 else None
+ 
+     def logits(self, X: np.ndarray):
+         e = self.V[X]
+         s = e.sum(1)
+         inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
+-        return self.b + self.W[X].sum(1) + inter, e, s
++        z = self.b + self.W[X].sum(1) + inter
++        return z, e, s
++
++    def logits(self, X: np.ndarray, X_cont: np.ndarray | None = None):
++        e = self.V[X]
++        s = e.sum(1)
++        inter = 0.5 * ((s**2).sum(1) - (e**2).sum((1, 2)))
++        z = self.b + self.W[X].sum(1) + inter
++        if X_cont is not None and self.W_cont is not None:
++            z = z + X_cont @ self.W_cont
++        return z, e, s
+ 
+     def step(self, X: np.ndarray, y: np.ndarray) -> float:
+         bsz = len(y)
+         z, e, s = self.logits(X)
+         g = ((sigmoid(z) - y) / bsz).astype(np.float32)
+         gV = np.zeros_like(self.V)
+         gW = np.zeros_like(self.W)
+         np.add.at(gW, X, g[:, None])
+         np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
+         gV += self.l2 * self.V
+         gW += self.l2 * self.W
++        gW_cont = None
+         self.t += 1
+         b1, b2, eps = 0.9, 0.999, 1e-8
+         for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+@@ -152,8 +228,20 @@ class FM:
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
+         self.b -= self.lr * g.sum()
+         return float(
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
++
++    def step(self, X: np.ndarray, y: np.ndarray, X_cont: np.ndarray | None = None) -> float:
++        bsz = len(y)
++        z, e, s = self.logits(X, X_cont)
++        g = ((sigmoid(z) - y) / bsz).astype(np.float32)
++        gV = np.zeros_like(self.V)
++        gW = np.zeros_like(self.W)
++        np.add.at(gW, X, g[:, None])
++        np.add.at(gV, X, g[:, None, None] * (s[:, None, :] - e))
++        gV += self.l2 * self.V
++        gW += self.l2 * self.W
++        if X_cont is not None and self.W_cont is not None:
++            gW_cont = X_cont.T @ g + self.l2 * self.W_cont
++        else:
++            gW_cont = None
+         self.t += 1
+         b1, b2, eps = 0.9, 0.999, 1e-8
+         for P, G, M, Vv in ((self.V, gV, self.mV, self.vV), (self.W, gW, self.mW, self.vW)):
+@@ -161,6 +249,14 @@ class FM:
+             M += (1 - b1) * G
+             Vv *= b2
+             Vv += (1 - b2) * (G * G)
+             P -= self.lr * (M / (1 - b1**self.t)) / (np.sqrt(Vv / (1 - b2**self.t)) + eps)
++        if gW_cont is not None:
++            self.mW_cont *= b1
++            self.mW_cont += (1 - b1) * gW_cont
++            self.vW_cont *= b2
++            self.vW_cont += (1 - b2) * (gW_cont * gW_cont)
++            self.W_cont -= self.lr * (self.mW_cont / (1 - b1**self.t)) / (
++                np.sqrt(self.vW_cont / (1 - b2**self.t)) + 1e-8
++            )
+         self.b -= self.lr * g.sum()
+         return float(
+             -np.mean(y * np.log(sigmoid(z) + 1e-9) + (1 - y) * np.log(1 - sigmoid(z) + 1e-9))
+         )
+ 
+     def predict(self, X: np.ndarray, bs: int = 200_000) -> np.ndarray:
+-        return np.concatenate([self.logits(X[i : i + bs])[0] for i in range(0, len(X), bs)])
++        return np.concatenate([self.logits(X[i : i + bs], None)[0] for i in range(0, len(X), bs)])
++
++    def predict(self, X: np.ndarray, X_cont: np.ndarray | None = None, bs: int = 200_000) -> np.ndarray:
++        return np.concatenate(
++            [
++                self.logits(X[i : i + bs], X_cont[i : i + bs] if X_cont is not None else None)[0]
++                for i in range(0, len(X), bs)
++            ]
++        )
+ 
+ 
+ def _write_preds(path: Path, rows: list[dict[str, str]], scores: np.ndarray) -> None:
+@@ -174,7 +270,11 @@ def _checkpoint_blob(model: FM) -> bytes:
+     buf = io.BytesIO()
+     np.savez(buf, V=model.V, W=model.W, b=np.asarray(model.b))
+     return buf.getvalue()
++
++def _checkpoint_blob(model: FM) -> bytes:
++    buf = io.BytesIO()
++    np.savez(buf, V=model.V, W=model.W, b=np.asarray(model.b), W_cont=model.W_cont if model.W_cont is not None else np.array([]))
++    return buf.getvalue()
+ 
+ 
+ def main() -> None:
+@@ -191,12 +291,24 @@ def main() -> None:
+     train_rows = _read_rows(train_path, with_label=True)
+     valid_rows = _read_rows(valid_path, with_label=False)
+     if max_rows:
+         train_rows = train_rows[: int(max_rows)]
++
+     edges = _bucket_edges([float(r["duration_ms"]) for r in train_rows])
+     vocabs, unk, offsets = _build_vocabs(train_rows, edges, fields)
+     dim = int(offsets[-1] + len(vocabs[-1]) + 1)
+ 
+-    xtr, ytr = _encode_rows(train_rows, vocabs, unk, offsets, edges, fields)
+-    xva, _ = _encode_rows(valid_rows, vocabs, unk, offsets, edges, fields)
++    target_encoding, global_mean = _compute_target_encoding_stats(
++        train_rows,
++        TARGET_ENCODING_FIELDS,
++        smoothing=1.0,
++    )
++
++    xtr, ytr, xtr_cont = _encode_rows(
++        train_rows, vocabs, unk, offsets, edges, fields,
++        target_encoding=target_encoding, target_fields=TARGET_ENCODING_FIELDS, global_mean=global_mean
++    )
++    xva, _, xva_cont = _encode_rows(
++        valid_rows, vocabs, unk, offsets, edges, fields,
++        target_encoding=target_encoding, target_fields=TARGET_ENCODING_FIELDS, global_mean=global_mean
++    )
+ 
+-    model = FM(dim, k=16, lr=lr, seed=seed)
++    model = FM(dim, k=16, lr=lr, seed=seed, cont_dim=len(TARGET_ENCODING_FIELDS))
+     rng = np.random.default_rng(seed)
+@@ -204,7 +316,7 @@ def main() -> None:
+         idx = rng.permutation(len(ytr))
+         losses = []
+         for i in range(0, len(idx), batch):
+-            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]]))
++            losses.append(model.step(xtr[idx[i : i + batch]], ytr[idx[i : i + batch]], xtr_cont[idx[i : i + batch]]))
+         report.progress(ep, epochs, float(np.mean(losses)))
+         report.checkpoint.save(ep, _checkpoint_blob(model))
+ 
+     preds_path = workspace / "preds.csv"
+-    _write_preds(preds_path, valid_rows, model.predict(xva))
++    _write_preds(preds_path, valid_rows, model.predict(xva, xva_cont))
+     report.result({}, preds_path)
