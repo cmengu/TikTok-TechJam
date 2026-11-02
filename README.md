@@ -1,18 +1,18 @@
-# Lux Max — an autonomous ML research harness
+<h1 align="center">Lux Max</h1>
 
-<video src="https://github.com/cmengu/TikTok-TechJam/raw/main/docs/luxmax-demo.mp4" controls width="100%"></video>
+<p align="center">An autonomous ML research harness that proposes, codes, trains and scores experiments on KuaiRand-Pure, and accepts a gain only if it survives repeat seeds, a hidden check and an explanation test.</p>
 
-▶ [Watch the walkthrough](https://github.com/cmengu/TikTok-TechJam/raw/main/docs/luxmax-demo.mp4) (if the player above doesn't load)
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Lux Max dashboard for run kuairand-20260831-180915: score 0.5896 labelled measured, funnel of 0 papers, 10 ideas, 6 attempts, 1 accepted, and a score-versus-current-best panel" width="900">
+</p>
 
-**TikTok TechJam · KuaiRand-Pure track.** Point it at the dataset and walk away:
-it proposes experiments, writes its own code changes, trains and scores them,
-and decides — alone — which improvements are real. Ideas that fail become
-lessons it reads before proposing again. Ideas that "win" must survive repeat
-tests on fresh seeds, a hidden check they cannot train on, and an explanation
-test: a gain that can't show *why* it happened is refused.
+<p align="center"><sub>The dashboard replaying the scored run <code>kuairand-20260831-180915</code> from its committed event log (real run data, not a mock-up). Live: <a href="https://luxmaxxing.vercel.app">luxmaxxing.vercel.app</a>. <a href="docs/luxmax-demo.mp4">Video walkthrough</a>.</sub></p>
 
-**Live dashboard:** https://luxmaxxing.vercel.app — every run in this
-repo, rendered from its event log.
+## Why
+
+Autonomous experiment loops tend to report gains that are seed noise, leaked labels, or unexplained.
+Here ideas that fail become lessons the proposer reads before proposing again, and an idea is accepted only after repeat tests on fresh seeds, a hidden check the search cannot train on, and an attribution check on its own declared mechanism.
+Built for the TikTok TechJam KuaiRand-Pure track.
 
 ---
 
@@ -29,7 +29,7 @@ accepted improvement.
 | **3 · Code diffs** | [`runs/kuairand-20260831-180915/patches/`](runs/kuairand-20260831-180915/patches/) — the actual diff applied at each iteration |
 | **3 · Manual interventions** | **0** during the scored run (see [Autonomy](#autonomy-and-honesty)) |
 | Raw event log (the source of every number) | `runs/kuairand-20260831-180915/events.jsonl` |
-| Every other run we did | `runs/` — 11 kuairand runs, all logs committed |
+| Every other run we did | `runs/` — 12 kuairand runs, all logs committed |
 
 ### Results — KuaiRand-Pure
 
@@ -62,11 +62,17 @@ speed, so the loop starts from ≈0.5956 — everything the agent gained was
 spent climbing back toward their starting line. What the agent *did* achieve is a
 genuine, fully-certified improvement over its own baseline:
 
-> **Iteration 4 (`dur-log-buckets`) — accepted.** Mean Δ **+0.0022** against a
-> noise bar of 0.0008, with **all three seeds positive** (+0.0025, +0.0012,
-> +0.0028) and attribution **clear** — the mechanism's declared observables
-> moved in the direction the hypothesis predicted. It is the only change in
-> any run that cleared every gate.
+Iteration 4 (`dur-log-buckets`) was accepted: mean Δ +0.0022 against a
+noise bar of 0.0008, all three seeds positive (+0.0025, +0.0012, +0.0028),
+and attribution clear, meaning the mechanism's declared observables moved in
+the direction the hypothesis predicted. In this run it is the only change that
+cleared every gate.
+
+Note: the generated `SUMMARY.md` and `summary.json` for this run report a
+different headline, `validation_best` 0.5978 (Δ −0.0038). That is the
+single-seed screen reading of iteration 6, which the three-seed replicate
+rejected (mean Δ −0.0078). The figures in this README are the replicate-based
+ones, from the `verdict` events in `events.jsonl`.
 
 ### Resource usage (scored run)
 
@@ -82,18 +88,16 @@ genuine, fully-certified improvement over its own baseline:
 
 ## See it running
 
-Every screen below is a fold over the run's own append-only event log — the UI
+Each screen below is a fold over the run's own append-only event log — the UI
 computes nothing of its own. Browse them live at
 [luxmaxxing.vercel.app](https://luxmaxxing.vercel.app).
 
 ### Dashboard
 
-The funnel (`papers → ideas → attempts → accepted`), the verification stage
-(**L4-v** — a closed loop gated by an external oracle the search cannot game),
-the intervention counter, and *Score vs current best* showing the accepted
+The hero image above: the funnel (`papers → ideas → attempts → accepted`), the verification stage
+(L4-v, a closed loop gated by an external oracle the search cannot game),
+the intervention counter, and a Score vs current best panel showing the accepted
 delta against the bar it had to clear.
-
-![Dashboard](docs/images/dashboard.png)
 
 ### Library
 
@@ -113,10 +117,9 @@ own hypothesis declared — did not, so the gain was never written into memory.
 
 ---
 
-## What we took from the literature — eight capabilities
+## Mechanisms taken from the literature
 
-Every mechanism below is implemented, and the screenshot beside it is that
-mechanism working in a real run — not a mockup.
+Eight mechanisms, each with a screenshot from a real run.
 
 ### NOVA (Tencent) — the architecture gradient
 
@@ -221,7 +224,7 @@ component), **MLE-bench** (always-valid submissions, runtime watchdogs).
 ```bash
 git clone https://github.com/cmengu/TikTok-TechJam.git && cd TikTok-TechJam
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e .                     # harness + deps (torch, lightgbm, numpy)
+pip install -e .                     # harness + deps (see pyproject.toml)
 ```
 
 Place the organisers' starter kit (`KuaiRand-Pure`, `evaluate.py`, `data.py`,
@@ -239,7 +242,7 @@ python -m harness run protocols/kuairand.yaml --max-nodes 50
 python scripts/export_iterations.py <run-id>
 
 # 3. validate the submission with the organisers' own checker
-python3 submit.py --check --split test runs/<run-id>/submission/pred.csv
+python3 starter_kit/submit.py --check --split test runs/<run-id>/submission/pred.csv
 
 # 4. watch it live (or browse any past run)
 python -m uvicorn app.server:app --port 8000    # http://127.0.0.1:8000
@@ -249,10 +252,9 @@ python -m uvicorn app.server:app --port 8000    # http://127.0.0.1:8000
 converged without promoting anything — the validation-best candidate is then
 the baseline, and the rules still ask for a file.
 
-Tests: `python -m pytest tests` (308) and `node --test "app/static/*.test.js"`
-(301). Everything was built test-first.
+Tests: `python -m pytest tests` and `node --test "app/static/*.test.js"` (302 passing when last run).
 
-## Autonomy and honesty
+## Autonomy and development history
 
 The scored run had **zero manual interventions**. Development history, fully
 disclosed: earlier runs were aborted by the operator after a chain of
@@ -265,7 +267,7 @@ those recoveries is an event in the log (`patch_retried`,
 `fullfile_fallback`), so the audit page counts what the loop survived, not
 only what it won.
 
-We also audited our **own dashboard for lying**. It once announced
+We also audited the dashboard's own narration. It once announced
 "Attempt 3 passed the tests, but the win is unexplained" about an experiment
 that had been *rejected* with all three seeds negative — the narration keyed
 off a side-field before checking the actual decision. We replayed every run's
@@ -273,7 +275,7 @@ raw event log through the sentence renderer, diffed what the UI *would say*
 against what the harness *actually decided*, found four false sentences, and
 rebuilt the narration so a sentence that cannot cite its deciding event does
 not render. Dead runs now say "stalled", and an empty score carries no
-provenance stamp. Write-up: `context/Unexplained_win_investigation.md`.
+provenance stamp.
 
 ## Limitations, and what we'd do next
 
